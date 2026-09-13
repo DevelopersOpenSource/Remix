@@ -1,0 +1,37 @@
+// Recursos do Remix.exe: icone + informacoes de versao.
+//   windres -O coff app.rc -o app_res.o
+// O manifesto fica em manifest.rc -> default-manifest.o (veja o comentario la).
+#define IDI_APPICON 101
+
+// icone do programa
+IDI_APPICON ICON "../assets/branding/app.ico"
+
+// informacoes de versao (Explorer > Propriedades > Detalhes)
+1 VERSIONINFO
+FILEVERSION     1,2,0,0
+PRODUCTVERSION  1,2,0,0
+FILEFLAGSMASK   0x3fL
+FILEFLAGS       0x0L
+FILEOS          0x40004L
+FILETYPE        0x1L
+FILESUBTYPE     0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041604b0"
+        BEGIN
+            VALUE "CompanyName",      "Remix Player"
+            VALUE "FileDescription",  "Remix Player - player de musica"
+            VALUE "FileVersion",      "1.2.0.0"
+            VALUE "InternalName",     "Remix"
+            VALUE "LegalCopyright",   "Remix Player (c) 2026"
+            VALUE "OriginalFilename", "Remix.exe"
+            VALUE "ProductName",      "Remix Player"
+            VALUE "ProductVersion",   "1.2.0"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0416, 1200
+    END
+END

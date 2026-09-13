@@ -1,0 +1,550 @@
+#pragma once
+// Entrada compartilhada (Windows e Linux): hit-test e reacao a mouse/teclado.
+// A plataforma traduz WM_* / raylib para estas funcoes e depois redesenha.
+#include "app_core.h"
+#include "app_layout.h"
+
+static bool IsEqId(int id){ return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8; }
+static const int Z_TRACK_RANGE=1000000, Z_EMPTY_ACTION=802;
+static bool AnyOverlay(){ return g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
+
+static int HitTest(int x,int y){
+    if(g_confirmOpen){ if(PtIn(R_confirmYes,x,y)) return Z_CONFIRM_YES; if(PtIn(R_confirmNo,x,y)) return Z_CONFIRM_NO; return -1; }
+    if(g_ctxOpen){ for(size_t i=0;i<R_ctxItems.size();++i) if(PtIn(R_ctxItems[i],x,y)) return Z_CTX_ITEM_BASE+(int)i; return -1; }
+    if(g_folderMenuOpen){ for(size_t i=0;i<R_folderItems.size();++i) if(PtIn(R_folderItems[i],x,y)) return Z_FOLDER_ITEM_BASE+(int)i; return -1; }
+    if(g_editArtist) return -1;
+    if(OU().open){   // tela de busca online
+        OnlineUI& u=OU();
+        if(PtIn(u.btnClose,x,y)) return Z_ON_CLOSE;
+        if(PtIn(u.qbox,x,y)) return Z_ON_QBOX;
+        if(PtIn(u.btnSearch,x,y)) return Z_ON_SEARCH;
+        for(int i=0;i<3;i++) if(PtIn(u.src[i],x,y)) return Z_ON_SRC_BASE+i;
+        if(PtIn(R_onList,x,y)) for(size_t i=0;i<u.rows.size()&&i<500;++i){
+            if(u.rows[i].right<=u.rows[i].left) continue;
+            if(PtIn(u.bPlay[i],x,y)) return Z_ON_PLAY_BASE+(int)i;
+            if(PtIn(u.bDl[i],x,y)) return Z_ON_DL_BASE+(int)i;
+            if(PtIn(u.bAdd[i],x,y)) return Z_ON_ADD_BASE+(int)i;
+            if(PtIn(u.rows[i],x,y)) return Z_ON_PLAY_BASE+(int)i;
+        }
+        if(u.btnAddAll.right>u.btnAddAll.left&&PtIn(u.btnAddAll,x,y)) return Z_ON_ADDALL;
+        return -1;
+    }
+    {
+        WebPick& wb=WP();
+        if(wb.open){
+            if(PtIn(wb.btnClose,x,y)) return Z_WEB_CLOSE;
+            if(PtIn(wb.qbox,x,y)) return Z_WEB_QBOX;
+            if(PtIn(wb.btnSearch,x,y)) return Z_WEB_SEARCH;
+            for(size_t i=0;i<wb.cells.size();++i) if(PtIn(wb.cells[i],x,y)) return Z_WEB_CELL_BASE+(int)i;
+            if(PtIn(wb.btnUse,x,y)) return Z_WEB_USE;
+            if(PtIn(wb.btnCancel,x,y)) return Z_WEB_CANCEL;
+            return -1;
+        }
+        if(g_imgMenuOpen){
+            if(PtIn(R_imgLocal,x,y)) return Z_IMG_LOCAL;
+            if(PtIn(R_imgWeb,x,y)) return Z_IMG_WEB;
+            return -1;
+        }
+    }
+    if(g_showSettings){
+        if(PtIn(R_settingsClose,x,y)) return Z_SETTINGS_CLOSE;   // o X fica fixo no canto; o resto rola
+        y+=g_setScroll;
+        if(PtIn(R_settingsDefault,x,y)) return Z_SETTINGS_DEFAULT;
+        if(PtIn(R_settingsCustom,x,y)) return Z_SETTINGS_CUSTOM;
+        if(PtIn(R_settingsModeSquare,x,y)) return Z_SETTINGS_MODE_SQUARE;
+        if(PtIn(R_settingsModeCd,x,y)) return Z_SETTINGS_MODE_CD;
+        if(PtIn(R_settingsModeVertical,x,y)) return Z_SETTINGS_MODE_VERTICAL;
+        for(auto&s:g_setSliders) if(PtIn(s.hit,x,y)) return s.id;
+        if(PtIn(R_setEffect,x,y)) return Z_LED_EFFECT;
+        if(PtIn(R_setParticles,x,y)) return Z_PARTICLES_TOGGLE;
+        if(PtIn(R_setGlitch,x,y)) return Z_GLITCH_TOGGLE;
+        if(PtIn(R_setPerf,x,y)) return Z_PERF_TOGGLE;
+        if(PtIn(R_setBgClose,x,y)) return Z_BG_TOGGLE;
+        if(PtIn(R_setSysMedia,x,y)) return Z_SYSMEDIA_TOGGLE;
+        if(PtIn(R_setQuit,x,y)) return Z_QUIT_BTN;
+        if(PtIn(R_setOnMode,x,y)) return Z_SET_ON_MODE;
+        if(PtIn(R_setOnFmt,x,y)) return Z_SET_ON_FMT;
+        if(PtIn(R_setOnSrc,x,y)) return Z_SET_ON_SRC;
+        if(PtIn(R_setOnFolder,x,y)) return Z_SET_ON_FOLDER;
+        if(PtIn(R_setOnRecheck,x,y)) return Z_SET_ON_RECHECK;
+        for(int a=0;a<HK_COUNT;a++){ if(PtIn(R_hkKey[a],x,y)) return Z_HK_KEY_BASE+a; if(PtIn(R_hkScope[a],x,y)) return Z_HK_SCOPE_BASE+a; }
+        if(PtIn(R_hkReset,x,y)) return Z_HK_RESET;
+        if(PtIn(R_setRunnerToggle,x,y)) return Z_RUNNER_TOGGLE;
+        if(PtIn(R_setAutoColor,x,y)) return Z_AUTOCOLOR_TOGGLE;
+        if(PtIn(R_setWallChoose,x,y)) return Z_SET_WALL_CHOOSE;
+        if(PtIn(R_setWallClear,x,y)) return Z_CLR_WALLPAPER;
+        if(PtIn(R_setCoverBlur,x,y)) return Z_COVERBLUR_TOGGLE;
+        if(PtIn(R_setAutoplay,x,y)) return Z_SET_AUTOPLAY;
+        if(PtIn(R_setSort,x,y)) return Z_SET_SORT;
+        if(PtIn(R_setSortDir,x,y)) return Z_SET_SORTDIR;
+        if(PtIn(R_setEqOn,x,y)) return Z_EQ_ON;
+        if(PtIn(R_setEqReset,x,y)) return Z_EQ_RESET;
+        for(size_t i=0;i<R_themeCirclesSettings.size();++i)if(PtIn(R_themeCirclesSettings[i],x,y))return Z_THEME_BASE+(int)i;
+        for(size_t i=0;i<R_runColors.size();++i) if(PtIn(R_runColors[i],x,y)) return Z_RUNNER_COLOR_BASE+(int)i;
+        for(size_t i=0;i<R_playColors.size();++i) if(PtIn(R_playColors[i],x,y)) return Z_BTN_PLAY_BASE+(int)i;
+        for(size_t i=0;i<R_navColors.size();++i) if(PtIn(R_navColors[i],x,y)) return Z_BTN_NAV_BASE+(int)i;
+        for(size_t i=0;i<R_partColors.size();++i) if(PtIn(R_partColors[i],x,y)) return Z_PART_COLOR_BASE+(int)i;
+        for(size_t i=0;i<R_ledColors.size();++i) if(PtIn(R_ledColors[i],x,y)) return Z_LED_COLOR_BASE+(int)i;
+        return -1;
+    }
+    if(R_close.right>R_close.left&&PtIn(R_close,x,y)) return Z_CLOSE;
+    if(R_min.right>R_min.left&&PtIn(R_min,x,y)) return Z_MIN;
+    if(PtIn(R_gear,x,y))return Z_GEAR;
+    if(R_activity.right>R_activity.left&&PtIn(R_activity,x,y))return Z_ACTIVITY;
+    if(R_autoTgl.right>R_autoTgl.left&&PtIn(R_autoTgl,x,y))return Z_AUTOPLAY;
+    if(R_volIcon.right>R_volIcon.left&&PtIn(R_volIcon,x,y))return Z_VOL_ICON;
+    if(g_cfg.displayMode==L"vertical"){
+        if(g_current>=0&&PtIn(R_verticalCoverButton,x,y))return Z_COVER_BASE+g_current;
+        if(g_current>=0&&PtIn(R_pencilVert,x,y))return Z_ARTIST_EDIT;
+        if(PtIn(R_shapeTgl,x,y))return Z_SHAPE_TOGGLE;
+        if(PtIn(R_play,x,y))return Z_PLAYPAUSE;
+        if(PtIn(R_prev,x,y))return Z_PREV;
+        if(PtIn(R_next,x,y))return Z_NEXT;
+        if(PtIn(R_shuffle,x,y))return Z_SHUFFLE;
+        if(PtIn(R_repeat,x,y))return Z_REPEAT;
+        if(PtIn(R_seek,x,y))return Z_WAVESEEK;
+        RECT sline={R_seek.left,R_seek.bottom+2,R_seek.right,(LONG)(R_seek.bottom+S(13))};
+        if(PtIn(sline,x,y))return Z_SEEKBAR;
+        if(PtIn(R_vol,x,y))return Z_VOLBAR;
+        return -1;
+    }
+    if(g_current>=0&&PtIn(R_pencilPanel,x,y))return Z_ARTIST_EDIT;
+    if(PtIn(R_runnerSlider,x,y))return Z_PLAYER_RESIZE;
+    if(PtIn(R_shapeTgl,x,y))return Z_SHAPE_TOGGLE;
+    if(R_sortBtn.right>R_sortBtn.left&&PtIn(R_sortBtn,x,y))return Z_SORT;
+    if(R_folderBtn.right>R_folderBtn.left&&PtIn(R_folderBtn,x,y))return Z_FOLDER_BTN;
+    if(PtIn(R_listBtn,x,y))return Z_LISTMODE;
+    if(PtIn(R_play,x,y))return Z_PLAYPAUSE;
+    if(PtIn(R_prev,x,y))return Z_PREV;
+    if(PtIn(R_next,x,y))return Z_NEXT;
+    if(PtIn(R_shuffle,x,y))return Z_SHUFFLE;
+    if(PtIn(R_repeat,x,y))return Z_REPEAT;
+    if(PtIn(R_wavePanel,x,y))return Z_WAVESEEK;
+    if(PtIn(R_seek,x,y))return Z_SEEKBAR;
+    if(PtIn(R_vol,x,y))return Z_VOLBAR;
+    if(R_tabTracks.right>R_tabTracks.left&&PtIn(R_tabTracks,x,y)) return Z_TAB_TRACKS;
+    if(R_tabOnline.right>R_tabOnline.left&&PtIn(R_tabOnline,x,y)) return Z_TAB_ONLINE;
+    if(R_plAdd.right>R_plAdd.left&&PtIn(R_plAdd,x,y)) return Z_PL_ADD;
+    if(R_plMode.right>R_plMode.left&&PtIn(R_plMode,x,y)) return Z_PL_MODE;
+    if(R_pickDone.right>R_pickDone.left&&PtIn(R_pickDone,x,y)) return Z_PICK_DONE;
+    if(R_pickCancel.right>R_pickCancel.left&&PtIn(R_pickCancel,x,y)) return Z_PICK_CANCEL;
+    if(R_onlineInfo.right>R_onlineInfo.left&&PtIn(R_onlineInfo,x,y)) return Z_EMPTY_ACTION;
+    if(R_tabPlaylists.right>R_tabPlaylists.left&&PtIn(R_tabPlaylists,x,y)) return Z_TAB_PLAYLISTS;
+    if(R_plBack.right>R_plBack.left&&PtIn(R_plBack,x,y)) return Z_PL_BACK;
+    if(R_plNew.right>R_plNew.left&&PtIn(R_plNew,x,y)) return Z_PL_NEW;
+    if(R_searchClear.right>R_searchClear.left&&!g_searchBuf.empty()&&PtIn(R_searchClear,x,y)) return Z_SEARCH_CLEAR;
+    if(R_searchBox.right>R_searchBox.left&&PtIn(R_searchBox,x,y)) return Z_SEARCH_BOX;
+    for(size_t k=0;k<R_plCards.size();++k){ if(R_plCards[k].right<=R_plCards[k].left) continue; if(PtIn(R_plPlay[k],x,y)) return Z_PL_PLAY_BASE+(int)k; if(PtIn(R_plShuf[k],x,y)) return Z_PL_SHUF_BASE+(int)k; if(PtIn(R_plCards[k],x,y)) return Z_PL_CARD_BASE+(int)k; }
+    if(g_pickMode){ for(size_t i=0;i<R_cardRects.size();++i) if(R_cardRects[i].right>R_cardRects[i].left&&PtIn(R_cardRects[i],x,y)) return Z_TRACK_BASE+(int)i; return -1; }   // marcando: o card inteiro marca
+    for(size_t i=0;i<R_cardCoverButtons.size();++i)if(R_cardCoverButtons[i].right>R_cardCoverButtons[i].left&&PtIn(R_cardCoverButtons[i],x,y))return Z_COVER_BASE+(int)i;
+    for(size_t i=0;i<R_rowUp.size();++i){
+        if(R_rowUp[i].right>R_rowUp[i].left&&PtIn(R_rowUp[i],x,y))return Z_ROW_UP_BASE+(int)i;
+        if(R_rowDown[i].right>R_rowDown[i].left&&PtIn(R_rowDown[i],x,y))return Z_ROW_DOWN_BASE+(int)i;
+    }
+    // Botoes de transporte dos cards ANTES da zona de seek.
+    if(g_cfg.listMode==0) for(size_t i=0;i<R_cardRects.size();++i){
+        RECT rr=R_cardRects[i];if(rr.right-rr.left<=0)continue;
+        int ccx=(rr.left+rr.right)/2, cy=rr.bottom-SI(40);
+        bool cur=(int)i==g_current;
+        if(PtIn({ccx-SI(120)-SI(15),cy-SI(15),ccx-SI(120)+SI(15),cy+SI(15)},x,y))return Z_SHUFFLE;
+        if(PtIn({ccx-SI(66)-SI(19),cy-SI(19),ccx-SI(66)+SI(19),cy+SI(19)},x,y))return Z_CARD_PREV_BASE+(int)i;
+        if(PtIn({ccx-SI(27),cy-SI(27),ccx+SI(27),cy+SI(27)},x,y))return cur?Z_PLAYPAUSE:(Z_TRACK_BASE+(int)i);
+        if(PtIn({ccx+SI(66)-SI(19),cy-SI(19),ccx+SI(66)+SI(19),cy+SI(19)},x,y))return Z_CARD_NEXT_BASE+(int)i;
+        if(PtIn({ccx+SI(120)-SI(15),cy-SI(15),ccx+SI(120)+SI(15),cy+SI(15)},x,y))return Z_REPEAT;
+    }
+    for(size_t i=0;i<R_cardSeekRects.size();++i)if(R_cardSeekRects[i].right>R_cardSeekRects[i].left&&PtIn(R_cardSeekRects[i],x,y))return Z_CARD_SEEK_BASE+(int)i;
+    for(size_t i=0;i<R_cardRects.size();++i)if(R_cardRects[i].right>R_cardRects[i].left&&PtIn(R_cardRects[i],x,y))return Z_TRACK_BASE+(int)i;
+    return -1;
+}
+// Faixa sob o cursor (para o menu de contexto): card/linha ou a arte do painel.
+static int TrackAt(int x,int y){
+    if(g_showSettings||AnyOverlay()) return -1;
+    for(size_t i=0;i<R_cardRects.size();++i)if(R_cardRects[i].right>R_cardRects[i].left&&PtIn(R_cardRects[i],x,y))return (int)i;
+    if(g_current>=0&&(PtIn(R_art,x,y)||(g_cfg.displayMode!=L"vertical"&&PtIn(R_playerPanel,x,y)))) return g_current;
+    return -1;
+}
+
+static void OnMouseDragSlider(int x){
+    for(auto&s:g_setSliders){
+        if(s.id!=g_dragSeek)continue;
+        float frac=(float)(x-s.r.left)/(float)std::max<int>(1,s.r.right-s.r.left);frac=std::max(0.f,std::min(1.f,frac));
+        int val=(int)std::lround(s.minv+frac*(s.maxv-s.minv));
+        if(IsEqId(s.id)){ g_cfg.eq[s.id-Z_EQ_BASE]=val; ApplyEqNow(); break; }
+        switch(s.id){case Z_UI_SCALE:g_cfg.uiScale=val;break;case Z_TITLE_SCALE:g_cfg.titleScale=val;break;case Z_ARTIST_SCALE:g_cfg.artistScale=val;break;case Z_VERTICAL_SCALE:g_cfg.verticalScale=val;break;case Z_PLAYER_SIZE_SLIDER:g_cfg.playerScale=val;break;case Z_LED_BRIGHT:g_cfg.ledBrightness=val;break;case Z_LED_SPEED:g_cfg.ledSpeed=val;break;case Z_RUNNER_SPEED:g_cfg.runnerSpeed=val;break;case Z_PART_SPEED:g_cfg.particlesSpeed=val;break;default:g_cfg.ledSpeed=val;break;}
+        break;
+    }
+    g_cfg.Clamp();BuildLayout();
+}
+static int g_rsArt0=0, g_rsScale0=100;
+
+static void OnLButtonDown(int x,int y){
+    if(g_showSplash){g_showSplash=false;return;}
+    if(g_searchFocus&&!PtIn(R_searchBox,x,y)) g_searchFocus=false;   // clicar fora tira o foco da busca (o filtro continua)
+    if(g_hkCapture>=0&&!(g_showSettings&&PtIn(R_hkKey[g_hkCapture],x,y))) g_hkCapture=-1;
+    if(g_confirmOpen){
+        if(PtIn(R_confirmYes,x,y)){ ConfirmYes(); }
+        else if(PtIn(R_confirmNo,x,y)||!PtIn(R_confirmBox,x,y)) g_confirmOpen=false;
+        return;
+    }
+    if(g_ctxOpen){
+        int hit=-1;
+        for(size_t i=0;i<R_ctxItems.size();++i) if(PtIn(R_ctxItems[i],x,y)) hit=(int)i;
+        g_ctxOpen=false;
+        if(hit<0||hit>=(int)g_ctxActs.size()) return;
+        int act=g_ctxActs[(size_t)hit], arg=g_ctxArg; RECT box=R_ctxBox;
+        if(RunMenuAction(g_ctxKind,act,arg)) return;   // menus novos (adicionar, pasta da playlist, online...)
+        if(g_ctxKind==CTX_TRACK){
+            int t=arg; if(t<0||t>=(int)g_tracks.size()) return;
+            switch(act){
+            case CA_PLAY: PlayIndex(t,true); break;
+            case CA_COVER: OpenImgMenu(t,box); break;
+            case CA_ARTIST: StartArtistEdit(t); break;
+            case CA_RENAME: StartFileRename(t); break;
+            case CA_FOLDER: PlatformOpenFolder(std::filesystem::path(g_tracks[(size_t)t].path).parent_path().wstring()); break;
+            case CA_ADDPL: OpenPickPlaylistMenu(t,box.left,box.top); break;
+            case CA_REMOVEPL: RemoveTrackFromOpenPlaylist(t); break;
+            case CA_DELETE: AskDeleteTrack(t); OpenConfirm(); break;
+            default: break;
+            }
+        } else if(g_ctxKind==CTX_PLAYLIST){
+            switch(act){
+            case CA_PL_PLAY: PlayPlaylist(arg,false); break;
+            case CA_PL_SHUF: PlayPlaylist(arg,true); break;
+            case CA_PL_RENAME: StartPlaylistNameEdit(3,arg); break;
+            case CA_PL_DELETE: AskDeletePlaylist(arg); OpenConfirm(); break;
+            default: break;
+            }
+        } else if(g_ctxKind==CTX_PICKPL){
+            if(act==CA_PICK_NEW) AddTrackToPlaylist(-1,arg);
+            else if(act>=CA_PICK_BASE) AddTrackToPlaylist(act-CA_PICK_BASE,arg);
+        }
+        return;
+    }
+    if(g_folderMenuOpen){
+        int hit=-1;
+        for(size_t i=0;i<R_folderItems.size();++i) if(PtIn(R_folderItems[i],x,y)) hit=(int)i;
+        g_folderMenuOpen=false;
+        if(hit<0) return;
+        const std::wstring& p=g_folderItemPaths[(size_t)hit];
+        if(p.empty()) PlatformPickFolderAsync();
+        else if(p==L"*") SwitchFolder(L"");
+        else SwitchFolder(p);
+        BuildLayout();
+        return;
+    }
+    {
+        WebPick& wb=WP();
+        if(wb.open){
+            if(PtIn(wb.btnClose,x,y)){wb.open=false;wb.editing=false;return;}
+            if(PtIn(wb.qbox,x,y)){wb.editing=true;return;}
+            if(PtIn(wb.btnSearch,x,y)){wb.editing=false;std::wstring q=wb.query;WebSearchAsync(q);return;}
+            for(size_t i=0;i<wb.cells.size();++i) if(PtIn(wb.cells[i],x,y)){
+                std::lock_guard<std::mutex> lk(wb.m);
+                wb.sel=(i<wb.res.size())?(int)i:-1;
+                return;
+            }
+            if(PtIn(wb.btnUse,x,y)){
+                bool can=false;
+                {std::lock_guard<std::mutex> lk(wb.m);can=(wb.sel>=0&&wb.sel<(int)wb.res.size()&&!wb.downloading);}
+                if(can){WebDownloadSelectedAsync();}
+                return;
+            }
+            if(PtIn(wb.btnCancel,x,y)||!PtIn(wb.box,x,y)){wb.open=false;wb.editing=false;return;}
+            return;
+        }
+        if(g_imgMenuOpen){
+            if(PtIn(R_imgLocal,x,y)){ g_imgMenuOpen=false; PlatformPickImageAsync(EV_PICK_IMAGE,g_imgMenuTrack); return; }
+            if(PtIn(R_imgWeb,x,y)){
+                wb.open=true; wb.track=g_imgMenuTrack; wb.sel=-1; wb.scroll=0;
+                wb.editing=true;
+                {std::lock_guard<std::mutex> lk(wb.m); ClearWebResultsPlatform(); wb.status=L"Buscando imagens..."; }
+                std::wstring q=(g_imgMenuTrack>=0&&g_imgMenuTrack<(int)g_tracks.size())?(g_tracks[g_imgMenuTrack].title+L" "+g_tracks[g_imgMenuTrack].artist):L"capa album musica";
+                wb.query=q;
+                g_imgMenuOpen=false;
+                WebSearchAsync(q);
+                return;
+            }
+            g_imgMenuOpen=false;
+            return;
+        }
+    }
+    if(OU().open){
+        OnlineUI& u=OU();
+        int oid=HitTest(x,y);
+        if(oid==Z_ON_CLOSE||!PtIn(u.box,x,y)){ u.open=false; u.editing=false; return; }
+        if(oid==Z_ON_QBOX){ u.editing=true; return; }
+        u.editing=false;
+        if(oid==Z_ON_SEARCH){ OnlineSearchAsync(); return; }
+        if(oid>=Z_ON_SRC_BASE&&oid<Z_ON_SRC_BASE+3){ u.source=oid-Z_ON_SRC_BASE; g_cfg.onlineSource=u.source; g_cfg.Save(); std::wstring q=Config::Trim(u.query); if(!q.empty()&&!IsUrlText(q)) OnlineSearchAsync(); return; }
+        if(oid>=Z_ON_PLAY_BASE&&oid<Z_ON_PLAY_BASE+500){ OnlinePlayResult(oid-Z_ON_PLAY_BASE); return; }
+        if(oid>=Z_ON_DL_BASE&&oid<Z_ON_DL_BASE+500){ OnlineDownloadResult(oid-Z_ON_DL_BASE); return; }
+        if(oid>=Z_ON_ADD_BASE&&oid<Z_ON_ADD_BASE+500){ OnlineAddResult(oid-Z_ON_ADD_BASE,x,y); return; }
+        if(oid==Z_ON_ADDALL){ OnlineAddAll(u.btnAddAll.left,u.btnAddAll.top-(int)S(220)); return; }
+        return;
+    }
+    if(g_editArtist){
+        LayoutEditor(g_winW,g_winH);
+        if(PtIn(R_editSave,x,y)) CommitArtistEdit();
+        else if(PtIn(R_editCancel,x,y)||!PtIn(R_editBox,x,y)) CancelArtistEdit();
+        return;
+    }
+    int id=HitTest(x,y);
+    if(id==Z_CLOSE){RequestClose();return;} if(id==Z_MIN){PlatformMinimize();return;} if(id==Z_GEAR){g_showSettings=!g_showSettings;g_hkCapture=-1;if(g_showSettings)EnsureToolsAsync();return;}
+    if(id==Z_TAB_TRACKS){ EnterLibraryView(); return; }
+    if(id==Z_TAB_PLAYLISTS){ ShowPlaylistCards(); return; }
+    if(id==Z_PL_BACK){ ShowPlaylistCards(); return; }
+    if(id==Z_PL_NEW){ OpenNewPlaylistMenu(R_plNew.left,R_plNew.bottom+4); return; }
+    if(id==Z_TAB_ONLINE){ OpenOnlineSearch(-1,L""); return; }
+    if(id==Z_PL_ADD){ OpenAddMenu(g_openPl,R_plAdd.left,R_plAdd.bottom+4); return; }
+    if(id==Z_PL_MODE){ CyclePlaylistMode(g_openPl); return; }
+    if(id==Z_PICK_DONE){ FinishPickMode(true); return; }
+    if(id==Z_PICK_CANCEL){ FinishPickMode(false); return; }
+    if(id==Z_ACTIVITY){ OpenActivityMenu(R_activity.left,R_activity.top-(int)S(90)); return; }
+    if(id==Z_EMPTY_ACTION){ if(g_view==2) OpenAddMenu(g_openPl,R_onlineInfo.left,R_onlineInfo.bottom+4); else OpenFolderMenu(); return; }
+    if(id==Z_SEARCH_BOX){ g_searchFocus=true; return; }
+    if(id==Z_SEARCH_CLEAR){ ClearSearch(); return; }
+    if(id>=Z_HK_KEY_BASE&&id<Z_HK_KEY_BASE+HK_COUNT){ g_hkCapture=id-Z_HK_KEY_BASE; SetStatus(L"Pressione a tecla (ou combinação) para: "+std::wstring(HkLabel(g_hkCapture))+L". Backspace limpa, Esc cancela.",4000); return; }
+    if(id>=Z_HK_SCOPE_BASE&&id<Z_HK_SCOPE_BASE+HK_COUNT){ int a=id-Z_HK_SCOPE_BASE; g_cfg.hk[a].global=!g_cfg.hk[a].global; g_cfg.Save(); PlatformUpdateGlobalHotkeys(); SetStatus(g_cfg.hk[a].global?L"GLOBAL: funciona com o Remix em segundo plano ou com outro programa na frente.":L"FOCO: só funciona com a janela do Remix ativa (não atrapalha jogos).",3200); return; }
+    if(id==Z_HK_RESET){ g_cfg.ResetHotkeys(); g_cfg.Save(); PlatformUpdateGlobalHotkeys(); SetStatus(L"Atalhos restaurados para o padrão.",2000); return; }
+    if(id>=Z_PL_CARD_BASE&&id<Z_PL_CARD_BASE+500){ int k=id-Z_PL_CARD_BASE; int n=(int)g_playlists.size(); if(k==0) EnterLibraryView(); else if(k<=n) OpenPlaylistView(k-1); else OpenNewPlaylistMenu(x,y); return; }
+    if(id>=Z_PL_PLAY_BASE&&id<Z_PL_PLAY_BASE+500){ PlayPlaylist(id-Z_PL_PLAY_BASE-1,false); return; }
+    if(id>=Z_PL_SHUF_BASE&&id<Z_PL_SHUF_BASE+500){ PlayPlaylist(id-Z_PL_SHUF_BASE-1,true); return; }
+    if(id==Z_SETTINGS_CLOSE){g_showSettings=false;return;}
+    if(id==Z_SETTINGS_DEFAULT){SwitchFolder(L"");BuildLayout();return;}
+    if(id==Z_SETTINGS_CUSTOM){PlatformPickFolderAsync();return;}
+    if(id==Z_SETTINGS_MODE_SQUARE||id==Z_SETTINGS_MODE_CD||id==Z_SETTINGS_MODE_VERTICAL){
+        if(id==Z_SETTINGS_MODE_SQUARE){g_cfg.displayMode=L"normal";g_cfg.artShape=L"square";}
+        else if(id==Z_SETTINGS_MODE_CD){g_cfg.displayMode=L"normal";g_cfg.artShape=L"cd";}
+        else {g_cfg.displayMode=L"vertical";}
+        g_cfg.Save();g_showSettings=false;g_listScroll=0;g_setScroll=0;PlatformResizeForMode();return;}
+    if(id==Z_LED_EFFECT){g_cfg.ledEffect=g_cfg.ledEffect==L"respiracao"?L"pulso":g_cfg.ledEffect==L"pulso"?L"estatico":L"respiracao";g_cfg.Save();return;}
+    if(id==Z_PARTICLES_TOGGLE){g_cfg.particlesOn=!g_cfg.particlesOn;g_cfg.Save();return;}
+    if(id==Z_GLITCH_TOGGLE){g_cfg.glitchOn=!g_cfg.glitchOn;g_cfg.Save();return;}
+    if(id==Z_PERF_TOGGLE){g_cfg.perfMode=!g_cfg.perfMode;g_cfg.Save();SetStatus(g_cfg.perfMode?L"Modo leve ligado: efeitos pesados desligados.":L"Modo leve desligado.",2500);return;}
+    if(id==Z_BG_TOGGLE){g_cfg.bgOnClose=!g_cfg.bgOnClose;g_cfg.Save();SetStatus(g_cfg.bgOnClose?L"Fechar a janela com musica tocando: continua em segundo plano.":L"Fechar a janela: encerra o Remix.",2800);return;}
+    if(id==Z_SYSMEDIA_TOGGLE){g_cfg.sysMedia=!g_cfg.sysMedia;g_cfg.Save();SetStatus(g_cfg.sysMedia?L"Controles do sistema ligados (teclas de midia, bandeja/applet de midia).":L"Controles do sistema desligados.",2800);return;}
+    if(id==Z_QUIT_BTN){QuitApp();return;}
+    if(id==Z_SET_ON_MODE){ g_cfg.onlineMode=g_cfg.onlineMode==L"download"?L"stream":L"download"; g_cfg.Save(); SetStatus(g_cfg.onlineMode==L"download"?L"Músicas online: baixa ao tocar (e já toca por streaming enquanto baixa).":L"Músicas online: streaming só na memória (nada fica no disco).",3500); return; }
+    if(id==Z_SET_ON_FMT){ g_cfg.onlineFormat=g_cfg.onlineFormat==L"mp3"?L"m4a":(g_cfg.onlineFormat==L"m4a"?L"original":L"mp3"); g_cfg.Save(); return; }
+    if(id==Z_SET_ON_SRC){ g_cfg.onlineSource=(g_cfg.onlineSource+1)%3; OU().source=g_cfg.onlineSource; g_cfg.Save(); return; }
+    if(id==Z_SET_ON_FOLDER){ PlatformPickFolderFor(EV_PICK_DLFOLDER,0); return; }
+    if(id==Z_SET_ON_RECHECK){ OT().probed=false; EnsureToolsAsync(); SetStatus(L"Procurando yt-dlp, ffmpeg e node/deno...",2500); return; }
+    if(id==Z_RUNNER_TOGGLE){g_cfg.runnerOn=!g_cfg.runnerOn;g_cfg.Save();return;}
+    if(id==Z_AUTOPLAY||id==Z_SET_AUTOPLAY){g_cfg.autoplay=!g_cfg.autoplay;g_cfg.Save();SetStatus(g_cfg.autoplay?L"Autoplay ligado":L"Autoplay desligado: toca so a faixa escolhida",1800);return;}
+    if(id==Z_SORT||id==Z_SET_SORT){CycleSortMode();BuildLayout();return;}
+    if(id==Z_SET_SORTDIR){g_cfg.sortDesc=!g_cfg.sortDesc;ApplySort();g_cfg.Save();BuildLayout();return;}
+    if(id==Z_EQ_ON){g_cfg.eqOn=!g_cfg.eqOn;ApplyEqNow();g_cfg.Save();return;}
+    if(id==Z_EQ_RESET){for(int&g:g_cfg.eq)g=0;ApplyEqNow();g_cfg.Save();return;}
+    if(id==Z_VOL_ICON){ToggleMute();return;}
+    if(id==Z_FOLDER_BTN){ if(g_view==2) OpenPlaylistFolderMenu(g_openPl); else OpenFolderMenu(); return; }   // playlist aberta: pasta DA PLAYLIST
+    if(id>=Z_ROW_UP_BASE&&id<Z_ROW_UP_BASE+Z_TRACK_RANGE){MoveTrack(id-Z_ROW_UP_BASE,-1);BuildLayout();return;}
+    if(id>=Z_ROW_DOWN_BASE&&id<Z_ROW_DOWN_BASE+Z_TRACK_RANGE){MoveTrack(id-Z_ROW_DOWN_BASE,+1);BuildLayout();return;}
+    auto setThemeIdColor=[&](std::wstring&dst,int i){
+        if(i<=0){dst=L"";return;}
+        size_t nt=g_themes.size();
+        if((size_t)i<=nt){dst=g_themes[i-1].id;return;}
+        int bi=(int)((size_t)i-nt-1);
+        dst=(bi>=0&&bi<15)?std::wstring(g_brightIds[bi]):L"";
+    };
+    if(id>=Z_RUNNER_COLOR_BASE&&id<Z_RUNNER_COLOR_BASE+20){setThemeIdColor(g_cfg.runnerColor,id-Z_RUNNER_COLOR_BASE);g_cfg.Save();return;}
+    if(id>=Z_BTN_PLAY_BASE&&id<Z_BTN_PLAY_BASE+20){setThemeIdColor(g_cfg.btnPlayColor,id-Z_BTN_PLAY_BASE);g_cfg.Save();return;}
+    if(id>=Z_BTN_NAV_BASE&&id<Z_BTN_NAV_BASE+20){setThemeIdColor(g_cfg.btnNavColor,id-Z_BTN_NAV_BASE);g_cfg.Save();return;}
+    if(id>=Z_PART_COLOR_BASE&&id<Z_PART_COLOR_BASE+20){setThemeIdColor(g_cfg.particlesColor,id-Z_PART_COLOR_BASE);g_cfg.autoColor=false;g_cfg.Save();return;}
+    if(id>=Z_LED_COLOR_BASE&&id<Z_LED_COLOR_BASE+20){setThemeIdColor(g_cfg.ledColor,id-Z_LED_COLOR_BASE);g_cfg.autoColor=false;g_cfg.Save();return;}
+    if(id==Z_AUTOCOLOR_TOGGLE){g_cfg.autoColor=!g_cfg.autoColor;g_cfg.Save();return;}
+    if(id==Z_COVERBLUR_TOGGLE){g_cfg.coverBlurBg=!g_cfg.coverBlurBg;g_cfg.Save();return;}
+    if(id==Z_SET_WALL_CHOOSE){PlatformPickImageAsync(EV_PICK_WALL,0);return;}
+    if(id==Z_CLR_WALLPAPER){g_cfg.bgWallpaper=L"";g_cfg.Save();return;}
+    if(id>=Z_THEME_BASE&&id<Z_THEME_BASE+100){int i=id-Z_THEME_BASE;if(i<(int)g_themes.size()){g_cfg.theme=g_themes[i].id;ApplyTheme();g_cfg.Save();}return;}
+    if(id==Z_ARTIST_EDIT){StartArtistEdit(g_current);return;}
+    if(id==Z_PLAYER_RESIZE){g_dragSeek=id;g_rsArt0=std::max(1,g_panelArt);g_rsScale0=g_cfg.playerScale;return;}
+    if(id==Z_SHAPE_TOGGLE){g_cfg.artShape=(g_cfg.artShape==L"cd")?L"square":L"cd";g_cfg.Save();return;}
+    if(id==Z_LISTMODE){g_cfg.listMode=g_cfg.listMode?0:1;g_listScroll=0;g_cfg.Save();BuildLayout();return;}
+    if(id==Z_WAVESEEK){
+        R_waveDragRect=PtIn(R_wavePanel,x,y)?R_wavePanel:R_seek;
+        g_dragSeek=id;
+        if(g_player.loaded&&g_player.GetLengthMs()>0){float frac=(float)(x-R_waveDragRect.left)/(float)std::max<int>(1,R_waveDragRect.right-R_waveDragRect.left);frac=std::max(0.f,std::min(1.f,frac));g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}
+        return;
+    }
+    if(id==Z_UI_SCALE||id==Z_TITLE_SCALE||id==Z_ARTIST_SCALE||id==Z_VERTICAL_SCALE||id==Z_PLAYER_SIZE_SLIDER||id==Z_LED_BRIGHT||id==Z_LED_SPEED||id==Z_RUNNER_SPEED||id==Z_PART_SPEED||IsEqId(id)){g_dragSeek=id;OnMouseDragSlider(x);return;}
+    if(g_showSettings) return;
+    if(id>=Z_COVER_BASE&&id<Z_COVER_BASE+Z_TRACK_RANGE){int i=id-Z_COVER_BASE;if(i>=0&&i<(int)g_tracks.size()){
+        RECT anchor=(i<(int)R_cardCoverButtons.size()&&R_cardCoverButtons[i].right>R_cardCoverButtons[i].left)?R_cardCoverButtons[i]:R_verticalCoverButton;
+        OpenImgMenu(i,anchor);
+    }return;}
+    if(id>=Z_CARD_SEEK_BASE&&id<Z_CARD_SEEK_BASE+Z_TRACK_RANGE){int i=id-Z_CARD_SEEK_BASE;if(i>=0&&i<(int)g_tracks.size()){if(g_current!=i)PlayIndex(i,false);g_dragSeek=id;int x0=R_cardSeekRects[i].left,x1=R_cardSeekRects[i].right;float frac=(float)(x-x0)/std::max<int>(1,x1-x0);frac=std::max(0.f,std::min(1.f,frac));if(g_player.loaded)g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}return;}
+    if(id==Z_PLAYPAUSE){TogglePlayPause();return;}
+    if(id==Z_NEXT){NextTrack();return;} if(id==Z_PREV){PrevOrRestart();return;}
+    if(id==Z_SHUFFLE){g_cfg.shuffle=!g_cfg.shuffle;g_cfg.Save();return;} if(id==Z_REPEAT){g_cfg.repeat=!g_cfg.repeat;g_cfg.Save();return;}
+    if(id>=Z_CARD_PREV_BASE&&id<Z_CARD_PREV_BASE+Z_TRACK_RANGE){PrevOrRestart();return;}
+    if(id>=Z_CARD_NEXT_BASE&&id<Z_CARD_NEXT_BASE+Z_TRACK_RANGE){NextTrack();return;}
+    if(id==Z_SEEKBAR||id==Z_VOLBAR){g_dragSeek=id;if(id==Z_SEEKBAR&&g_player.loaded&&g_player.GetLengthMs()>0){float frac=(float)(x-R_seek.left)/(float)std::max<int>(1,R_seek.right-R_seek.left);frac=std::max(0.f,std::min(1.f,frac));g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}
+        if(id==Z_VOLBAR){float frac=(float)(x-R_vol.left)/(float)std::max<int>(1,R_vol.right-R_vol.left);SetVolumePercent((int)(std::max(0.f,std::min(1.f,frac))*100));}
+        return;}
+    if(id>=Z_TRACK_BASE&&id<Z_TRACK_BASE+Z_TRACK_RANGE){int i=id-Z_TRACK_BASE;if(i<(int)g_tracks.size()){ if(g_pickMode) TogglePick(i); else PlayIndex(i,true); }return;}
+}
+static void OnRButtonDown(int x,int y){
+    if(g_showSplash) return;
+    if(AnyOverlay()){ g_ctxOpen=false; g_folderMenuOpen=false; g_imgMenuOpen=false; return; }
+    if(g_pickMode) return;
+    int t=TrackAt(x,y);
+    if(t>=0) OpenCtxMenu(t,x,y);
+    else if(g_view==1){ for(size_t k=1;k<R_plCards.size()&&k<=g_playlists.size();++k) if(R_plCards[k].right>R_plCards[k].left&&PtIn(R_plCards[k],x,y)){ OpenPlaylistCtxMenu((int)k-1,x,y); break; } }
+}
+static void OnMouseDrag(int x){
+    if(g_dragSeek==-1) return;
+    if(g_dragSeek==Z_SEEKBAR&&g_player.loaded){float frac=(float)(x-R_seek.left)/(float)std::max<int>(1,R_seek.right-R_seek.left);frac=std::max(0.f,std::min(1.f,frac));g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}
+    else if(g_dragSeek==Z_WAVESEEK&&g_player.loaded){float frac=(float)(x-R_waveDragRect.left)/(float)std::max<int>(1,R_waveDragRect.right-R_waveDragRect.left);frac=std::max(0.f,std::min(1.f,frac));g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}
+    else if(g_dragSeek>=Z_CARD_SEEK_BASE&&g_dragSeek<Z_CARD_SEEK_BASE+Z_TRACK_RANGE){int i=g_dragSeek-Z_CARD_SEEK_BASE;if(i>=0&&i<(int)R_cardSeekRects.size()&&i<(int)g_tracks.size()&&g_player.loaded){float frac=(float)(x-R_cardSeekRects[i].left)/(float)std::max<int>(1,R_cardSeekRects[i].right-R_cardSeekRects[i].left);frac=std::max(0.f,std::min(1.f,frac));if(g_current==i)g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}}
+    else if(g_dragSeek==Z_VOLBAR){float frac=(float)(x-R_vol.left)/(float)std::max<int>(1,R_vol.right-R_vol.left);SetVolumePercent((int)(std::max(0.f,std::min(1.f,frac))*100));}
+    else if(g_dragSeek==Z_PLAYER_RESIZE){int refX=R_playerPanel.left+SI(22);double dist=(double)x-refX;if(dist<(double)S(60))dist=(double)S(60);int sc=(int)std::lround(g_rsScale0*dist/std::max(1,g_rsArt0));g_cfg.playerScale=std::max(60,std::min(170,sc));BuildLayout();}
+    else OnMouseDragSlider(x);
+}
+static void OnLButtonUp(){ if(g_dragSeek!=-1){g_dragSeek=-1;g_cfg.Save();} }
+static void OnWheel(int d){ // d = notches (>0 = pra cima)
+    if(WP().open){WebPick& wb=WP();int rows=(int)((wb.cells.size()+3)/4);int content=rows*(int)S(150)+(int)S(40);wb.scroll-=d*SI(120);wb.scroll=std::max(0,std::min(wb.scroll,std::max(0,content-(int)(S(360)))));return;}
+    if(OU().open){ OU().scroll-=d*SI(116); if(OU().scroll<0) OU().scroll=0; return; }   // LayoutOnline limita o maximo
+    if(g_showSettings){g_setScroll-=d*(int)S(56);int maxSc=std::max(0,(int)(g_setContentH-(R_settingsPanel.bottom-R_settingsPanel.top-76)));g_setScroll=std::max(0,std::min(g_setScroll,maxSc));return;}
+    if(g_showSplash||g_cfg.displayMode==L"vertical")return;
+    g_listScroll-=d*SI(g_cfg.listMode?64:120);
+    g_listScroll=std::max(0,std::min(g_listScroll,MaxScroll()));
+    BuildLayout();
+}
+static void OnChar(int c){ // so caracteres imprimiveis
+    WebPick& wb=WP();
+    if(wb.open&&wb.editing){ if(c>=32&&c!=127&&(int)wb.query.size()<120)wb.query.push_back((wchar_t)c); return; }
+    if(OU().open){ if(OU().editing&&c>=32&&c!=127&&(int)OU().query.size()<300) OU().query.push_back((wchar_t)c); return; }
+    if(g_editArtist){ if(c>=32&&c!=127&&(int)g_editBuf.size()<(g_editMode==1?120:(g_editMode>=4?800:64))) g_editBuf.push_back((wchar_t)c); return; }
+    if(g_searchFocus){ if(c>=32&&c!=127&&(int)g_searchBuf.size()<60){ g_searchBuf.push_back((wchar_t)c); BuildLayout(); } return; }
+}
+// Tecla pressionada com a janela em foco. kc = KeyCode (app_keys.h), mods = KM_*.
+// Enter/Esc/Backspace dos editores e da busca sao fixos; o resto passa pelos atalhos configuraveis.
+static void OnKeyEvent(int kc,int mods){
+    WebPick& wb=WP();
+    if(g_hkCapture>=0){   // capturando um atalho nas configuracoes
+        int a=g_hkCapture;
+        if(kc==KC_ESC){ g_hkCapture=-1; SetStatus(L"Captura cancelada.",1500); return; }
+        if(kc==KC_BACKSPACE){ g_cfg.hk[a].key=0; g_cfg.hk[a].mods=0; SetStatus(std::wstring(HkLabel(a))+L": sem atalho.",2000); }
+        else {
+            for(int i=0;i<HK_COUNT;i++) if(i!=a&&g_cfg.hk[i].key==kc&&g_cfg.hk[i].mods==mods){ g_cfg.hk[i].key=0; g_cfg.hk[i].mods=0; SetStatus(L"Esse atalho estava em \""+std::wstring(HkLabel(i))+L"\" e foi movido.",3000); }
+            g_cfg.hk[a].key=kc; g_cfg.hk[a].mods=mods;
+        }
+        g_hkCapture=-1; g_cfg.Save(); PlatformUpdateGlobalHotkeys(); return;
+    }
+    if(g_confirmOpen){ if(kc==KC_ENTER) ConfirmYes(); else if(kc==KC_ESC){ g_confirmOpen=false; g_confirmKind=0; } return; }
+    if(g_ctxOpen||g_folderMenuOpen){ if(kc==KC_ESC){g_ctxOpen=false;g_folderMenuOpen=false;} return; }
+    if(wb.open){
+        if(kc==KC_ESC){wb.open=false;wb.editing=false;}
+        else if(kc==KC_ENTER){wb.editing=false;WebSearchAsync(wb.query);}
+        else if(kc==KC_BACKSPACE&&wb.editing){if(!wb.query.empty())wb.query.pop_back();}
+        return;
+    }
+    auto clip=[](size_t lim){ std::wstring c=Config::Trim(PlatformClipboardText()); for(auto& ch:c) if(ch<32) ch=L' '; if(c.size()>lim) c.resize(lim); return c; };
+    if(OU().open){
+        OnlineUI& u=OU();
+        if(kc==KC_ESC){ u.open=false; u.editing=false; }
+        else if(kc==KC_ENTER||kc==KC_KPENTER) OnlineSearchAsync();
+        else if(kc=='V'&&(mods&KM_CTRL)){ u.query+=clip(300); if(u.query.size()>300) u.query.resize(300); u.editing=true; }
+        else if(kc==KC_BACKSPACE&&u.editing){ if(!u.query.empty()) u.query.pop_back(); }
+        return;
+    }
+    if(g_editArtist){
+        size_t lim=g_editMode==1?120:(g_editMode>=4?800:64);
+        if(kc==KC_ENTER||kc==KC_KPENTER) CommitArtistEdit();
+        else if(kc==KC_ESC) CancelArtistEdit();
+        else if(kc==KC_BACKSPACE){ if(!g_editBuf.empty()) g_editBuf.pop_back(); }
+        else if(kc=='V'&&(mods&KM_CTRL)){ g_editBuf+=clip(lim); if(g_editBuf.size()>lim) g_editBuf.resize(lim); }
+        return;
+    }
+    if(g_searchFocus){
+        if(kc==KC_ESC){ ClearSearch(); return; }
+        if(kc==KC_ENTER){ g_searchFocus=false; if(!g_visible.empty()){ if(g_pickMode) TogglePick(g_visible[0]); else PlayIndex(g_visible[0],true); } return; }
+        if(kc=='V'&&(mods&KM_CTRL)){ std::wstring c=clip(600); if(IsUrlText(c)){ ClearSearch(); OpenOnlineSearch(g_view==2?g_openPl:-1,c); } else { g_searchBuf+=c; if(g_searchBuf.size()>60) g_searchBuf.resize(60); BuildLayout(); } return; }
+        if(kc==KC_BACKSPACE){ if(!g_searchBuf.empty()){ g_searchBuf.pop_back(); BuildLayout(); } return; }
+        if(!(mods&(KM_CTRL|KM_ALT))) return;   // digitando: letras vao para a busca (OnChar), nao para os atalhos
+    }
+    if(g_showSplash){g_showSplash=false;return;}
+    if(g_pickMode&&(kc==KC_ENTER||kc==KC_KPENTER)&&mods==0&&!g_showSettings){ FinishPickMode(true); return; }
+    if(kc=='V'&&mods==KM_CTRL&&!g_showSettings){ std::wstring c=clip(600); if(IsUrlText(c)){ OpenOnlineSearch(g_view==2?g_openPl:-1,c); return; } }   // Ctrl+V com link: abre na busca online
+    int a=FindHotkey(kc,mods);
+    if(a>=0){ RunHotkeyAction(a); return; }
+    if(kc==KC_ESC&&mods==0) RunHotkeyAction(HK_CLOSE);   // Esc sempre fecha paineis, mesmo sem atalho definido
+}
+
+// Acoes agendadas (testes sem clique): --after 1500:vertical --after 3000:shot:/tmp/a.png
+struct TimedAction { int ms; std::string action; bool done=false; };
+static std::vector<TimedAction> g_timed;
+static void RunAction(const std::string& a){
+    fprintf(stderr,"[remix] acao: %s\n",a.c_str());
+    if(a=="vertical"){g_cfg.displayMode=L"vertical";PlatformResizeForMode();}
+    else if(a=="square"){g_cfg.displayMode=L"normal";g_cfg.artShape=L"square";PlatformResizeForMode();}
+    else if(a=="cd"){g_cfg.displayMode=L"normal";g_cfg.artShape=L"cd";PlatformResizeForMode();}
+    else if(a=="list"){g_cfg.listMode=1;BuildLayout();}
+    else if(a=="grid"){g_cfg.listMode=0;BuildLayout();}
+    else if(a=="settings"){g_showSettings=!g_showSettings;}
+    else if(a=="next")NextTrack();
+    else if(a=="play")TogglePlayPause();
+    else if(a=="autoplay"){g_cfg.autoplay=!g_cfg.autoplay;}
+    else if(a=="sort"){CycleSortMode();BuildLayout();}
+    else if(a=="movedown"){MoveTrack(g_current,+1);BuildLayout();}
+    else if(a=="eq"){g_cfg.eqOn=true;g_cfg.eq[0]=8;g_cfg.eq[1]=5;g_cfg.eq[6]=-6;g_cfg.eq[7]=4;ApplyEqNow();}
+    else if(a=="mute")ToggleMute();
+    else if(a=="volup")SetVolumePercent(g_cfg.volume+5);
+    else if(a=="ctx"){if(g_current>=0)OpenCtxMenu(g_current,R_art.left+40,R_art.top+40);}
+    else if(a=="foldermenu")OpenFolderMenu();
+    else if(a=="confirm"){AskDeleteTrack(g_current);OpenConfirm();}
+    else if(a=="rename"){StartFileRename(g_current);}
+    else if(a=="perf"){g_cfg.perfMode=!g_cfg.perfMode;}
+    else if(a=="close")RequestClose();
+    else if(a=="show")ShowFromBackground();
+    else if(a=="quit")QuitApp();
+    else if(a=="minimize")PlatformMinimize();
+    else if(a.rfind("size:",0)==0){ int w=0,h=0; if(sscanf(a.c_str()+5,"%dx%d",&w,&h)==2&&w>0&&h>0) PlatformSetWindowSize(w,h); }
+    else if(a=="scrollend"){g_setScroll=100000;g_listScroll=100000;BuildLayout();LayoutSettings(g_winW,g_winH);}
+    else if(a.rfind("shot:",0)==0){PlatformScreenshot(Utf8ToWide(a.substr(5)));}
+    else if(a.rfind("track:",0)==0){int i=atoi(a.c_str()+6);PlayIndex(i,true);}
+    else if(a.rfind("key:",0)==0){ Hotkey h; ParseHotkey(Utf8ToWide(a.substr(4)),h); if(h.key) OnKeyEvent(h.key,h.mods); }
+    else if(a.rfind("search:",0)==0){ FocusSearch(); g_searchBuf=Utf8ToWide(a.substr(7)); BuildLayout(); }
+    else if(a=="tab:playlists"){ ShowPlaylistCards(); }
+    else if(a=="tab:tracks"){ EnterLibraryView(); }
+    else if(a=="back"){ RunHotkeyAction(HK_CLOSE); }
+    else if(a.rfind("plnew:",0)==0){ int pi=CreatePlaylist(Utf8ToWide(a.substr(6))); fprintf(stderr,"[remix] playlist criada: %d\n",pi); BuildLayout(); }
+    else if(a.rfind("pladd:",0)==0){ AddTrackToPlaylist(atoi(a.c_str()+6),g_current); }
+    else if(a.rfind("plopen:",0)==0){ OpenPlaylistView(atoi(a.c_str()+7)); }
+    else if(a.rfind("plplay:",0)==0){ PlayPlaylist(atoi(a.c_str()+7),false); }
+    else if(a.rfind("plshuf:",0)==0){ PlayPlaylist(atoi(a.c_str()+7),true); }
+    else if(a.rfind("hkset:",0)==0){ std::string r=a.substr(6); size_t eq=r.find('='); if(eq!=std::string::npos){ int act=HkIndexById(Utf8ToWide(r.substr(0,eq))); if(act>=0){ ParseHotkey(Utf8ToWide(r.substr(eq+1)),g_cfg.hk[act]); g_cfg.Save(); PlatformUpdateGlobalHotkeys(); } } }
+    else if(a.rfind("hkcap:",0)==0){ g_hkCapture=HkIndexById(Utf8ToWide(a.substr(6))); }
+    else if(a.rfind("click:",0)==0){ int x=0,y=0; if(sscanf(a.c_str()+6,"%d,%d",&x,&y)==2){ OnLButtonDown(x,y); OnLButtonUp(); } }
+    else if(a=="plctx"){ if(!g_playlists.empty()&&R_plCards.size()>1) OpenPlaylistCtxMenu(0,R_plCards[1].left+20,R_plCards[1].top+20); }
+    else if(a.rfind("type:",0)==0){for(wchar_t c:Utf8ToWide(a.substr(5)))OnChar((int)c);}
+    else if(a.rfind("pickstart:",0)==0){ StartPickMode(atoi(a.c_str()+10)); }
+    else if(a.rfind("picktoggle:",0)==0){ TogglePick(atoi(a.c_str()+11)); }
+    else if(a=="pickdone"){ FinishPickMode(true); }
+    else if(a.rfind("pllink:",0)==0){ std::string r=a.substr(7); size_t c=r.find(':'); if(c!=std::string::npos) LinkPlaylistFolder(atoi(r.substr(0,c).c_str()),Utf8ToWide(r.substr(c+1))); }
+    else if(a.rfind("pladdfiles:",0)==0){ std::string r=a.substr(11); size_t c=r.find(':'); if(c!=std::string::npos){ SetPendingPl(atoi(r.substr(0,c).c_str())); std::wstring v=Utf8ToWide(r.substr(c+1)); for(auto& ch:v) if(ch==L'|') ch=L'\n'; OnPickedFiles(v,false); } }
+    else if(a.rfind("online:",0)==0){ OpenOnlineSearch(g_view==2?g_openPl:-1,Utf8ToWide(a.substr(7))); }
+    else if(a.rfind("onsrc:",0)==0){ OU().source=atoi(a.c_str()+6); g_cfg.onlineSource=OU().source; }
+    else if(a.rfind("onplay:",0)==0){ OnlinePlayResult(atoi(a.c_str()+7)); }
+    else if(a.rfind("ondl:",0)==0){ OnlineDownloadResult(atoi(a.c_str()+5)); }
+    else if(a.rfind("onadd:",0)==0){ OnlineAddResult(atoi(a.c_str()+6),300,200); }
+    else if(a=="onaddall"){ OnlineAddAll(300,200); }
+    else if(a=="onclose"){ OU().open=false; }
+    else if(a.rfind("onmode:",0)==0){ g_cfg.onlineMode=Utf8ToWide(a.substr(7)); }
+    else if(a=="addmenu"){ OpenAddMenu(g_openPl,R_plAdd.left,R_plAdd.bottom+4); }
+    else if(a=="newmenu"){ OpenNewPlaylistMenu(300,200); }
+    else if(a=="plfolder"){ OpenPlaylistFolderMenu(g_openPl); }
+    else if(a.rfind("linkadd:",0)==0){ ResolveLinkAsync(Utf8ToWide(a.substr(8)),(g_view==2&&g_openPl>=0)?g_playlists[(size_t)g_openPl].slug:L""); }
+    else if(a.rfind("seek:",0)==0){ if(g_player.loaded) g_player.SeekMs((DWORD)atoi(a.c_str()+5)); }
+    else if(a=="dump"){
+        fprintf(stderr,"[remix] view=%d openPl=%d pick=%d tracks=%d current=%d playing=%d stream=%d pos=%lu len=%lu playlists=%d online=%d\n",g_view,g_openPl,(int)g_pickMode,(int)g_tracks.size(),g_current,(int)g_player.playing,(int)g_player.IsStream(),
+            (unsigned long)(g_player.loaded?g_player.GetPositionMs():0),(unsigned long)(g_player.loaded?g_player.GetLengthMs():0),(int)g_playlists.size(),(int)OU().res.size());
+        for(size_t i=0;i<g_tracks.size()&&i<12;++i) fprintf(stderr,"[remix]   %zu %s | %s | capa=%s\n",i,WideToUtf8(g_tracks[i].title).c_str(),WideToUtf8(g_tracks[i].path).c_str(),WideToUtf8(g_tracks[i].coverPath).c_str());
+        { std::lock_guard<std::mutex> lk(OU().m); for(size_t i=0;i<OU().res.size()&&i<5;++i) fprintf(stderr,"[remix]   online %zu %s - %s (%d s) %s\n",i,WideToUtf8(OU().res[i].artist).c_str(),WideToUtf8(OU().res[i].title).c_str(),OU().res[i].dur,WideToUtf8(OU().res[i].url).c_str()); if(!OU().status.empty()) fprintf(stderr,"[remix]   status online: %s\n",WideToUtf8(OU().status).c_str()); }
+        for(auto& c:StreamSnapshot()) fprintf(stderr,"[remix]   canal %d %s fase=%d recebido=%llus/%llus %s\n",c.id,c.id==g_curStreamId?"TOCANDO":"fila",c.phase,(unsigned long long)(c.end/c.rate),(unsigned long long)(c.len/c.rate),WideToUtf8(c.title.empty()?c.url:c.title).c_str());
+        if(StatusVisible()) fprintf(stderr,"[remix]   aviso: %s\n",WideToUtf8(g_status).c_str());
+    }
+}
+static void RunTimedActions(unsigned long long elapsedMs){
+    for(auto& ta:g_timed) if(!ta.done&&elapsedMs>=(unsigned long long)ta.ms){ ta.done=true; RunAction(ta.action); }
+}

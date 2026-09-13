@@ -1,0 +1,28 @@
+Remix: prazo de 0,5 s em waitForVisibilityNotify (GLFW 3.4 que vem no raylib 5.5).
+Sem isso a janela pode travar ao abrir no XWayland (sessao Wayland).
+Aplicado sozinho por linux/fetch-deps.sh e linux/build-raylib.sh.
+
+--- a/src/external/glfw/src/x11_window.c
++++ b/src/external/glfw/src/x11_window.c
+@@ -141,6 +141,12 @@
+ {
+     XEvent dummy;
+     double timeout = 0.1;
++    // Remix: prazo absoluto. Se ha outros eventos na fila (ReparentNotify,
++    // ConfigureNotify...) e o VisibilityNotify nunca chega (XWayland em
++    // sessao Wayland, compositor que so mostra depois do 1o frame), o laco
++    // original girava para sempre em XPending()>0.
++    const uint64_t t0 = _glfwPlatformGetTimerValue();
++    const uint64_t freq = _glfwPlatformGetTimerFrequency();
+ 
+     while (!XCheckTypedWindowEvent(_glfw.x11.display,
+                                    window->x11.handle,
+@@ -149,6 +155,8 @@
+     {
+         if (!waitForX11Event(&timeout))
+             return GLFW_FALSE;
++        if (freq && (_glfwPlatformGetTimerValue() - t0) > freq / 2)   // 0,5 s
++            return GLFW_FALSE;
+     }
+ 
+     return GLFW_TRUE;

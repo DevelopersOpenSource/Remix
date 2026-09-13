@@ -1,0 +1,1165 @@
+#pragma once
+// Nucleo compartilhado Windows/Linux do Remix: estado, reproducao, biblioteca,
+// ordem da playlist, analise de audio (onda + espectro), volume/mudo, menus
+// (pasta, contexto, confirmacao), renomear/excluir arquivo e eventos vindos de
+// threads. NAO desenha nada e nao conhece Win32 nem raylib: tudo que depende do
+// sistema entra pelos hooks Platform* declarados abaixo, implementados em
+// main.cpp (Windows, GDI+) e linux/main_linux.cpp (raylib).
+#include "platform.h"
+#include "config.h"
+#include "theme.h"
+#include "playlist.h"
+#include "app_playlists.h"
+#include "player_ma.h"
+#include <vector>
+#include <string>
+#include <map>
+#include <cmath>
+#include <algorithm>
+#include <thread>
+#include <mutex>
+#include <atomic>
+#include <filesystem>
+#include <cstdlib>
+#include <cstdio>
+#include <set>
+
+// ------------------------------------------------------------ hooks --------
+void AppPost(int type, const std::wstring& s = L"", int n = 0); // evento de thread -> UI (drenado no loop)
+void PlatformPickFolderAsync();                                 // responde com EV_PICK_FOLDER (s = pasta ou vazio)
+void PlatformPickImageAsync(int evType, int ctx);               // responde com evType (s = imagem, n = ctx)
+void PlatformResizeForMode();
+void PlatformMinimize();
+void PlatformClose();          // encerra o app de vez
+void PlatformHide();           // esconde a janela (segue tocando em 2o plano)
+void PlatformSetWindowSize(int w,int h);   // testes (--after N:size:WxH)
+void PlatformUpdateGlobalHotkeys();       // registra/desregistra no sistema os atalhos marcados como GLOBAL
+static void BuildLayout();                 // app_layout.h (mesma unidade de compilacao)
+void PlatformRestoreAndFocus();
+void PlatformRedraw();
+void PlatformLoadCover(const std::wstring& path);
+void PlatformEvictThumb(const std::wstring& path);
+void PlatformClearThumbs();
+bool PlatformTrash(const std::wstring& path);                   // manda para a lixeira
+bool PlatformHaveFfmpeg();
+std::wstring PlatformTranscodeToWav(const std::wstring& src);   // roda em thread; vazio = falhou
+void PlatformOpenFolder(const std::wstring& path);              // abre no gerenciador de arquivos
+void PlatformWatchStart(const std::wstring& dir);
+void PlatformWatchStop();
+bool PlatformWatchTake(unsigned long long quietMs);             // houve mudanca e ja passou a janela de acalmia
+bool PlatformScreenshot(const std::wstring& pngPath);           // testes
+void PlatformPickFolderFor(int evType, int ctx);                // pasta para outra finalidade (s = pasta, n = ctx)
+void PlatformPickAudioFilesAsync(int evType, int ctx);          // varios arquivos de audio (s = caminhos separados por \n)
+std::wstring PlatformClipboardText();                           // colar (Ctrl+V)
+bool PlatformHttpGet(const std::string& url, std::string& body);
+// busca de capa na web (HTTP + decodificacao de imagem sao por plataforma)
+static void WebSearchAsync(std::wstring q);
+static void WebDownloadSelectedAsync();
+static void ConsumeWebDownload();
+static void ClearWebResultsPlatform();
+
+// ------------------------------------------------------------ estado -------
+static Config g_cfg;
+static std::vector<Theme> g_themes;
+static Theme g_theme;
+static std::vector<Track> g_tracks;
+static int g_current = -1;
+static Player g_player;
+static float g_rotation = 0.0f;
+static float g_glowPhase = 0.0f;
+static float g_runnerPhase = 0.0f;
+static bool g_showSettings = false;
+static bool g_showSplash = true;
+// Segundo plano: janela escondida com a musica tocando (fechar com bgOnClose).
+static bool g_hiddenToBg=false, g_bgAutoQuit=false, g_userPaused=false; static float g_bgIdleSec=0;
+// ---- busca, vistas (biblioteca / playlists) e atalhos ----
+static bool g_searchFocus=false; static std::wstring g_searchBuf; static std::vector<int> g_visible;   // faixas visiveis (filtro da busca)
+static int g_view=0;                       // 0 = faixas da biblioteca, 1 = cards de playlists, 2 = faixas de uma playlist
+static int g_openPl=-1;                    // playlist aberta (g_view==2)
+static std::vector<Track> g_libTracks; static bool g_libCached=false;   // biblioteca guardada enquanto uma playlist esta aberta
+static Track g_nowPlaying; static bool g_nowPlayingValid=false;        // faixa tocando (pode nao estar na lista visivel)
+static int g_hkCapture=-1;                 // acao cujo atalho esta sendo capturado (configuracoes)
+static std::wstring g_pendingAddPath;      // faixa a adicionar na playlist recem-criada
+static int g_confirmKind=0;                // 0 = excluir faixa, 1 = excluir playlist
+// ---- marcar musicas da biblioteca para uma playlist / musicas online ----
+static bool g_pickMode=false; static int g_pickPl=-1; static std::set<std::wstring> g_pickSel;
+static std::wstring g_lastOnlineUrl, g_lastOnlineTitle;         // ultima musica em streaming (diario)
+static ULONGLONG g_journalLast=0; static std::wstring g_journalSig;
+static ULONGLONG g_splashStart = 0;
+static const ULONGLONG SPLASH_MS = 2400;
+static int g_dragSeek = -1;
+static int g_listScroll = 0;
+static std::wstring g_pendingPlay;
+static std::thread g_waveThread;
+static std::thread g_scanThread;
+static int g_winW = 1500, g_winH = 812;      // area cliente atual
+static bool g_customChrome = false;          // Windows: janela sem borda -> fechar/minimizar no cabecalho
+static bool g_muted = false;
+static int g_volBeforeMute = 80;
+static std::wstring g_status;                // aviso curto na base da janela
+static ULONGLONG g_statusUntil = 0;
+
+static const int MIN_WIN_W = 560;
+static const int MIN_WIN_H = 430;
+static const int ROW_H = 56;
+
+// Eventos vindos de threads.
+enum : int {
+    EV_NEXT_TRACK = 1, EV_REDRAW, EV_WEB_DOWNLOAD_DONE, EV_THUMBS_INVALIDATE, EV_COMMAND,
+    EV_PICK_FOLDER, EV_PICK_IMAGE, EV_PICK_WALL, EV_TRANSCODED,
+    EV_ART_READY, EV_ONLINE_META, EV_ONLINE_READY, EV_ONLINE_FAIL, EV_ONLINE_THUMB, EV_ONLINE_SEARCH, EV_ONLINE_RESOLVED, EV_ONLINE_JOB,
+    EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY
+};
+#include "online_play.h"
+static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
+static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
+// Teclas (mapeadas por cada plataforma).
+enum AppKey : int { K_NONE = 0, K_SPACE, K_LEFT, K_RIGHT, K_UP, K_DOWN, K_ENTER, K_ESC, K_BACKSPACE, K_R, K_M, K_DELETE, K_F2, K_PLUS, K_MINUS, K_Q };
+
+// Estado compartilhado com threads em background. Alocado uma unica vez e
+// nunca destruido: threads desanexadas podem terminar depois do main sem
+// tocar em objetos ja destruidos.
+struct WaveState {
+    std::mutex m;
+    std::vector<float> data;   // onda (320 buckets 0..1)
+    std::wstring path;
+    std::atomic<unsigned long> job{0};
+    std::mutex fm;
+    std::vector<float> spec;   // espectrograma: frames*48 (48 bandas por ~50 ms)
+    int specHopMs = 50;
+    float bands[48] = {0};
+    bool hasSpec = false;
+};
+static WaveState& WS(){ static WaveState* s = new WaveState(); return *s; }
+struct ScanState {
+    std::mutex m;
+    std::vector<Track> result;
+    std::atomic<bool> again{false};   // pedido de nova varredura enquanto uma roda
+    bool computer=true; std::wstring folder;
+    std::atomic<bool> busy{false};
+    std::atomic<bool> ready{false};
+    std::atomic<unsigned long> gen{0};
+};
+static ScanState& SS(){ static ScanState* s = new ScanState(); return *s; }
+
+enum : int {
+    Z_CLOSE=1, Z_MIN, Z_PLAYPAUSE, Z_NEXT, Z_PREV, Z_SHUFFLE, Z_REPEAT,
+    Z_SEEKBAR, Z_VOLBAR, Z_HEART, Z_MODE_SQUARE, Z_MODE_CD, Z_MODE_VERTICAL, Z_GEAR,
+    Z_ARTIST_EDIT=16, Z_PLAYER_RESIZE,
+    Z_SHAPE_TOGGLE=18, Z_LISTMODE=19, Z_WAVESEEK=20,
+    Z_IMG_LOCAL=21, Z_IMG_WEB=22,
+    Z_WEB_QBOX=23, Z_WEB_SEARCH=24, Z_WEB_USE=25, Z_WEB_CANCEL=26, Z_WEB_CLOSE=27,
+    Z_THEME_BASE=100, Z_TRACK_BASE=1000000,   // faixa i = BASE+i (ate 1 milhao): nao pode colidir com os IDs fixos
+    Z_SETTINGS_FOLDER=900, Z_SETTINGS_CLOSE, Z_LED_BRIGHT, Z_LED_SPEED, Z_LED_EFFECT,
+    Z_UI_SCALE, Z_TITLE_SCALE, Z_ARTIST_SCALE, Z_VERTICAL_SCALE,
+    Z_SETTINGS_DEFAULT, Z_SETTINGS_CUSTOM, Z_SETTINGS_MODE_SQUARE, Z_SETTINGS_MODE_CD, Z_SETTINGS_MODE_VERTICAL,
+    Z_RUNNER_TOGGLE=600, Z_RUNNER_SPEED=605, Z_RUNNER_COLOR_BASE=610, Z_BTN_PLAY_BASE=630, Z_BTN_NAV_BASE=650,
+    Z_PARTICLES_TOGGLE=670, Z_GLITCH_TOGGLE=671, Z_PLAYER_SIZE_SLIDER=672, Z_AUTOCOLOR_TOGGLE=673,
+    Z_SET_WALL_CHOOSE=674, Z_CLR_WALLPAPER=675, Z_COVERBLUR_TOGGLE=676,
+    Z_PART_SPEED=680, Z_LED_COLOR_BASE=684, Z_PART_COLOR_BASE=704,
+    Z_EQ_BASE=740, Z_SET_AUTOPLAY=760, Z_SET_SORT=761, Z_SET_SORTDIR=762, Z_EQ_ON=763, Z_EQ_RESET=764,
+    Z_AUTOPLAY=765, Z_SORT=766, Z_VOL_ICON=767, Z_FOLDER_BTN=768, Z_CONFIRM_YES=769, Z_CONFIRM_NO=770, Z_PERF_TOGGLE=771, Z_BG_TOGGLE=772, Z_QUIT_BTN=773, Z_SYSMEDIA_TOGGLE=774, Z_TAB_TRACKS=780, Z_TAB_PLAYLISTS=781, Z_SEARCH_BOX=782, Z_SEARCH_CLEAR=783, Z_PL_BACK=784, Z_PL_NEW=785, Z_HK_RESET=786,
+    Z_TAB_ONLINE=787, Z_PL_ADD=788, Z_PICK_DONE=789, Z_PICK_CANCEL=790, Z_ACTIVITY=791, Z_SET_ON_MODE=792, Z_SET_ON_FMT=793, Z_SET_ON_SRC=794,
+    Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810,
+    Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
+    Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
+    Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
+    Z_PL_CARD_BASE=13000, Z_PL_PLAY_BASE=13500, Z_PL_SHUF_BASE=14000, Z_HK_KEY_BASE=14500, Z_HK_SCOPE_BASE=14600, Z_ON_PLAY_BASE=15000, Z_ON_DL_BASE=15500, Z_ON_ADD_BASE=16000
+};
+
+static RECT R_titlebar, R_art, R_seek, R_vol, R_play, R_prev, R_next, R_shuffle, R_repeat;
+static RECT R_heart, R_gear, R_close, R_min, R_library;
+static RECT R_modeSquare, R_modeCd, R_modeVertical;
+static std::vector<RECT> R_themeCircles;
+static std::vector<RECT> R_cardRects;
+static std::vector<RECT> R_cardCoverButtons;
+static std::vector<RECT> R_cardSeekRects;
+static RECT R_settingsPanel, R_settingsDefault, R_settingsCustom, R_settingsClose;
+static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
+static RECT R_verticalCoverButton;
+static RECT R_playerPanel;
+static int g_panelArt = 300;
+static RECT R_pencilPanel, R_pencilVert, R_editBox, R_editSave, R_editCancel;
+static RECT R_setParticles, R_setGlitch, R_setRunnerToggle, R_runnerSlider, R_setEffect;
+static RECT R_setAutoColor, R_setPerf, R_setBgClose, R_setSysMedia, R_setQuit;
+static RECT R_libBar, R_tabTracks, R_tabPlaylists, R_searchBox, R_searchClear, R_plBack, R_plNew, R_hkReset;
+static RECT R_hkKey[HK_COUNT], R_hkScope[HK_COUNT];
+static std::vector<RECT> R_plCards, R_plPlay, R_plShuf;
+static RECT R_tabOnline, R_plAdd, R_plMode, R_pickDone, R_pickCancel, R_activity;
+static RECT R_setOnMode, R_setOnFmt, R_setOnSrc, R_setOnFolder, R_setOnRecheck, R_onlineInfo;
+static RECT R_setWallChoose, R_setWallClear, R_setCoverBlur;
+static std::vector<RECT> R_themeCirclesSettings, R_runColors, R_playColors, R_navColors;
+static std::vector<RECT> R_partColors, R_ledColors;
+static bool g_editArtist = false;            // editor de texto aberto
+static int g_editMode = 0;                   // 0 = nome do artista, 1 = nome do arquivo
+static int g_editTrack = -1;
+static std::wstring g_editBuf;
+static std::map<std::wstring,std::wstring> g_artistMap;
+struct SetSlider { RECT r, hit; int id; int minv, maxv; };
+static std::vector<SetSlider> g_setSliders;
+static std::vector<std::pair<RECT,std::wstring>> g_setLabels;
+static int g_setScroll = 0;
+static int g_setContentH = 0;
+static std::vector<std::pair<RECT,std::wstring>> g_setSections;
+static RECT R_wavePanel, R_waveDragRect, R_shapeTgl, R_listBtn;
+static int g_gridCols = 0, g_contentH = 0;
+static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
+static std::vector<RECT> R_rowUp, R_rowDown;
+static RECT R_setAutoplay, R_setSort, R_setSortDir, R_setEqOn, R_setEqReset;
+static std::vector<std::wstring> g_shortcutLines;   // secao ATALHOS (so texto)
+static RECT R_shortcutsBox;
+// menu "trocar imagem" (local / web)
+static bool g_imgMenuOpen = false;
+static int g_imgMenuTrack = -1;
+static RECT R_imgBox, R_imgLocal, R_imgWeb;
+// menu PASTA (recentes)
+static bool g_folderMenuOpen = false;
+static RECT R_folderBox;
+static std::vector<RECT> R_folderItems;
+static std::vector<std::wstring> g_folderItemPaths; // "" = escolher..., L"*" = todo o PC
+// menu de contexto (botao direito numa faixa)
+static bool g_ctxOpen = false;
+static int g_ctxTrack = -1;
+static RECT R_ctxBox;
+static std::vector<RECT> R_ctxItems;
+// menu de contexto generico: rotulos + acao de cada item (faixa, card de playlist, escolher playlist)
+enum { CTX_TRACK=0, CTX_PLAYLIST=1, CTX_PICKPL=2, CTX_MENU=3, CTX_PICKON=4 };
+enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PICK_NEW,
+       CA_ADD_LIB, CA_ADD_FILES, CA_ADD_FOLDERCOPY, CA_ADD_FOLDERLINK, CA_ADD_LINK, CA_ADD_SEARCH, CA_NEW_EMPTY, CA_NEW_FOLDER, CA_NEW_LINK, CA_NEW_SEARCH,
+       CA_PLF_PICK, CA_PLF_UNLINK, CA_PLF_LIBRARY, CA_PL_FOLDER, CA_PL_SYNC, CA_PL_DLALL, CA_PL_MODE, CA_DOWNLOAD, CA_OPEN_URL, CA_ACT_CANCEL, CA_ACT_OPENDIR, CA_PICKON_NEW,
+       CA_PICK_BASE=100, CA_PLF_RECENT_BASE=200, CA_PICKON_BASE=300 };
+static int g_ctxKind=0, g_ctxArg=-1; static std::vector<std::wstring> g_ctxLabels; static std::vector<int> g_ctxActs; static std::vector<bool> g_ctxDanger;
+// confirmacao (excluir)
+static bool g_confirmOpen = false;
+static std::wstring g_confirmText;
+static int g_confirmTrack = -1;
+static RECT R_confirmBox, R_confirmYes, R_confirmNo;
+// conversao de formato em andamento
+static bool g_converting = false;
+static unsigned g_openGen = 0;
+static bool g_pendingAutoplay = false;
+static std::wstring g_currentSource;          // arquivo realmente aberto (pode ser o WAV convertido)
+// seletor de imagem da web (imagens sao void* por plataforma)
+struct WebRes { std::wstring murl; std::wstring turl; void* img=nullptr; void* cpu=nullptr; };
+struct WebPick {
+    bool open=false; int track=-1; std::wstring query; bool editing=false;
+    std::vector<WebRes> res; std::mutex m; std::atomic<int> gen{0};
+    std::atomic<bool> searching{false}; std::atomic<bool> downloading{false};
+    int sel=-1; int scroll=0; std::wstring status=L"Aguardando...";
+    RECT box{}, qbox{}, btnSearch{}, btnUse{}, btnCancel{}, btnClose{};
+    std::vector<RECT> cells;
+};
+static WebPick& WP(){ static WebPick* s=new WebPick(); return *s; }
+struct WebDlState{std::mutex m;std::wstring path;bool ok=false;};
+static WebDlState& WDS(){static WebDlState* s=new WebDlState();return *s;}
+
+static bool PtIn(const RECT& r, int x, int y){ return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom; }
+static float S(float v){ return v * g_cfg.uiScale / 100.0f; }
+static int SI(int v){ return (int)std::lround(S((float)v)); }
+static float TextScale(int base, int pct){ return S((float)base) * pct / 100.0f; }
+static bool FxOn(){ return !g_cfg.perfMode; }     // efeitos pesados (particulas, glitch, corredor, blur)
+static void SetStatus(const std::wstring& s, int ms=2600){ g_status=s; g_statusUntil=GetTickCount64()+ms; }
+static bool StatusVisible(){ return !g_status.empty() && GetTickCount64() < g_statusUntil; }
+
+static BYTE LedAlpha(float phase,int minA,int maxA){
+    float t=1.0f;
+    if(g_cfg.ledEffect==L"pulso") t=powf((sinf(phase)+1.0f)/2.0f,3.0f);
+    else if(g_cfg.ledEffect==L"respiracao") t=(sinf(phase)+1.0f)/2.0f;
+    float bright=g_cfg.ledBrightness/100.0f;
+    int a=(int)((minA+t*(maxA-minA))*bright); return (BYTE)std::max(0,std::min(255,a));
+}
+// Paleta brilhante: originais + claras + vermelho sangue etc (15 opcoes).
+static const wchar_t* g_brightIds[15] = {
+    L"#00ff66", L"#00e5ff", L"#ff2d95", L"#ff9500", L"#ffe600",
+    L"#8a0303", L"#ff5e5e", L"#ffb3c6", L"#a7d8ff", L"#b9fbcf",
+    L"#e4c7ff", L"#ffe3b3", L"#fff9b0", L"#7ff7e0", L"#c9ccd4"
+};
+static COLORREF ParseHexColor(const std::wstring& id){
+    if(id.size()<7||id[0]!=L'#') return g_theme.accent;
+    unsigned v=remix_parse_hex(id,1,6);
+    return RGB((v>>16)&0xFF,(v>>8)&0xFF,v&0xFF);
+}
+static bool IsBrightId(const std::wstring& id){
+    if(id.size()!=7||id[0]!=L'#') return false;
+    for(auto b:g_brightIds) if(id==b) return true;
+    return false;
+}
+static COLORREF ResolveCustom(const std::wstring& id){
+    if(g_cfg.autoColor) return g_theme.accent;
+    if(IsBrightId(id)) return ParseHexColor(id);
+    if(!id.empty()&&id[0]==L'#') return ParseHexColor(id);
+    if(id.empty()) return g_theme.accent;
+    return FindTheme(g_themes,id).accent;
+}
+
+// ---- waves organicas --------------------------------------------------
+static float Hash01(float n){ float s=sinf(n)*43758.5453f; return s-floorf(s); }
+static float VNoise(float x){
+    float i=floorf(x),f=x-i; f=f*f*(3.0f-2.0f*f);
+    return Hash01(i)+(Hash01(i+1.0f)-Hash01(i))*f;
+}
+static float WaveIdleAt(int i,int count,float t){
+    float p=count>1?(float)i/(count-1):0.f;
+    float v=.5f+(VNoise(p*7.f+t*.55f)-.5f)*1.05f
+             +(VNoise(p*19.f-t*1.15f+40.f)-.5f)*.5f
+             +.10f*sinf(p*12.56f+t*.8f);
+    return std::max(.10f,std::min(1.f,v));
+}
+static float AudioWaveBar(int i,int count,DWORD posMs,DWORD lenMs,float t){
+    if(!lenMs) return WaveIdleAt(i,count,t);
+    std::lock_guard<std::mutex> lock(WS().m);
+    if(WS().data.empty()) return WaveIdleAt(i,count,t);
+    float p=count>1?(float)i/(count-1):0.f;
+    DWORD look=std::min<DWORD>(lenMs/1000*35,14000);
+    DWORD back=std::min<DWORD>(lenMs/1000*6,2500);
+    double center=(double)posMs-back+(double)look*p;
+    float norm=(float)(center/std::max<double>(1,(double)lenMs));
+    norm=std::max(0.f,std::min(1.f,norm));
+    size_t n=WS().data.size();
+    size_t idx=(size_t)(norm*(float)(n-1));
+    size_t span=std::max<size_t>(1,n/110);
+    size_t a=idx>span?idx-span:0,b=std::min(n-1,idx+span);
+    float v=0; for(size_t j=a;j<=b;j++) v=std::max(v,WS().data[j]);
+    v=powf(v,.82f);
+    float micro=1.f+.18f*sinf(t*2.3f+p*9.f)+.09f*sinf(t*4.1f-p*17.f);
+    float out=v*micro;
+    float band=1.f;
+    {
+        std::lock_guard<std::mutex> lk(WS().fm);
+        if(WS().hasSpec){
+            float q=powf(p,.7f);
+            int bi=(int)(q*47.99f); if(bi<0)bi=0; if(bi>47)bi=47;
+            band=.30f+1.15f*WS().bands[bi];
+        }
+    }
+    out*=band;
+    float idle=(.07f+.13f*WaveIdleAt(i,count,t*.7f))*band;
+    return std::max(.06f,std::min(1.f,std::max(out,idle)));
+}
+// ---- LED corredor: ponto sobre o perimetro de um retangulo arredondado -----
+struct RectFC { float X, Y, Width, Height; };
+static void PerimeterPoint(const RectFC& r,float rad,float u,float&x,float&y){
+    float w=r.Width,h=r.Height;
+    rad=std::min(rad,std::min(w,h)/2.f);
+    const float PIf=3.14159265f;
+    float L[4]={w-rad*2,h-rad*2,w-rad*2,h-rad*2};
+    float Q=PIf*rad*.5f;
+    float P=L[0]+Q+L[1]+Q+L[2]+Q+L[3]+Q;
+    float d=u*P; d-=floorf(d/P)*P;
+    auto arcPt=[](float cx,float cy,float a0,float dd,float rr,float&px,float&py){
+        float ang=a0+dd/rr; px=cx+rr*cosf(ang); py=cy+rr*sinf(ang); };
+    if(d<L[0]){ x=r.X+rad+d; y=r.Y; return; } d-=L[0];
+    if(d<Q){ arcPt(r.X+w-rad,r.Y+rad,-PIf*.5f,d,rad,x,y); return; } d-=Q;
+    if(d<L[1]){ x=r.X+w; y=r.Y+rad+d; return; } d-=L[1];
+    if(d<Q){ arcPt(r.X+w-rad,r.Y+h-rad,0,d,rad,x,y); return; } d-=Q;
+    if(d<L[2]){ x=r.X+w-rad-d; y=r.Y+h; return; } d-=L[2];
+    if(d<Q){ arcPt(r.X+rad,r.Y+h-rad,PIf*.5f,d,rad,x,y); return; } d-=Q;
+    if(d<L[3]){ x=r.X; y=r.Y+h-rad-d; return; } d-=L[3];
+    arcPt(r.X+rad,r.Y+rad,PIf,d,rad,x,y);
+}
+static BYTE RunnerAlpha(){
+    float bright=g_cfg.ledBrightness/100.0f;
+    int a=(int)(200*bright); return (BYTE)std::max(0,std::min(255,a));
+}
+static bool GlitchNow(DWORD nowMs){
+    if(!g_cfg.glitchOn||!FxOn()||!g_player.playing) return false;
+    DWORD c=nowMs%2800; return c<190;
+}
+static std::wstring FormatTime(DWORD ms){
+    int total=(int)(ms/1000), m=total/60, s=total%60; wchar_t b[32];
+    swprintf(b,32,L"%d:%02d",m,s); return b;
+}
+static void ApplyTheme(){ g_theme=FindTheme(g_themes,g_cfg.theme); }
+
+// ---- volume / mudo ------------------------------------------------------
+static void ApplyVolume(){ g_player.SetVolume(g_muted?0:g_cfg.volume); }
+static void SetVolumePercent(int v){ g_cfg.volume=std::max(0,std::min(100,v)); if(g_muted&&v>0) g_muted=false; ApplyVolume(); }
+static void ToggleMute(){ g_muted=!g_muted; ApplyVolume(); SetStatus(g_muted?L"Mudo":L"Som ligado",1200); }
+
+// ---- FFT + espectrograma --------------------------------------------------
+static void FftMag(float* re,float* im,int N){
+    for(int i=1,j=0;i<N;i++){int bit=N>>1;for(;j&bit;bit>>=1)j^=bit;j^=bit;
+        if(i<j){std::swap(re[i],re[j]);std::swap(im[i],im[j]);}}
+    for(int len=2;len<=N;len<<=1){
+        float ang=-6.2831853f/len,wr=cosf(ang),wi=sinf(ang);
+        for(int i=0;i<N;i+=len){
+            float cr=1.f,ci=0.f;
+            for(int k=0;k<len/2;k++){
+                int a=i+k,b=i+k+len/2;
+                float vr=re[b]*cr-im[b]*ci,vi=re[b]*ci+im[b]*cr;
+                float ur=re[a],ui=im[a];
+                re[a]=ur+vr;im[a]=ui+vi;re[b]=ur-vr;im[b]=ui-vi;
+                float ncr=cr*wr-ci*wi;ci=cr*wi+ci*wr;cr=ncr;
+            }
+        }
+    }
+}
+static void SpecBands(const float* mag,int nbins,int sr,float out[48]){
+    const int NB=48;
+    const float fmin=45.f,fmax=15000.f,fnyq=sr*0.5f;
+    for(int k=0;k<NB;k++){
+        float f0=fmin*powf(fmax/fmin,(float)k/NB);
+        float f1=fmin*powf(fmax/fmin,(float)(k+1)/NB);
+        int b0=(int)(f0/fnyq*nbins); if(b0<1)b0=1; if(b0>=nbins)b0=nbins-1;
+        int b1=(int)(f1/fnyq*nbins)+1; if(b1<=b0)b1=b0+1; if(b1>=nbins)b1=nbins-1;
+        float e=0.f; for(int j=b0;j<=b1;j++) if(mag[j]>e)e=mag[j];
+        e*=1.f+1.1f*(float)k/NB;
+        out[k]=std::min(1.f,powf(e*2.5f,.5f));
+    }
+}
+// Analise da faixa atual em thread: onda (320 buckets) + espectrograma.
+static void AnalyzeCurrentWave(){
+    if(g_current<0 || g_current>=(int)g_tracks.size()) return;
+    std::wstring path=g_currentSource.empty()?g_tracks[g_current].path:g_currentSource;
+    unsigned long job=++WS().job;
+    if(g_waveThread.joinable()) g_waveThread.detach();
+    { std::lock_guard<std::mutex> lock(WS().m); WS().data.clear(); WS().path=path; }
+    { std::lock_guard<std::mutex> lk(WS().fm); WS().spec.clear(); }
+    g_waveThread=std::thread([path,job](){
+        try{
+            const int N=2048;
+            std::vector<float> raw, bucket, hann(N), re(N), im(N), mag(N/2), ring(N,0.f), specLocal;
+            for(int i=0;i<N;i++){float a=6.2831853f*i/2047.f;hann[i]=.5f-.5f*cosf(a);}
+            size_t framesPerBucket=2205, hop=2205, sinceHop=0, rpos=0; bool first=true; int sr=44100;
+            auto publishSpec=[&](){
+                if(specLocal.empty()) return;
+                std::lock_guard<std::mutex> lk(WS().fm);
+                if(job==WS().job.load()){ WS().spec.insert(WS().spec.end(),specLocal.begin(),specLocal.end()); WS().specHopMs=(int)(hop*1000/std::max(1,sr)); }
+                specLocal.clear();
+            };
+            bool ok=Player::DecodeMono(path,[&](const float* f,size_t n,unsigned srr)->bool{
+                if(job!=WS().job.load()) return false;
+                if(first){ sr=(int)srr; framesPerBucket=std::max<size_t>(256,(size_t)sr/20); hop=framesPerBucket; first=false; }
+                for(size_t i=0;i<n;i++){
+                    float v=f[i];
+                    bucket.push_back(fabsf(v));
+                    if(bucket.size()>=framesPerBucket){float m=0.f;for(float b:bucket)m=std::max(m,b);raw.push_back(sqrtf(std::max(0.f,m)));bucket.clear();}
+                    ring[rpos]=v; rpos=(rpos+1)%N;
+                    if(++sinceHop>=hop){
+                        sinceHop=0;
+                        for(int k=0;k<N;k++){re[k]=ring[(rpos+k)%N]*hann[k];im[k]=0.f;}
+                        FftMag(re.data(),im.data(),N);
+                        for(int k=0;k<N/2;k++)mag[k]=sqrtf(re[k]*re[k]+im[k]*im[k])/(N/4);
+                        float bands[48]; SpecBands(mag.data(),N/2,sr,bands);
+                        specLocal.insert(specLocal.end(),bands,bands+48);
+                        if(specLocal.size()>=48*20) publishSpec();
+                    }
+                }
+                return true;
+            });
+            publishSpec();
+            if(!bucket.empty()){float m=0.f;for(float b:bucket)m=std::max(m,b);raw.push_back(sqrtf(std::max(0.f,m)));}
+            if(ok && !raw.empty() && job==WS().job.load()){
+                const size_t buckets=320;
+                std::vector<float> data(buckets,0.f);
+                for(size_t i=0;i<buckets;++i){size_t a=(i*raw.size())/buckets,b=((i+1)*raw.size())/buckets;if(b<=a)b=std::min(raw.size(),a+1);float mx=0.f;for(size_t j=a;j<b;++j)mx=std::max(mx,raw[j]);data[i]=std::max(0.06f,std::min(1.f,mx));}
+                std::lock_guard<std::mutex> lock(WS().m);
+                if(job==WS().job.load()){ WS().data.swap(data); WS().path=path; }
+            }
+        } catch(...){}
+    });
+}
+static void ClearWave(){ ++WS().job; { std::lock_guard<std::mutex> lk(WS().m); WS().data.clear(); WS().path.clear(); } { std::lock_guard<std::mutex> lk(WS().fm); WS().spec.clear(); WS().hasSpec=false; } }
+static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
+    WaveState&W=WS();
+    std::lock_guard<std::mutex> lk(W.fm);
+    int frames=(int)(W.spec.size()/48);
+    float tick=dt/0.03f;
+    if(!playingNow||frames==0){
+        bool any=false; float decay=powf(.80f,tick);
+        for(float&b:W.bands){b*=decay;if(b>.004f)any=true;}
+        if(!any){for(float&b:W.bands)b=0;W.hasSpec=false;}
+        return;
+    }
+    int idx=(int)((posMs+50)/std::max(1,W.specHopMs)); if(idx>=frames)idx=frames-1; if(idx<0)idx=0;
+    const float* v=&W.spec[(size_t)idx*48];
+    float rise=1.f-powf(1.f-.55f,tick), fall=1.f-powf(.86f,tick);
+    for(int k=0;k<48;k++){float o=W.bands[k],t=v[k];W.bands[k]=(t>o)?o+(t-o)*rise:o+(t-o)*fall;}
+    W.hasSpec=true;
+}
+
+// ---- biblioteca ------------------------------------------------------------
+static void ApplySort();
+static void PlayIndex(int idx,bool autoplay);
+static void LoadFolderAndPlaylist(){
+    if(g_cfg.musicFolder.empty()) { g_tracks.clear(); g_current=-1; g_listScroll=0; return; }
+    g_tracks=ScanFolder(g_cfg.musicFolder);
+    for(auto&t:g_tracks){auto it=g_artistMap.find(t.path);if(it!=g_artistMap.end())t.artist=it->second;}
+    ApplySort();
+    g_current=g_tracks.empty()?-1:0; g_listScroll=0;
+}
+// Varredura em thread. Um pedido novo durante uma varredura nao se perde mais: a
+// thread em andamento roda de novo com o pedido mais recente (antes, trocar de pasta
+// rapido deixava a lista vazia para sempre).
+static void RunScanLoop(){
+    for(;;){
+        while(SS().again.exchange(false)){
+            unsigned long gen=SS().gen.load(); bool computer; std::wstring folder;
+            { std::lock_guard<std::mutex> lk(SS().m); computer=SS().computer; folder=SS().folder; }
+            try{
+                auto result=computer?ScanComputerMusic():ScanFolder(folder);
+                if(gen==SS().gen.load()){ { std::lock_guard<std::mutex> lk(SS().m); SS().result.swap(result); } SS().ready=true; }
+            } catch(...){}
+        }
+        SS().busy=false;
+        if(!SS().again.load()||SS().busy.exchange(true)) return;
+    }
+}
+static void RequestScan(bool computer,const std::wstring& folder){
+    { std::lock_guard<std::mutex> lk(SS().m); SS().computer=computer; SS().folder=folder; }
+    ++SS().gen; SS().ready=false; SS().again=true;
+    if(SS().busy.exchange(true)) return;
+    if(g_scanThread.joinable()) g_scanThread.join();
+    g_scanThread=std::thread(RunScanLoop);
+}
+static void StartAutoScan(){ RequestScan(true,L""); }
+static std::atomic<bool> g_refreshMode{false};
+static void StartFolderRescan(){
+    if(g_cfg.musicFolder.empty()) return;
+    g_refreshMode=true;
+    RequestScan(false,g_cfg.musicFolder);
+}
+static void PollFolderWatch(){
+    if(g_cfg.musicFolder.empty()) return;
+    if(!PlatformWatchTake(900)) return;
+    StartFolderRescan();
+}
+// Capas embutidas extraidas ENQUANTO a varredura rodava: o aviso chegou antes da lista
+// existir e se perdia. Ao receber a lista, aplica o que ja esta no indice.
+static void RefreshEmbeddedCovers(std::vector<Track>& v){
+    std::map<std::wstring,std::wstring> custom; bool loaded=false;
+    for(auto& t:v){
+        if(IsOnlineTrack(t)) continue;
+        std::wstring emb;
+        if(art::Lookup(t.path,LowerExt(std::filesystem::path(t.path)),emb)!=1||emb==t.coverPath) continue;
+        if(!loaded){ custom=LoadCustomCovers(); loaded=true; }
+        if(!custom.count(t.path)) t.coverPath=emb;
+    }
+}
+static void ConsumeAutoScan(){
+    if(!SS().ready.exchange(false)) return;
+    if(g_view==2){   // playlist aberta: a biblioteca nova fica guardada, a lista em tela nao muda
+        std::lock_guard<std::mutex> lk(SS().m); g_libTracks.swap(SS().result); g_libCached=true; g_refreshMode=false; RefreshEmbeddedCovers(g_libTracks);
+        for(auto&t:g_libTracks){auto it=g_artistMap.find(t.path);if(it!=g_artistMap.end())t.artist=it->second;}
+        return;
+    }
+    bool preserve = g_refreshMode.exchange(false);
+    std::wstring curPath;
+    bool wasPlaying = g_player.playing;
+    if(preserve && g_current>=0 && g_current<(int)g_tracks.size()) curPath = g_tracks[g_current].path;
+    std::vector<Track> keepOnline; for(auto&t:g_tracks) if(IsOnlineTrack(t)) keepOnline.push_back(t);   // musicas online abertas pela busca
+    { std::lock_guard<std::mutex> lk(SS().m);
+      if(preserve && !curPath.empty() && SS().result.size()==g_tracks.size()){
+          // mesma lista? compara conjunto de caminhos (a ordem em tela pode ser outra)
+          std::vector<std::wstring> a,b; for(auto&t:g_tracks)a.push_back(t.path); for(auto&t:SS().result)b.push_back(t.path);
+          std::sort(a.begin(),a.end()); std::sort(b.begin(),b.end());
+          if(a==b) return;
+      }
+      g_tracks.swap(SS().result);
+    }
+    for(auto& t:keepOnline) g_tracks.push_back(t);
+    RefreshEmbeddedCovers(g_tracks);
+    for(auto&t:g_tracks){auto it=g_artistMap.find(t.path);if(it!=g_artistMap.end())t.artist=it->second;}
+    ApplySort();
+    if(preserve && !curPath.empty()){
+        int ni=-1;
+        for(size_t i=0;i<g_tracks.size();++i) if(g_tracks[i].path==curPath){ ni=(int)i; break; }
+        if(ni>=0){ g_current=ni; return; }
+        if(wasPlaying) g_player.Pause();
+        g_current=g_tracks.empty()?-1:0; g_listScroll=0;
+        return;
+    }
+    g_current=g_tracks.empty()?-1:0; g_listScroll=0;
+    if(g_current>=0) PlayIndex(g_current,false);
+    if(g_tracks.empty()) SetStatus(L"Nenhuma musica encontrada nas pastas do usuario.",4000);
+}
+// Pastas recentes (menu PASTA)
+static void AddRecentFolder(const std::wstring& f){
+    if(f.empty()) return;
+    auto& v=g_cfg.recentFolders;
+    v.erase(std::remove_if(v.begin(),v.end(),[&](const std::wstring& x){ return _wcsicmp(x.c_str(),f.c_str())==0; }),v.end());
+    v.insert(v.begin(),f);
+    if(v.size()>6) v.resize(6);
+}
+static void SwitchFolder(const std::wstring& f){   // "" = padrao (pastas do usuario)
+    g_pickMode=false; g_pickSel.clear();
+    if(g_view==2||g_view==1){ g_libCached=false; g_openPl=-1; g_view=0; g_cfg.openPlaylist.clear(); }
+    ++SS().gen; SS().ready=false;
+    g_cfg.musicFolder=f;
+    if(!f.empty()) AddRecentFolder(f);
+    g_cfg.Save(); g_showSettings=false; g_folderMenuOpen=false;
+    LoadFolderAndPlaylist();
+    if(f.empty()){ PlatformWatchStop(); StartAutoScan(); SetStatus(L"Procurando musicas em Musicas, Downloads, Documentos e Area de trabalho...",4000); }
+    else { PlatformWatchStart(f); if(g_current>=0) PlayIndex(g_current,false); }
+}
+
+// ---- reproducao -------------------------------------------------------------
+static void OpenAndStart(const std::wstring& src,bool autoplay){
+    if(g_player.Open(src)){
+        g_currentSource=src;
+        ApplyVolume();
+        AnalyzeCurrentWave();
+        if(autoplay) g_player.Play();
+    } else SetStatus(Player::HasAudio()?L"Nao consegui abrir este arquivo.":L"Sem saida de audio (nenhum dispositivo de som encontrado).",3000);
+}
+// ---- fila embaralhada ---------------------------------------------------------
+// A lista visivel continua na ordem do usuario (inclusive a manual); o aleatorio
+// so muda a ORDEM DE REPRODUCAO: cada faixa toca uma vez por ciclo e "anterior"
+// volta pela fila. Clicar numa faixa recomeca a fila a partir dela.
+static std::vector<int> g_shufQueue; static int g_shufPos=-1;
+static void RebuildShuffleQueue(int startIdx){
+    g_shufQueue.clear(); g_shufPos=-1;
+    int n=(int)g_tracks.size(); if(n<=0) return;
+    for(int i=0;i<n;i++) if(i!=startIdx) g_shufQueue.push_back(i);
+    for(int i=(int)g_shufQueue.size()-1;i>0;i--){ int j=rand()%(i+1); std::swap(g_shufQueue[(size_t)i],g_shufQueue[(size_t)j]); }
+    if(startIdx>=0&&startIdx<n){ g_shufQueue.insert(g_shufQueue.begin(),startIdx); g_shufPos=0; }
+}
+static void PlayOnlineIndex(int idx,bool autoplay,unsigned gen);
+static void PlayIndex(int idx,bool autoplay=true){
+    if(g_tracks.empty()) return; if(idx<0)idx=(int)g_tracks.size()-1; if(idx>=(int)g_tracks.size())idx=0;
+    // aleatorio: se a faixa nao e a proxima da fila (clique do usuario), recomeca a fila a partir dela
+    if(g_cfg.shuffle&&(g_shufQueue.size()!=g_tracks.size()||g_shufPos<0||g_shufPos>=(int)g_shufQueue.size()||g_shufQueue[(size_t)g_shufPos]!=idx)) RebuildShuffleQueue(idx);
+    g_current=idx; g_nowPlaying=g_tracks[(size_t)idx]; g_nowPlayingValid=true;
+    const std::wstring path=g_tracks[idx].path;
+    PlatformLoadCover(g_tracks[idx].coverPath);
+    unsigned gen=++g_openGen;
+    g_currentSource.clear();
+    g_player.Close(); g_curStreamOpen=false; g_curStreamId=0; g_queueTick=0;   // o canal antigo sai na proxima UpdateStreamQueue (se nao for uma das proximas)
+    if(IsOnlineTrack(g_tracks[(size_t)idx])){ PlayOnlineIndex(idx,autoplay,gen); return; }
+    if(!Player::ProbeNative(path)){
+        g_player.Close();
+        if(!PlatformHaveFfmpeg()) {
+            g_converting=false;
+            bool nativeExt=IsNativeAudioExt(LowerExt(std::filesystem::path(path)));
+            SetStatus(nativeExt?L"Nao consegui abrir este arquivo (danificado ou codec incomum).":L"Formato nao suportado (instale o ffmpeg para tocar este arquivo).",4000);
+            return;
+        }
+        g_converting=true; g_pendingAutoplay=autoplay;
+        std::thread([path,gen](){
+            std::wstring dst=PlatformTranscodeToWav(path);
+            AppPost(EV_TRANSCODED,dst,(int)gen);
+        }).detach();
+        return;
+    }
+    g_converting=false;
+    OpenAndStart(path,autoplay);
+}
+static void OnTranscoded(const std::wstring& dst,unsigned gen){
+    if(gen!=g_openGen) return;
+    g_converting=false;
+    if(dst.empty()){ SetStatus(L"A conversao com o ffmpeg falhou.",3500); return; }
+    OpenAndStart(dst,g_pendingAutoplay);
+}
+#include "app_online_a.h"
+static bool PlayFileDirect(const std::wstring& path,bool autoplay=true){
+    std::error_code ec;
+    if(path.empty() || !std::filesystem::exists(std::filesystem::path(path),ec)) return false;
+    for(size_t i=0;i<g_tracks.size();++i) if(_wcsicmp(g_tracks[i].path.c_str(),path.c_str())==0){PlayIndex((int)i,autoplay);return true;}
+    Track t; t.path=path; t.title=std::filesystem::path(path).stem().wstring(); t.artist=L"Artista desconhecido"; ResolveTrackCover(t,std::filesystem::path(path),LowerExt(std::filesystem::path(path)),LoadCustomCovers());
+    t.fileTime=FileTimeOf(std::filesystem::path(path));
+    auto tg=ReadTags(path,LowerExt(std::filesystem::path(path))); if(!tg.title.empty())t.title=tg.title; if(!tg.artist.empty())t.artist=tg.artist;
+    {auto it=g_artistMap.find(t.path);if(it!=g_artistMap.end())t.artist=it->second;}
+    g_tracks.push_back(t);
+    if(g_cfg.sortMode!=L"manual") ApplySort();
+    int idx=-1; for(size_t i=0;i<g_tracks.size();++i) if(g_tracks[i].path==path){idx=(int)i;break;}
+    if(idx<0) return false;
+    PlayIndex(idx,autoplay);
+    return g_player.loaded||g_converting;
+}
+static int NextShuffled(){
+    int n=(int)g_tracks.size(); if(n<=0) return -1;
+    if((int)g_shufQueue.size()!=n) RebuildShuffleQueue(g_current);
+    if(g_shufPos+1>=(int)g_shufQueue.size()){        // fim do ciclo: novo embaralhado, sem repetir a ultima
+        int last=g_current; RebuildShuffleQueue(-1);
+        if(n>1&&g_shufQueue[0]==last) std::swap(g_shufQueue[0],g_shufQueue[1]);
+        g_shufPos=0; return g_shufQueue[0];
+    }
+    return g_shufQueue[(size_t)++g_shufPos];
+}
+static int PrevShuffled(){
+    if(g_shufPos>0&&g_shufPos<(int)g_shufQueue.size()) return g_shufQueue[(size_t)--g_shufPos];
+    return g_current;
+}
+static void NextTrack(){
+    if(g_tracks.empty())return;
+    int n=(int)g_tracks.size(); int idx;
+    if(g_cfg.shuffle&&n>1) idx=NextShuffled();
+    else idx=g_current+1;
+    PlayIndex(idx,true);
+}
+static void PrevOrRestart(){ if(g_tracks.empty())return; if(g_player.GetPositionMs()>3000)g_player.Restart();else PlayIndex(g_cfg.shuffle?PrevShuffled():g_current-1,true); }
+static void TogglePlayPause(){
+    if(g_player.playing) g_player.Pause();
+    else if(g_player.loaded) g_player.Play();
+    else if(g_current>=0&&!g_converting) PlayIndex(g_current,true);
+}
+
+// ---- ordem da playlist ------------------------------------------------------
+static std::wstring SortModeName(const std::wstring& m){
+    if(m==L"artist") return L"ARTISTA"; if(m==L"file") return L"ARQUIVO"; if(m==L"date") return L"DATA"; if(m==L"manual") return L"MANUAL"; return L"TÍTULO";
+}
+static void ApplySort(){
+    std::wstring cur=(g_current>=0&&g_current<(int)g_tracks.size())?g_tracks[g_current].path:L"";
+    if(!(g_view==2&&g_cfg.sortMode==L"manual")) SortTracks(g_tracks,g_cfg.sortMode,g_cfg.sortDesc);   // playlist: manual = ordem do playlist.json
+    if(!cur.empty()) for(size_t i=0;i<g_tracks.size();++i) if(g_tracks[i].path==cur){g_current=(int)i;break;}
+    RebuildShuffleQueue(g_current);   // os indices mudaram
+}
+static void CycleSortMode(){
+    const wchar_t* modes[]={L"title",L"artist",L"file",L"date",L"manual"};
+    int i=0; for(int k=0;k<5;k++) if(g_cfg.sortMode==modes[k]) i=k;
+    g_cfg.sortMode=modes[(i+1)%5];
+    if(g_cfg.sortMode==L"manual") SaveCustomOrder(g_tracks);
+    ApplySort(); g_cfg.Save();
+    SetStatus(L"Ordem: "+SortModeName(g_cfg.sortMode),1500);
+}
+static void MoveTrack(int i,int dir){
+    if(i<0||i>=(int)g_tracks.size()) return;
+    int j=i+dir; if(j<0||j>=(int)g_tracks.size()) return;
+    if(g_cfg.sortMode!=L"manual"){ g_cfg.sortMode=L"manual"; }
+    std::swap(g_tracks[i],g_tracks[j]);
+    if(g_current==i) g_current=j; else if(g_current==j) g_current=i;
+    if(g_view==2){ std::vector<std::wstring> ps; for(auto&t:g_tracks) ps.push_back(t.path); PlaylistSetOrder(g_openPl,ps); } else SaveCustomOrder(g_tracks);
+    g_cfg.Save();
+}
+
+// ---- renomear / excluir arquivo -------------------------------------------
+// Troca a chave 'oldPath' por 'newPath' em covers.ini, artists.ini e order.ini.
+static void RekeyAssociations(const std::wstring& oldPath,const std::wstring& newPath){
+    { auto m=LoadCustomCovers(); auto it=m.find(oldPath); if(it!=m.end()){ std::wstring v=it->second; m.erase(it); if(!newPath.empty()) m[newPath]=v;
+        std::vector<std::wstring> ls; for(auto&kv:m) ls.push_back(Config::ToPortable(kv.first)+L"="+Config::ToPortable(kv.second)); WriteAllUtf8Lines(Config::CoversPath(),ls); } }
+    { auto m=LoadCustomArtists(); auto it=m.find(oldPath); if(it!=m.end()){ std::wstring v=it->second; m.erase(it); if(!newPath.empty()) m[newPath]=v;
+        std::vector<std::wstring> ls; for(auto&kv:m) if(!kv.second.empty()) ls.push_back(Config::ToPortable(kv.first)+L"="+kv.second); WriteAllUtf8Lines(Config::ArtistsPath(),ls); } }
+    { auto o=LoadCustomOrder(); bool ch=false; for(auto& p:o) if(p==oldPath){ p=newPath; ch=true; } if(ch){ o.erase(std::remove(o.begin(),o.end(),std::wstring()),o.end()); std::vector<std::wstring> ls; for(auto&p:o) ls.push_back(Config::ToPortable(p)); WriteAllUtf8Lines(Config::OrderPath(),ls); } }
+    { auto it=g_artistMap.find(oldPath); if(it!=g_artistMap.end()){ std::wstring v=it->second; g_artistMap.erase(it); if(!newPath.empty()) g_artistMap[newPath]=v; } }
+    PlaylistsRekey(oldPath,newPath);
+}
+static bool RenameTrackFile(int i,const std::wstring& newStem){
+    if(i<0||i>=(int)g_tracks.size()) return false;
+    std::wstring stem=newStem;
+    for(auto& c:stem) if(c==L'/'||c==L'\\'||c==L':'||c==L'*'||c==L'?'||c==L'"'||c==L'<'||c==L'>'||c==L'|') c=L'-';
+    stem=Config::Trim(stem);
+    if(stem.empty()) return false;
+    namespace fs=std::filesystem;
+    fs::path oldP(g_tracks[i].path);
+    fs::path newP=oldP.parent_path()/(stem+oldP.extension().wstring());
+    if(newP==oldP) return true;
+    std::error_code ec;
+    if(fs::exists(newP,ec)){ SetStatus(L"Ja existe um arquivo com esse nome.",3000); return false; }
+    bool wasCurrent=(i==g_current);
+    DWORD pos=0; bool wasPlaying=false;
+    if(wasCurrent&&g_player.loaded){ pos=g_player.GetPositionMs(); wasPlaying=g_player.playing; g_player.Close(); } // Windows nao renomeia arquivo aberto
+    fs::rename(oldP,newP,ec);
+    if(ec){ SetStatus(L"Nao consegui renomear o arquivo.",3000); if(wasCurrent) PlayIndex(i,wasPlaying); return false; }
+    std::wstring oldPath=g_tracks[i].path, newPath=newP.wstring();
+    bool titleWasStem=(g_tracks[i].title==oldP.stem().wstring());
+    g_tracks[i].path=newPath;
+    if(titleWasStem) g_tracks[i].title=stem;
+    RekeyAssociations(oldPath,newPath);
+    if(g_cfg.sortMode==L"manual") SaveCustomOrder(g_tracks);
+    if(wasCurrent){ PlayIndex(i,wasPlaying); if(pos>0) g_player.SeekMs(pos); }
+    SetStatus(L"Arquivo renomeado.",2000);
+    return true;
+}
+static void DeleteTrack(int i){
+    if(i<0||i>=(int)g_tracks.size()) return;
+    std::wstring path=g_tracks[i].path;
+    bool wasCurrent=(i==g_current);
+    if(wasCurrent){ g_player.Close(); g_currentSource.clear(); }
+    if(!PlatformTrash(path)){ SetStatus(L"Nao consegui mover para a lixeira.",3000); if(wasCurrent) PlayIndex(i,false); return; }
+    RekeyAssociations(path,L"");
+    PlatformEvictThumb(g_tracks[i].coverPath);
+    g_tracks.erase(g_tracks.begin()+i);
+    if(g_cfg.sortMode==L"manual") SaveCustomOrder(g_tracks);
+    if(g_tracks.empty()){ g_current=-1; PlatformLoadCover(L""); }
+    else if(wasCurrent){ g_current=std::min(i,(int)g_tracks.size()-1); PlayIndex(g_current,false); }
+    else if(g_current>i) g_current--;
+    SetStatus(L"Movido para a lixeira.",2500);
+}
+
+// ---- editor de texto (artista / nome do arquivo) --------------------------
+static void StartArtistEdit(int idx){
+    if(idx<0||idx>=(int)g_tracks.size()) return;
+    g_editArtist=true; g_editMode=0; g_editTrack=idx; g_editBuf=g_tracks[idx].artist;
+}
+static void StartFileRename(int idx){
+    if(idx<0||idx>=(int)g_tracks.size()) return;
+    g_editArtist=true; g_editMode=1; g_editTrack=idx; g_editBuf=std::filesystem::path(g_tracks[idx].path).stem().wstring();
+}
+static void StartPlaylistNameEdit(int mode,int pl){ g_editArtist=true; g_editMode=mode; g_editTrack=pl; g_editBuf=(mode==3&&pl>=0&&pl<(int)g_playlists.size())?g_playlists[(size_t)pl].name:L"";
+    if(mode==4||mode==5){ std::wstring c=Config::Trim(PlatformClipboardText()); if(IsUrlText(c)&&c.size()<600) g_editBuf=c; } }   // link na area de transferencia ja vem colado
+static void CancelArtistEdit(){ g_editArtist=false; g_editTrack=-1; g_editBuf.clear(); g_editMode=0; }
+static void CommitArtistEdit(){
+    std::wstring s=g_editBuf;
+    while(!s.empty()&&(s.back()==L' '||s.back()==L'\r'||s.back()==L'\n')) s.pop_back();
+    if(g_editMode==1){ RenameTrackFile(g_editTrack,s); CancelArtistEdit(); return; }
+    if(g_editMode==2){
+        int pi=CreatePlaylistSafe(s.empty()?L"Playlist":s); CancelArtistEdit();
+        if(pi>=0){
+            if(!g_pendingAddPath.empty()){
+                for(auto& t:g_tracks) if(t.path==g_pendingAddPath){ if(IsOnlineTrack(t)){ std::vector<OTrack> v{OTrackFor(t)}; AddOnlineItemsToPlaylist(pi,v); } else PlaylistAddTrack(pi,t); break; }
+                SetStatus(L"Adicionada à playlist \""+g_playlists[(size_t)pi].name+L"\".",2500);
+            } else { OpenPlaylistView(pi); SetStatus(L"Playlist criada. Use + ADICIONAR para colocar músicas (biblioteca, arquivos, pasta ou link).",4500); }
+        } else SetStatus(L"Nao consegui criar a playlist.",3000);
+        g_pendingAddPath.clear(); BuildLayout(); return;
+    }
+    if(g_editMode==4||g_editMode==5){   // link colado: adiciona na playlist (4) ou cria uma nova (5)
+        int mode=g_editMode, pl=g_editTrack; std::wstring url=Config::Trim(s); CancelArtistEdit();
+        if(!IsUrlText(url)){ SetStatus(L"Cole um link que comece com https://",3000); return; }
+        ResolveLinkAsync(url,(mode==4&&pl>=0&&pl<(int)g_playlists.size())?g_playlists[(size_t)pl].slug:L"");
+        SetStatus(L"Lendo o link... (alguns segundos; o Spotify pode levar mais)",5000);
+        return;
+    }
+    if(g_editMode==3){ int pl=g_editTrack; RenamePlaylist(pl,s); if(g_openPl>=0) g_cfg.openPlaylist=g_playlists[(size_t)std::min(g_openPl,(int)g_playlists.size()-1)].slug; CancelArtistEdit(); BuildLayout(); return; }
+    if(g_editTrack>=0&&g_editTrack<(int)g_tracks.size()){
+        if(s.empty()) s=L"Artista desconhecido";
+        g_tracks[g_editTrack].artist=s;
+        SaveCustomArtist(g_tracks[g_editTrack].path,s);
+        g_artistMap[g_tracks[g_editTrack].path]=s;
+    }
+    CancelArtistEdit();
+}
+static void AskDeleteTrack(int idx){
+    if(idx<0||idx>=(int)g_tracks.size()) return;
+    g_confirmOpen=true; g_confirmKind=0; g_confirmTrack=idx;
+    g_confirmText=L"Mover \""+std::filesystem::path(g_tracks[idx].path).filename().wstring()+L"\" para a lixeira?";
+}
+
+// ---- menus flutuantes (geometria calculada ao abrir) --------------------
+static void OpenImgMenu(int i,const RECT& anchor){
+    int bw=(int)S(280),bh=(int)S(112);
+    int bx=std::max(6,std::min((int)anchor.left-bw/2,g_winW-bw-6));
+    int by=std::max(6,std::min((int)anchor.bottom+6,g_winH-bh-6));
+    R_imgBox={bx,by,bx+bw,by+bh};
+    R_imgLocal={(LONG)(bx+S(16)),(LONG)(by+S(14)),(LONG)(bx+bw-S(16)),(LONG)(by+S(48))};
+    R_imgWeb={(LONG)(bx+S(16)),(LONG)(by+S(58)),(LONG)(bx+bw-S(16)),(LONG)(by+S(98))};
+    g_imgMenuTrack=i; g_imgMenuOpen=true;
+}
+static void OpenFolderMenu(){
+    g_folderItemPaths.clear(); R_folderItems.clear();
+    g_folderItemPaths.push_back(L"");   // escolher pasta...
+    g_folderItemPaths.push_back(L"*");  // pastas do usuario (padrao)
+    for(auto& f:g_cfg.recentFolders) if(Config::DirExists(f)) g_folderItemPaths.push_back(f);
+    int rowH=(int)S(34), bw=std::min((int)S(440),g_winW-12), bh=(int)S(14)+rowH*(int)g_folderItemPaths.size()+(int)S(10);
+    int bx=std::max(6,std::min((int)R_folderBtn.left,g_winW-bw-6)), by=std::min((int)R_folderBtn.bottom+4,g_winH-bh-6);
+    R_folderBox={bx,by,bx+bw,by+bh};
+    for(size_t i=0;i<g_folderItemPaths.size();++i){ int y=by+(int)S(8)+(int)i*rowH; R_folderItems.push_back({bx+(int)S(8),y,bx+bw-(int)S(8),y+rowH-(int)S(4)}); }
+    g_folderMenuOpen=true;
+}
+static void OpenCtxMenuGeneric(int x,int y,int kind,int arg,const std::vector<std::wstring>& labels,const std::vector<int>& acts,const std::vector<bool>& danger,int width){
+    int rowH=(int)S(32), bw=width, n=(int)labels.size(), bh=(int)S(10)+rowH*n+(int)S(8);
+    int bx=std::max(6,std::min(x,g_winW-bw-6)), by=std::max(6,std::min(y,g_winH-bh-6));
+    R_ctxBox={bx,by,bx+bw,by+bh}; R_ctxItems.clear();
+    for(int i=0;i<n;i++){ int yy=by+(int)S(6)+i*rowH; R_ctxItems.push_back({bx+(int)S(6),yy,bx+bw-(int)S(6),yy+rowH-(int)S(2)}); }
+    g_ctxKind=kind; g_ctxArg=arg; g_ctxLabels=labels; g_ctxActs=acts; g_ctxDanger=danger; g_ctxTrack=(kind==CTX_TRACK)?arg:-1; g_ctxOpen=true;
+}
+static void OpenCtxMenu(int track,int x,int y){   // menu de uma faixa
+    if(track<0||track>=(int)g_tracks.size()) return;
+    if(IsOnlineTrack(g_tracks[(size_t)track])){
+        std::vector<std::wstring> l={L"Tocar (streaming)",L"Baixar",L"Trocar capa...",L"Abrir o link no navegador",L"Adicionar à playlist..."};
+        std::vector<int> a={CA_PLAY,CA_DOWNLOAD,CA_COVER,CA_OPEN_URL,CA_ADDPL}; std::vector<bool> d={false,false,false,false,false};
+        if(g_view==2){ l.push_back(L"Remover da playlist"); a.push_back(CA_REMOVEPL); d.push_back(true); }
+        OpenCtxMenuGeneric(x,y,CTX_TRACK,track,l,a,d,(int)S(250));
+        return;
+    }
+    std::vector<std::wstring> l={L"Tocar",L"Trocar capa...",L"Renomear artista...",L"Renomear arquivo...",L"Abrir pasta",L"Adicionar à playlist..."};
+    std::vector<int> a={CA_PLAY,CA_COVER,CA_ARTIST,CA_RENAME,CA_FOLDER,CA_ADDPL};
+    std::vector<bool> d={false,false,false,false,false,false};
+    if(g_view==2){ l.push_back(L"Remover da playlist"); a.push_back(CA_REMOVEPL); d.push_back(true); }
+    l.push_back(L"Excluir arquivo (lixeira)"); a.push_back(CA_DELETE); d.push_back(true);
+    OpenCtxMenuGeneric(x,y,CTX_TRACK,track,l,a,d,(int)S(240));
+}
+static void OpenPlaylistCtxMenu(int pl,int x,int y){   // menu de um card de playlist
+    if(pl<0||pl>=(int)g_playlists.size()) return;
+    const Playlist& p=g_playlists[(size_t)pl];
+    std::vector<std::wstring> l={L"Tocar em ordem",L"Tocar aleatório",p.folder.empty()?L"Vincular uma pasta...":L"Trocar a pasta vinculada..."};
+    std::vector<int> a={CA_PL_PLAY,CA_PL_SHUF,CA_PL_FOLDER}; std::vector<bool> d={false,false,false};
+    if(!p.link.empty()){ l.push_back(L"Sincronizar com o link"); a.push_back(CA_PL_SYNC); d.push_back(false); }
+    int on=0; for(auto& e:p.entries) if(!e.url.empty()&&e.path.empty()) ++on;
+    if(on>0){ l.push_back(L"Baixar as "+std::to_wstring(on)+L" músicas online"); a.push_back(CA_PL_DLALL); d.push_back(false); }
+    l.push_back(p.mode.empty()?L"Modo online: padrão das configurações":(p.mode==L"download"?L"Modo online: baixar":L"Modo online: streaming")); a.push_back(CA_PL_MODE); d.push_back(false);
+    l.push_back(L"Renomear..."); a.push_back(CA_PL_RENAME); d.push_back(false);
+    l.push_back(L"Excluir playlist"); a.push_back(CA_PL_DELETE); d.push_back(true);
+    OpenCtxMenuGeneric(x,y,CTX_PLAYLIST,pl,l,a,d,(int)S(280));
+}
+static void OpenPickPlaylistMenu(int track,int x,int y){   // "adicionar a playlist": escolher qual
+    if(track<0||track>=(int)g_tracks.size()) return;
+    std::vector<std::wstring> l; std::vector<int> a; std::vector<bool> d;
+    for(size_t i=0;i<g_playlists.size();++i){ l.push_back(g_playlists[i].name); a.push_back(CA_PICK_BASE+(int)i); d.push_back(false); }
+    l.push_back(L"+ Nova playlist..."); a.push_back(CA_PICK_NEW); d.push_back(false);
+    OpenCtxMenuGeneric(x,y,CTX_PICKPL,track,l,a,d,(int)S(260));
+}
+static void AskDeletePlaylist(int i){ if(i<0||i>=(int)g_playlists.size()) return; g_confirmOpen=true; g_confirmKind=1; g_confirmTrack=i; g_confirmText=L"Excluir a playlist \""+g_playlists[(size_t)i].name+L"\"? (as músicas continuam no disco)"; }
+static void OpenConfirm(){ // geometria da caixa de confirmacao
+    int bw=std::min(520,g_winW-40), bh=170, bx=(g_winW-bw)/2, by=(g_winH-bh)/2;
+    R_confirmBox={bx,by,bx+bw,by+bh};
+    R_confirmYes={bx+bw-250,by+bh-56,bx+bw-135,by+bh-18};
+    R_confirmNo={bx+bw-125,by+bh-56,bx+bw-20,by+bh-18};
+}
+static void ApplyCoverPick(int i,const std::wstring& imgPath){
+    if(imgPath.empty()||i<0||i>=(int)g_tracks.size()) return;
+    auto oldCover=g_tracks[i].coverPath;
+    auto saved=SaveCustomCover(g_tracks[i].path,imgPath);
+    if(!saved.empty()){g_tracks[i].coverPath=saved;PlatformEvictThumb(oldCover);PlatformEvictThumb(saved);if(i==g_current)PlatformLoadCover(saved);}
+}
+static void ApplyEqNow(){ Player::SetEq(g_cfg.eq,g_cfg.eqOn); g_player.ApplyEq(); }
+// ---- segundo plano ---------------------------------------------------------
+// Botao X / Alt+F4 / fechar pelo sistema: com musica tocando e a opcao ligada,
+// a janela some e o Remix segue tocando. Relancar o app (instancia unica), a
+// bandeja (Windows) ou os controles de midia (MPRIS no Linux) trazem a janela
+// de volta. Quando a musica acaba sozinha, o app fecha (g_bgAutoQuit).
+static void HideToBackground(bool autoQuit){ g_hiddenToBg=true; g_bgAutoQuit=autoQuit; g_bgIdleSec=0; PlatformHide(); }
+static void ShowFromBackground(){ g_hiddenToBg=false; g_bgAutoQuit=false; PlatformRestoreAndFocus(); }
+static void QuitApp(){ PlatformClose(); }
+static void RequestClose(){
+    if(g_cfg.bgOnClose&&g_player.playing&&!g_hiddenToBg){ HideToBackground(true); return; }
+    PlatformClose();
+}
+// Pausa/toca vindos de fora (bandeja, teclas de midia, MPRIS): lembra que foi o
+// usuario que pausou, para nao fechar sozinho em segundo plano.
+static void RemotePlayPause(){ TogglePlayPause(); g_userPaused=g_player.loaded&&!g_player.playing; }
+static void RemotePlay(){ if(!g_player.playing) RemotePlayPause(); }
+static void RemotePause(){ if(g_player.playing) RemotePlayPause(); }
+static void RemoteStop(){ if(g_player.playing) TogglePlayPause(); if(g_player.loaded) g_player.SeekMs(0); g_userPaused=true; }
+
+// ---- vistas: biblioteca / cards de playlists / faixas de uma playlist ----------------
+static void SyncCurrentToList(){   // acha a faixa tocando na lista em tela (ou -1)
+    g_current=-1;
+    if(g_nowPlayingValid) for(size_t i=0;i<g_tracks.size();++i) if(_wcsicmp(g_tracks[i].path.c_str(),g_nowPlaying.path.c_str())==0){ g_current=(int)i; break; }
+    RebuildShuffleQueue(g_current);
+}
+static void ApplyArtistMap(std::vector<Track>& v){ for(auto&t:v){ auto it=g_artistMap.find(t.path); if(it!=g_artistMap.end()) t.artist=it->second; } }
+static void EnterLibraryView(){
+    if(g_view==2){
+        if(g_libCached){ g_tracks=g_libTracks; g_libCached=false; } else LoadFolderAndPlaylist();
+        g_openPl=-1; g_cfg.openPlaylist.clear(); g_cfg.Save(); ApplySort(); SyncCurrentToList();
+    }
+    g_view=0; g_listScroll=0; g_searchFocus=false; BuildLayout();
+}
+static void ShowPlaylistCards(){ g_view=1; g_listScroll=0; g_searchFocus=false; BuildLayout(); }
+static void OpenPlaylistView(int pi){
+    if(pi<0||pi>=(int)g_playlists.size()) return;
+    if(!g_libCached&&g_view!=2){ g_libTracks=g_tracks; g_libCached=true; }
+    const std::vector<Track>& lib=g_libCached?g_libTracks:g_tracks;
+    if(g_pickMode){ g_pickMode=false; g_pickSel.clear(); }
+    int missing=0; std::vector<Track> tr=PlaylistTracks(pi,lib,missing);
+    ApplyArtistMap(tr);
+    if(g_playlists[(size_t)pi].coverPath.empty()){ for(auto& t:tr) if(!t.coverPath.empty()){ g_playlists[(size_t)pi].coverPath=t.coverPath; break; } }
+    g_tracks=tr; g_openPl=pi; g_view=2; g_cfg.openPlaylist=g_playlists[(size_t)pi].slug; g_cfg.Save();
+    ApplySort(); SyncCurrentToList(); g_listScroll=0; g_searchFocus=false; BuildLayout();
+    if(missing>0) SetStatus(std::to_wstring(missing)+(missing==1?L" faixa não encontrada (o arquivo mudou de lugar ou foi apagado).":L" faixas não encontradas (arquivos mudaram de lugar ou foram apagados)."),4000);
+}
+static void PlayPlaylist(int pi,bool shuffle){   // "tocar" direto do card (pi<0 = todas as musicas)
+    if(pi<0) EnterLibraryView(); else OpenPlaylistView(pi);
+    if(g_tracks.empty()){ SetStatus(pi<0?L"Biblioteca vazia.":L"Playlist vazia: use + ADICIONAR (biblioteca, arquivos, pasta ou link).",3500); return; }
+    if(g_cfg.shuffle!=shuffle){ g_cfg.shuffle=shuffle; g_cfg.Save(); }
+    int start=0; if(shuffle){ RebuildShuffleQueue(-1); start=g_shufQueue.empty()?0:g_shufQueue[0]; }
+    PlayIndex(start,true);
+}
+static void RestoreOpenPlaylist(){   // ao abrir o app: volta para a playlist que estava aberta, com a 1a faixa carregada (pausada)
+    if(g_cfg.openPlaylist.empty()) return;
+    int i=FindPlaylistBySlug(g_cfg.openPlaylist); if(i<0){ g_cfg.openPlaylist.clear(); return; }
+    OpenPlaylistView(i);
+    if(g_player.playing||g_current>=0||g_tracks.empty()) return;
+    for(size_t k=0;k<g_tracks.size();++k) if(!g_lastOnlineUrl.empty()&&g_tracks[k].path==g_lastOnlineUrl){   // lembra a musica online; o streaming recomeca no play
+        PlayIndex((int)k,false);
+        SetStatus(L"Última música online: "+g_tracks[k].title+L" (aperte play: o streaming recomeça).",4500);
+        return;
+    }
+    PlayIndex(0,false);
+}
+static void AddTrackToPlaylist(int pi,int track){
+    if(track<0||track>=(int)g_tracks.size()) return;
+    if(pi<0){ g_pendingAddPath=g_tracks[(size_t)track].path; StartPlaylistNameEdit(2,-1); return; }
+    if(pi<(int)g_playlists.size()&&IsOnlineTrack(g_tracks[(size_t)track])){
+        std::vector<OTrack> v{OTrackFor(g_tracks[(size_t)track])};
+        SetStatus(AddOnlineItemsToPlaylist(pi,v)>0?L"Adicionada à playlist \""+g_playlists[(size_t)pi].name+L"\".":std::wstring(L"Essa música já está na playlist."),2500);
+        return;
+    }
+    if(PlaylistAddTrack(pi,g_tracks[(size_t)track])) SetStatus(L"Adicionada à playlist \""+g_playlists[(size_t)pi].name+L"\".",2500);
+    else SetStatus(L"Essa faixa já está na playlist \""+g_playlists[(size_t)pi].name+L"\".",2500);
+}
+static void RemoveTrackFromOpenPlaylist(int track){
+    if(g_view!=2||track<0||track>=(int)g_tracks.size()) return;
+    if(!PlaylistRemovePath(g_openPl,g_tracks[(size_t)track].path)){ SetStatus(L"Essa música vem da pasta vinculada: desvincule a pasta (menu PASTA DA PLAYLIST) ou tire o arquivo de lá.",4500); return; }
+    g_tracks.erase(g_tracks.begin()+track);
+    if(g_current==track) g_current=-1; else if(g_current>track) g_current--;
+    RebuildShuffleQueue(g_current); BuildLayout();
+}
+#include "app_online_b.h"
+#include "app_online_c.h"
+static void ConfirmYes(){
+    int t=g_confirmTrack; int kind=g_confirmKind; g_confirmOpen=false; g_confirmKind=0;
+    if(kind==1){
+        bool wasOpen=(g_openPl==t); DeletePlaylistDir(t);
+        if(wasOpen){ g_openPl=-1; EnterLibraryView(); } else if(g_openPl>t) g_openPl--;
+        if(g_openPl>=0&&g_openPl<(int)g_playlists.size()) g_cfg.openPlaylist=g_playlists[(size_t)g_openPl].slug;
+        SetStatus(L"Playlist excluída.",2000);
+    } else DeleteTrack(t);
+    BuildLayout();
+}
+// ---- busca (filtra a lista em tela; nao muda a fila de reproducao) --------------
+static std::wstring FoldText(const std::wstring& s){
+    std::wstring o; o.reserve(s.size());
+    for(wchar_t c:s){ wchar_t l=(wchar_t)towlower(c);
+        switch(l){ case L'á': case L'à': case L'â': case L'ã': case L'ä': l=L'a'; break; case L'é': case L'è': case L'ê': case L'ë': l=L'e'; break;
+        case L'í': case L'ì': case L'î': case L'ï': l=L'i'; break; case L'ó': case L'ò': case L'ô': case L'õ': case L'ö': l=L'o'; break;
+        case L'ú': case L'ù': case L'û': case L'ü': l=L'u'; break; case L'ç': l=L'c'; break; case L'ñ': l=L'n'; break; default: break; }
+        o.push_back(l); }
+    return o;
+}
+static bool TrackMatchesSearch(const Track& t){
+    if(g_searchBuf.empty()) return true;
+    std::wstring q=FoldText(g_searchBuf);
+    if(FoldText(t.title).find(q)!=std::wstring::npos) return true;
+    if(FoldText(t.artist).find(q)!=std::wstring::npos) return true;
+    return FoldText(std::filesystem::path(t.path).filename().wstring()).find(q)!=std::wstring::npos;
+}
+static void FocusSearch(){ if(g_cfg.displayMode==L"vertical") return; if(g_showSettings) g_showSettings=false; if(g_view==1) EnterLibraryView(); g_searchFocus=true; }
+static void ClearSearch(){ g_searchFocus=false; if(!g_searchBuf.empty()){ g_searchBuf.clear(); BuildLayout(); } }
+// ---- atalhos configuraveis -----------------------------------------------------------
+static int FindHotkey(int kc,int mods){ if(!kc) return -1; for(int a=0;a<HK_COUNT;a++) if(g_cfg.hk[a].key==kc&&g_cfg.hk[a].mods==mods) return a; return -1; }
+static void RunHotkeyAction(int a){
+    switch(a){
+    case HK_PLAYPAUSE: RemotePlayPause(); break;
+    case HK_NEXT: NextTrack(); break;
+    case HK_PREV: PrevOrRestart(); break;
+    case HK_VOLUP: SetVolumePercent(g_cfg.volume+5); break;
+    case HK_VOLDOWN: SetVolumePercent(g_cfg.volume-5); break;
+    case HK_MUTE: ToggleMute(); break;
+    case HK_RESTART: g_player.Restart(); break;
+    case HK_SHUFFLE: g_cfg.shuffle=!g_cfg.shuffle; g_cfg.Save(); RebuildShuffleQueue(g_current); SetStatus(g_cfg.shuffle?L"Aleatório ligado: a lista fica na sua ordem, só a reprodução muda.":L"Aleatório desligado.",2200); break;
+    case HK_REPEAT: g_cfg.repeat=!g_cfg.repeat; g_cfg.Save(); SetStatus(g_cfg.repeat?L"Repetir a faixa: ligado":L"Repetir a faixa: desligado",1800); break;
+    case HK_SEARCH: FocusSearch(); break;
+    case HK_DELETE: if(!g_showSettings&&g_current>=0){ AskDeleteTrack(g_current); OpenConfirm(); } break;
+    case HK_RENAME: if(!g_showSettings&&g_current>=0) StartFileRename(g_current); break;
+    case HK_MOVEUP: if(!g_showSettings){ MoveTrack(g_current,-1); BuildLayout(); } break;
+    case HK_MOVEDOWN: if(!g_showSettings){ MoveTrack(g_current,+1); BuildLayout(); } break;
+    case HK_CLOSE:
+        if(g_hkCapture>=0) g_hkCapture=-1;
+        else if(OU().open){ OU().open=false; OU().editing=false; }
+        else if(g_imgMenuOpen) g_imgMenuOpen=false;
+        else if(g_searchFocus||!g_searchBuf.empty()) ClearSearch();
+        else if(g_showSettings) g_showSettings=false;
+        else if(g_pickMode) FinishPickMode(false);
+        else if(g_view==2) ShowPlaylistCards();
+        else if(g_view==1) EnterLibraryView();
+        break;
+    case HK_QUIT: QuitApp(); break;
+    case HK_SHOWHIDE: if(g_hiddenToBg) ShowFromBackground(); else HideToBackground(false); break;
+    default: break;
+    }
+}
+static bool RunHotkeyByName(const std::wstring& id){
+    if(_wcsicmp(id.c_str(),L"show")==0){ ShowFromBackground(); return true; }
+    if(_wcsicmp(id.c_str(),L"hide")==0){ HideToBackground(false); return true; }
+    int a=HkIndexById(id); if(a<0) return false; RunHotkeyAction(a); return true;
+}
+
+static void HandleCommand(const std::wstring& cmd){
+    if(cmd.rfind(L"CMD|",0)==0){ if(!RunHotkeyByName(cmd.substr(4))) SetStatus(L"Comando desconhecido: "+cmd.substr(4),2500); return; }   // remix --cmd <acao>
+    const std::wstring p=L"PLAYFILE|";
+    if(cmd.rfind(p,0)==0){
+        std::wstring path=cmd.substr(p.size());
+        if(!path.empty()) PlayFileDirect(path,true);
+        ShowFromBackground();
+    }
+}
+static void HandleEvent(int type,const std::wstring& s,int n){
+    switch(type){
+    case EV_NEXT_TRACK: NextTrack(); break;
+    case EV_WEB_DOWNLOAD_DONE: ConsumeWebDownload(); break;
+    case EV_THUMBS_INVALIDATE: PlatformClearThumbs(); break;
+    case EV_COMMAND: HandleCommand(s); break;
+    case EV_TRANSCODED: OnTranscoded(s,(unsigned)n); break;
+    case EV_PICK_FOLDER: if(!s.empty()) SwitchFolder(s); break;
+    case EV_PICK_IMAGE: ApplyCoverPick(n,s); break;
+    case EV_PICK_WALL: if(!s.empty()){g_cfg.bgWallpaper=s;g_cfg.Save();} break;
+    case EV_ART_READY: OnArtReady(s); break;
+    case EV_ONLINE_META: OnStreamMeta(s,n); break;
+    case EV_ONLINE_READY: OnStreamReady(n,_wtoi(s.c_str())); break;
+    case EV_ONLINE_FAIL: OnStreamFail(s,n); break;
+    case EV_ONLINE_THUMB: OnOnlineThumb(s); break;
+    case EV_ONLINE_RESOLVED: OnLinkResolved(s,n); break;
+    case EV_ONLINE_JOB: OnDownloadJob(n); break;
+    case EV_PICK_PL_FOLDER: OnPickedPlaylistFolder(s); break;
+    case EV_PICK_PL_FILES: OnPickedFiles(s,n==1); break;
+    case EV_PICK_PL_ADDFOLDER: OnPickedAddFolder(s); break;
+    case EV_PICK_NEWPL_FOLDER: OnPickedNewPlaylistFolder(s); break;
+    case EV_PICK_DLFOLDER: if(!s.empty()){ g_cfg.downloadFolder=s; g_cfg.Save(); SetStatus(L"Downloads vão para: "+s,3000); } break;
+    case EV_ONLINE_SEARCH: {   // miniaturas dos resultados em segundo plano
+        std::vector<std::pair<std::wstring,std::wstring>> v;
+        { std::lock_guard<std::mutex> lk(OU().m); for(auto& t:OU().res) if(!t.thumb.empty()) v.push_back({t.url,t.thumb}); }
+        FetchThumbsAsync(v); } break;
+    default: break;   // EV_TOOLS_READY: so redesenhar
+    }
+    PlatformRedraw();
+}
+// Diario do online: no maximo 1 gravacao por segundo, so com streaming/download ativo
+// (parado, grava uma vez so para lembrar a ultima musica online).
+static void TickJournal(){
+    ULONGLONG now=GetTickCount64(); if(now-g_journalLast<1000) return; g_journalLast=now;
+    int waiting=0; float pct=0; std::wstring dt; bool dl=DownloadActivity(waiting,pct,dt);
+    bool memo=g_nowPlayingValid&&IsOnlineTrack(g_nowPlaying);
+    int pos=0,dur=memo?g_nowPlaying.durSec:0;
+    if(memo&&g_player.IsStream()){ pos=(int)(g_player.GetPositionMs()/1000); DWORD l=g_player.GetLengthMs(); if(l) dur=(int)(l/1000); }
+    // so grava se algo mudou (posicao, fase/buffer de um canal, download)
+    std::wstring sig=(memo?g_nowPlaying.path:std::wstring())+L"|"+std::to_wstring(pos)+L"|"+std::to_wstring(g_curStreamId);
+    for(auto& c:StreamSnapshot()) sig+=L"|"+std::to_wstring(c.id)+L":"+std::to_wstring(c.phase)+L":"+std::to_wstring(c.end/std::max<uint32_t>(1,c.rate));
+    if(dl) sig+=L"|dl:"+std::to_wstring((int)pct)+L":"+std::to_wstring(waiting)+dt;
+    if(sig==g_journalSig) return;
+    g_journalSig=sig;
+    WriteJournal(false,memo,memo?g_nowPlaying.title:L"",memo?g_nowPlaying.path:L"",pos,dur,g_curStreamId);
+}
+// Chamado a cada frame/tick. dt em segundos.
+static void Tick(float dt){
+    // escondido em 2o plano e a musica acabou sozinha (nao foi pausa do usuario): encerra
+    if(g_hiddenToBg&&g_bgAutoQuit&&!g_player.playing&&!g_converting&&!g_userPaused){ g_bgIdleSec+=dt; if(g_bgIdleSec>3.f){ g_bgIdleSec=0; PlatformClose(); return; } }
+    else g_bgIdleSec=0;
+    if(g_player.playing) g_userPaused=false;
+    if(g_showSplash){ if(GetTickCount64()-g_splashStart>=SPLASH_MS) g_showSplash=false; }
+    else {
+        ConsumeAutoScan(); PollFolderWatch(); UpdateStreamQueue(); TickJournal();
+        float sm=.4f+(g_cfg.ledSpeed/100.f)*1.6f;
+        float k=dt/0.04f;
+        if(g_player.playing&&g_cfg.artShape==L"cd")g_rotation+=1.2f*sm*k;
+        if(g_rotation>360)g_rotation-=360;
+        g_glowPhase+=.08f*sm*k;
+        g_runnerPhase+=(.0022f+.0135f*(g_cfg.runnerSpeed/100.f))*sm*k;
+        if(g_runnerPhase>1.f)g_runnerPhase-=1.f;
+        if(g_runnerPhase<0.f)g_runnerPhase=0.f;
+        if(g_player.ReachedEnd()){
+            if(g_cfg.repeat) g_player.Restart();
+            else if(!g_cfg.autoplay) g_player.Pause();
+            else if(!g_tracks.empty()&&(g_cfg.shuffle||g_current+1<(int)g_tracks.size())) NextTrack();
+            else g_player.Pause();
+        }
+    }
+    UpdateSpecBands(g_player.loaded&&g_player.playing, g_player.loaded?g_player.GetPositionMs():0, dt);
+}
+// Inicializacao comum (depois de carregar config e antes da janela).
+static void CoreInit(){
+    art::St().onReady=[](const std::wstring& a,const std::wstring& b){ AppPost(EV_ART_READY,OPack({a,b})); };   // capa embutida pronta
+    g_themes=LoadAllThemes(); ApplyTheme(); g_cfg.HealMusicFolder(); MigrateIniAssociations(g_cfg.musicFolder); g_artistMap=LoadCustomArtists();
+    ExtraFormatsEnabled()=PlatformHaveFfmpeg();
+    Player::GlobalInit();
+    Player::SetEq(g_cfg.eq,g_cfg.eqOn);
+    LoadPlaylists();
+    g_shortcutLines={ L"Espaço: tocar / pausar", L"← / →: anterior / próxima", L"↑ / ↓ ou + / -: volume", L"M: mudo   R: reinicia a faixa",
+                      L"Del: excluir (lixeira)   F2: renomear arquivo", L"Ctrl+↑ / Ctrl+↓: mover na ordem manual", L"Botão direito numa faixa: menu", L"Esc: fecha painéis",
+                      L"Fechar a janela tocando: continua em 2º plano (abra o app de novo para voltar)", L"Ctrl+Q: sair de vez" };
+    { std::wstring msg=OnlineStartupCleanup(g_lastOnlineUrl,g_lastOnlineTitle); if(!msg.empty()) SetStatus(msg,5000); }   // restos de download interrompido
+}
+static void CoreShutdown(){
+    g_cfg.Save();
+    PlatformWatchStop();
+    if(g_waveThread.joinable())g_waveThread.detach();
+    if(g_scanThread.joinable())g_scanThread.detach();
+    bool memo=g_nowPlayingValid&&IsOnlineTrack(g_nowPlaying);
+    g_player.Close(); StopAllStreams();   // canais de streaming: a atual e os da fila
+    if(CancelAllDownloads()>0){ for(int k=0;k<40;k++){ int w=0; float pc=0; std::wstring t; if(!DownloadActivity(w,pc,t)) break; std::this_thread::sleep_for(std::chrono::milliseconds(50)); } }
+    bool anyDl=false; { std::lock_guard<std::mutex> lk(DQ().m); anyDl=!DQ().all.empty(); }
+    std::error_code ec;
+    if(memo||anyDl||std::filesystem::exists(std::filesystem::path(JournalPath()),ec))
+        WriteJournal(true,memo,memo?g_nowPlaying.title:L"",memo?g_nowPlaying.path:L"",0,memo?g_nowPlaying.durSec:0,0);
+    Player::GlobalShutdown();
+}
