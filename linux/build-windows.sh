@@ -45,9 +45,22 @@ if [ "$TC" = mingw ]; then
   echo "[win] compilando Remix.exe com MinGW-w64: $("$PFX-g++" --version | head -1)"
   winres app.rc app_res.o                     # icone + versao
   winres manifest.rc default-manifest.o       # manifesto
-  "$PFX-gcc" -O2 -w -c -I"$ROOT/comum" comum/audio_backend.c -o build/win/audio_backend.o
-  "$PFX-g++" -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"$ROOT/windows/" -I"$ROOT/comum" -I"$ROOT/windows" \
-    windows/main.cpp build/win/audio_backend.o windows/app_res.o -o build/win/Remix.exe "${LIBS[@]}"
+  # -g1: nomes de funcao e linhas, so no Remix-sym.exe (o -g nao muda o codigo gerado)
+  "$PFX-gcc" -O2 -g1 -w -c -I"$ROOT/comum" comum/audio_backend.c -o build/win/audio_backend.o
+  "$PFX-g++" -std=gnu++20 -O2 -g1 -w -municode -mwindows -static -B"$ROOT/windows/" -I"$ROOT/comum" -I"$ROOT/windows" \
+    windows/main.cpp build/win/audio_backend.o windows/app_res.o -o build/win/Remix-sym.exe "${LIBS[@]}"
+  # O exe distribuido e o mesmo binario sem simbolos. O Remix-sym.exe traduz os enderecos de um
+  # remix-log.txt:  bash linux/traduzir-log-windows.sh remix-log.txt
+  STRIP="$(command -v "$PFX-strip" || command -v x86_64-w64-mingw32-strip || command -v strip || true)"
+  if [ -z "$STRIP" ] || ! "$STRIP" -s -o build/win/Remix.exe build/win/Remix-sym.exe; then
+    "$PFX-g++" -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"$ROOT/windows/" -I"$ROOT/comum" -I"$ROOT/windows" \
+      windows/main.cpp build/win/audio_backend.o windows/app_res.o -o build/win/Remix.exe "${LIBS[@]}"
+  fi
+  # uma copia por build (id = carimbo do cabecalho PE, a linha "build:" do log), para logs de versoes ja enviadas; guarda as 8 ultimas
+  lf=$(od -An -tu4 -j60 -N4 build/win/Remix-sym.exe | tr -d ' ')
+  BID=$(od -An -tx4 -j$((lf + 8)) -N4 build/win/Remix-sym.exe | tr -d ' ' | tr a-f A-F)
+  mkdir -p build/win/simbolos && cp -f build/win/Remix-sym.exe "build/win/simbolos/Remix-sym-$BID.exe"
+  ls -1t build/win/simbolos/Remix-sym-*.exe | tail -n +9 | xargs -r rm -f
 else
   ZIG="$ROOT/third_party/zig/zig"
   [ -x "$ZIG" ] || { echo "zig nao encontrado: rode linux/fetch-deps.sh"; exit 1; }
@@ -67,6 +80,9 @@ cp -a assets/branding assets/themes "$PW/assets/"
 cp Musica/LEIA-ME.txt "$PW/Musica/" 2>/dev/null || true
 cp README.md "$PW/" 2>/dev/null || true
 cp README.pt-BR.md "$PW/" 2>/dev/null || true
+cp windows/INSTALAR-DEPENDENCIAS.bat "$PW/INSTALAR-DEPENDENCIAS.bat"
+cp windows/LEIA-ME-PORTATIL.txt "$PW/LEIA-ME.txt"
+mkdir -p "$PW/tools" && printf 'Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe e deno.exe se preferir instalar a mao (sem o winget).\r\nO Remix procura nesta pasta.\r\n' > "$PW/tools/LEIA-ME.txt"
 printf '[General]\r\nMusicFolder=Musica\r\n' > "$PW/config.ini"
 OUT="dist/remix-$VER-windows-x64-portable.zip"; rm -f "$OUT"
 (cd "$ROOT/build/portable-win" && zip -qr "$ROOT/$OUT" "remix-$VER-windows-x64")

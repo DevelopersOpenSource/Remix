@@ -30,9 +30,10 @@ inline std::vector<Theme> BuiltinThemes() {
 inline void LoadThemesFrom(const std::wstring& dir, std::vector<Theme>& themes) {
     std::error_code ec;
     if (!std::filesystem::exists(std::filesystem::path(dir), ec)) return;
-    for (auto& e : std::filesystem::directory_iterator(std::filesystem::path(dir), ec)) {
-        if (ec) break;
-        if (!e.is_regular_file()) continue;
+    for (std::filesystem::directory_iterator it(std::filesystem::path(dir), ec), end; !ec && it != end; it.increment(ec)) {
+        const std::filesystem::directory_entry& e = *it;   // incremento com error_code: o range-for lancava excecao
+        std::error_code e2;
+        if (!e.is_regular_file(e2)) continue;
         auto ext = e.path().extension().wstring();
         for (auto& c : ext) c = towlower(c);
         if (ext != L".ini") continue;

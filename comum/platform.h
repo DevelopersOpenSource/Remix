@@ -81,3 +81,16 @@ inline int remix_parse_int(const std::wstring& s) {
     long v = 0; while (i < s.size() && s[i] >= L'0' && s[i] <= L'9') { v = v * 10 + (s[i] - L'0'); if (v > 2147483647L) break; ++i; }
     return (int)(neg ? -v : v);
 }
+
+// Log de diagnostico: no Windows vai para o remix-log.txt (ao lado do app ou em
+// %LOCALAPPDATA%\Remix); no Linux para o stderr com REMIX_DEBUG=1. Cada casca implementa.
+void PlatformLog(const char* msg);
+#include <cstdio>
+#include <exception>
+// Roda f() registrando no log qualquer excecao C++ que escapar, em vez de derrubar o app
+// (excecao que sai de uma thread chama std::terminate). Usado na entrada das threads.
+template <class F> inline void RemixSafe(const char* where, F&& f) {
+    try { f(); }
+    catch (const std::exception& e) { char b[640]; snprintf(b, sizeof b, "aviso: excecao em %s: %s", where, e.what()); PlatformLog(b); }
+    catch (...) { char b[240]; snprintf(b, sizeof b, "aviso: excecao desconhecida em %s", where); PlatformLog(b); }
+}

@@ -231,3 +231,5 @@ bool PlatformWatchTake(unsigned long long quietMs){
     if(GetTickCount64()-g_watch.lastChangeMs.load()<quietMs) return false;
     return g_watch.pending.exchange(0)>0;
 }
+// Log de diagnostico (erros tratados nas threads): no Linux vai para o stderr com REMIX_DEBUG=1.
+void PlatformLog(const char* msg){ if(std::getenv("REMIX_DEBUG")) fprintf(stderr,"[remix] %s\n",msg); }

@@ -12,31 +12,55 @@ Spotify, Deezer and Apple Music** links.
   <img src="docs/screenshots/windows-lista.png" alt="List view (Windows)" width="32%">
 </p>
 
+## Credits
+
+<p align="center">
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: co-author, original idea and Windows version" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): author, online streaming and Linux version" width="48%"></a>
+</p>
+
+The idea for Remix and the Windows version came from **[Nero-2077](https://github.com/Nero-2077)**; online streaming
+and the Linux version from **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
+
 ## Download
 
-Ready-to-use builds are on the [Releases page](https://github.com/EchoGroupStudio/Remix/releases):
+Portable builds are on the [Releases page](https://github.com/EchoGroupStudio/Remix/releases), nothing to install:
 
 | System | File |
 |---|---|
-| Windows 10/11 (x64) | `remix-<version>-windows-x64-portable.zip`: extract and run `Remix.exe` |
-| Any Linux distro (x86_64) | `Remix-<version>-x86_64.AppImage`: make it executable and run |
-| Debian / Ubuntu / Mint | `remix_<version>_amd64.deb` |
-| Fedora / Nobara / RHEL-like | `remix-<version>.x86_64.rpm` |
-| Linux without installing | `remix-<version>-linux-x86_64-portable.zip` |
+| Windows 10/11 (x64) | `remix-<version>-windows-x64-portable.zip`: extract the whole folder and run `Remix.exe` |
+| Linux (x86_64, any distro) | `remix-<version>-linux-x86_64-portable.zip`: extract and run `./RODAR.sh` |
 
-Linux builds only need glibc 2.27 or newer (Ubuntu 18.04+, Debian 10+, Fedora...).
+Linux builds only need glibc 2.27 or newer (Ubuntu 18.04+, Debian 10+, Fedora...). A `.deb`, a `.rpm` and an
+AppImage can be built with `bash linux/packaging/build-packages.sh` (see [Building from source](#building-from-source)).
 
 ### Online music requirements
 
-Streaming, downloads and online search use free external tools that are **not bundled**:
-**yt-dlp** and **ffmpeg**, plus **Node.js** or **Deno** (YouTube now requires a JavaScript runtime).
+Streaming, downloads and online search use free external tools that are **not bundled**: **yt-dlp**, **FFmpeg**
+and a JavaScript runtime, which YouTube now requires (**Deno 2.3+** or **Node.js 22+**). The portable versions
+include an installer:
 
-- Fedora: `sudo dnf install yt-dlp ffmpeg nodejs`
-- Debian / Ubuntu: `sudo apt install ffmpeg nodejs` and `pipx install yt-dlp` (distro packages of yt-dlp are often too old)
-- Windows: put `yt-dlp.exe` and `ffmpeg.exe` next to `Remix.exe` or anywhere in `PATH`
-  (for example `winget install yt-dlp.yt-dlp`, `winget install Gyan.FFmpeg`, `winget install OpenJS.NodeJS`)
+- **Windows:** double-click `INSTALAR-DEPENDENCIAS.bat` in the Remix folder. It shows whether this is Windows 10 or 11
+  and installs yt-dlp, FFmpeg and Deno with **winget** (Microsoft's package manager), for your user only and without
+  administrator rights. Without winget (older Windows 10, LTSC, company PCs) it can download the official files
+  straight into the `tools` folder next to `Remix.exe` with the `curl` and `tar` built into Windows 10 1803+ and 11,
+  open App Installer in the Microsoft Store, or open the official download pages.
+- **Linux:** `bash instalar-dependencias.sh` in the portable folder. It detects the distribution and uses its package
+  manager (apt on Debian/Ubuntu/Mint, dnf on Fedora/Nobara/RHEL, pacman on Arch/Manjaro/CachyOS, zypper on openSUSE,
+  xbps on Void, eopkg on Solus). When the packaged yt-dlp or JavaScript runtime is too old, on immutable systems
+  (Bazzite, Silverblue, SteamOS) or without sudo, it downloads the official yt-dlp, Deno and static FFmpeg builds into
+  `~/.local/bin` and `~/.deno/bin`. On NixOS it prints the `nix` command instead; `--mostrar` only shows the plan.
 
-*Settings › ONLINE* shows which tools were found. Keep yt-dlp up to date: YouTube changes often.
+Then just open Remix: it finds the tools by itself, no restart needed. *Settings › ONLINE* shows what was found.
+Run the installer again from time to time: YouTube changes often and yt-dlp must stay up to date.
+
+### If Remix closes by itself (Windows)
+
+Remix writes `remix-log.txt` next to `Remix.exe` (or in `%LOCALAPPDATA%\Remix`) with every startup step, the
+Windows version, the audio device and the error, and shows a message instead of just disappearing. The next launch
+starts in **safe mode** (no splash sound, effects, tray icon or global hotkeys; force it with `Remix.exe --seguro`).
+Please open an issue with that file. Also check that the whole folder was extracted (do not run `Remix.exe` from
+inside the `.zip`) and that your antivirus did not quarantine it.
 
 ## Features
 

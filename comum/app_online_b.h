@@ -163,7 +163,7 @@ static void OnPickedAddFolder(const std::wstring& folder){   // guarda o caminho
     if(folder.empty()) return;
     SetStatus(L"Lendo a pasta...",2000);
     std::thread([folder]{
-        auto v=ScanFolder(folder);
+        std::vector<Track> v; RemixSafe("ler pasta",[&]{ v=ScanFolder(folder); });
         std::sort(v.begin(),v.end(),[](const Track& a,const Track& b){ return a.path<b.path; });
         std::wstring all; for(auto& t:v){ if(!all.empty()) all.push_back(L'\n'); all+=t.path; }
         AppPost(EV_PICK_PL_FILES,all,1);
@@ -178,14 +178,14 @@ static void OnPickedNewPlaylistFolder(const std::wstring& folder){
 }
 static void DownloadPlaylistOnline(int pl){
     if(pl<0||pl>=(int)g_playlists.size()) return;
-    const Playlist& p=g_playlists[(size_t)pl]; int n=0;
+    const Playlist& p=g_playlists[(size_t)pl]; std::vector<OTrack> items;
     for(auto& e:p.entries){
         if(e.url.empty()||!e.path.empty()) continue;
         OTrack t; t.url=e.url; t.play=e.play; t.title=e.title; t.artist=e.artist; t.thumb=e.thumb; t.dur=e.dur; t.src=DetectSource(e.url);
         if(t.play.empty()&&!NeedsMatch(t.src)) t.play=t.url;
-        QueueDownload(t,p.name,OnlineDownloadBase(),g_cfg.onlineFormat); ++n;
+        items.push_back(t);
     }
-    SetStatus(n?std::to_wstring(n)+L" na fila de download  →  "+Config::Join(OnlineDownloadBase(),SafeFileName(p.name)):std::wstring(L"Nada para baixar."),4500);
+    StartDownloads(items,p.name);
 }
 static void CyclePlaylistMode(int pl){
     if(pl<0||pl>=(int)g_playlists.size()) return;

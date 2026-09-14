@@ -52,6 +52,9 @@ private:
 };
 
 #ifdef _WIN32
+#ifndef PROC_THREAD_ATTRIBUTE_JOB_LIST
+#define PROC_THREAD_ATTRIBUTE_JOB_LIST 0x0002000D
+#endif
 inline std::wstring QuoteArgW(const std::wstring& a) {
     if (!a.empty() && a.find_first_of(L" \t\n\v\"") == std::wstring::npos) return a;
     std::wstring r = L"\"";
@@ -89,29 +92,41 @@ inline bool Proc::Start(const std::vector<std::wstring>& args, bool pipeOut, boo
     HANDLE inherit[3]; DWORD ni = 0;
     auto addH = [&](HANDLE h) { if (!h || h == INVALID_HANDLE_VALUE) return; for (DWORD k = 0; k < ni; ++k) if (inherit[k] == h) return; inherit[ni++] = h; };
     addH(si.StartupInfo.hStdInput); addH(si.StartupInfo.hStdOutput); addH(si.StartupInfo.hStdError);
-    SIZE_T asz = 0;
-    InitializeProcThreadAttributeList(NULL, 1, 0, &asz);
-    std::vector<BYTE> attr(asz ? asz : 1);
-    si.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)attr.data();
-    bool attrOk = asz && ni && InitializeProcThreadAttributeList(si.lpAttributeList, 1, 0, &asz) &&
-                  UpdateProcThreadAttribute(si.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit, ni * sizeof(HANDLE), NULL, NULL);
     std::wstring line;
     for (size_t i = 0; i < args.size(); ++i) { if (i) line.push_back(L' '); line += QuoteArgW(args[i]); }
-    std::vector<wchar_t> buf(line.begin(), line.end()); buf.push_back(0);
-    PROCESS_INFORMATION pinfo{};
-    DWORD flags = CREATE_NO_WINDOW | CREATE_SUSPENDED | (attrOk ? EXTENDED_STARTUPINFO_PRESENT : 0);
-    BOOL created = CreateProcessW(NULL, buf.data(), NULL, NULL, TRUE, flags, NULL, NULL, attrOk ? (LPSTARTUPINFOW)&si : &si.StartupInfo, &pinfo);
-    if (attrOk) DeleteProcThreadAttributeList(si.lpAttributeList);
-    cl(oW); cl(eW); cl(iR); cl(nulIn); cl(nulOut);
-    if (!created) { cl(oR); cl(eR); cl(iW); return false; }
+    // Job "mata junto": se o Remix fechar (ou cair), o yt-dlp/ffmpeg nao fica rodando sozinho.
     hJob = CreateJobObjectW(NULL, NULL);
     if (hJob) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION li{};
         li.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &li, sizeof(li));
-        AssignProcessToJobObject(hJob, pinfo.hProcess);
+        if (!SetInformationJobObject(hJob, JobObjectExtendedLimitInformation, &li, sizeof(li))) { CloseHandle(hJob); hJob = nullptr; }
     }
-    ResumeThread(pinfo.hThread);
+    // Windows 10 1607+: o processo ja nasce dentro do job (PROC_THREAD_ATTRIBUTE_JOB_LIST), sem
+    // ser criado suspenso e retomado depois - padrao que antivirus associam a injecao de codigo.
+    auto create = [&](bool withJob, PROCESS_INFORMATION& pi) -> BOOL {
+        DWORD count = withJob ? 2 : 1;
+        SIZE_T asz = 0;
+        InitializeProcThreadAttributeList(NULL, count, 0, &asz);
+        std::vector<BYTE> attr(asz ? asz : 1);
+        STARTUPINFOEXW sx = si;
+        sx.lpAttributeList = (LPPROC_THREAD_ATTRIBUTE_LIST)attr.data();
+        bool listOk = asz && InitializeProcThreadAttributeList(sx.lpAttributeList, count, 0, &asz);
+        bool handlesOk = listOk && ni && UpdateProcThreadAttribute(sx.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, inherit, ni * sizeof(HANDLE), NULL, NULL);
+        bool jobOk = listOk && withJob && UpdateProcThreadAttribute(sx.lpAttributeList, 0, PROC_THREAD_ATTRIBUTE_JOB_LIST, &hJob, sizeof(HANDLE), NULL, NULL);
+        if (withJob && !jobOk) { if (listOk) DeleteProcThreadAttributeList(sx.lpAttributeList); return FALSE; }
+        bool ext = handlesOk || jobOk;
+        std::vector<wchar_t> cmd(line.begin(), line.end()); cmd.push_back(0);   // CreateProcessW pode escrever na linha de comando
+        BOOL r = CreateProcessW(NULL, cmd.data(), NULL, NULL, TRUE, CREATE_NO_WINDOW | (ext ? EXTENDED_STARTUPINFO_PRESENT : 0), NULL, NULL,
+                                ext ? (LPSTARTUPINFOW)&sx : &sx.StartupInfo, &pi);
+        if (listOk) DeleteProcThreadAttributeList(sx.lpAttributeList);
+        return r;
+    };
+    PROCESS_INFORMATION pinfo{};
+    bool inJob = hJob && create(true, pinfo);
+    BOOL created = inJob ? TRUE : create(false, pinfo);
+    cl(oW); cl(eW); cl(iR); cl(nulIn); cl(nulOut);
+    if (!created) { cl(oR); cl(eR); cl(iW); if (hJob) { CloseHandle(hJob); hJob = nullptr; } return false; }
+    if (hJob && !inJob && !AssignProcessToJobObject(hJob, pinfo.hProcess)) { CloseHandle(hJob); hJob = nullptr; }   // Windows antigo: entra no job logo depois
     CloseHandle(pinfo.hThread);
     hProc = pinfo.hProcess; outR = oR; errR = eR; inW = iW;
     started = true;

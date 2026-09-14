@@ -155,6 +155,11 @@ public:
 
     static void GlobalInit() { if (!EngineOk()) InitEngine(0); }
     static bool HasAudio() { return EngineOk(); }   // dispositivo de som abriu?
+    static ma_backend Backend() { ma_device* d = EngineOk() ? ma_engine_get_device(&Engine()) : nullptr; return (d && d->pContext) ? d->pContext->backend : ma_backend_null; }
+    static const char* BackendName() { return EngineOk() ? ma_get_backend_name(Backend()) : "nenhum"; }
+    // Sem nenhuma saida de som (fone/caixa desconectados, servico de audio parado) o miniaudio cai no
+    // backend "Null": abre, o tempo da faixa anda e nada toca.
+    static bool SilentOutput() { return EngineOk() && Backend() == ma_backend_null; }
     static void GlobalShutdown() {
         if (!EngineOk()) return;
         DestroyEq();
@@ -178,9 +183,12 @@ public:
     static void PlayOneShot(const std::wstring& path) {
         if (!EngineOk() || path.empty()) return;
 #ifdef _WIN32
-        // ma_engine_play_sound so aceita char* (fopen ANSI): converte pro codepage do sistema
-        int n = WideCharToMultiByte(CP_ACP, 0, path.c_str(), -1, NULL, 0, NULL, NULL);
-        std::string a; if (n > 1) { a.resize((size_t)n - 1); WideCharToMultiByte(CP_ACP, 0, path.c_str(), -1, &a[0], n, NULL, NULL); }
+        // ma_engine_play_sound so aceita char* (fopen ANSI): usa o nome curto 8.3 (so ASCII) quando
+        // existe, porque pastas com letras fora do codepage (ex.: japones) nao abririam
+        std::wstring use = path;
+        { wchar_t sh[MAX_PATH]; DWORD k = GetShortPathNameW(path.c_str(), sh, MAX_PATH); if (k > 0 && k < MAX_PATH) use = sh; }
+        int n = WideCharToMultiByte(CP_ACP, 0, use.c_str(), -1, NULL, 0, NULL, NULL);
+        std::string a; if (n > 1) { a.resize((size_t)n - 1); WideCharToMultiByte(CP_ACP, 0, use.c_str(), -1, &a[0], n, NULL, NULL); }
         if (!a.empty()) ma_engine_play_sound(&Engine(), a.c_str(), NULL);
 #else
         ma_engine_play_sound(&Engine(), WideToUtf8(path).c_str(), NULL);

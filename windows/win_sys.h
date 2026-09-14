@@ -7,6 +7,7 @@
 #include <shlobj.h>
 #include <commdlg.h>
 #include <deque>
+#include <functional>
 
 static HWND g_hwnd = nullptr;
 #define WM_APP_EVENT (WM_APP+1)
@@ -28,9 +29,21 @@ static void DrainEvents(){
 }
 void PlatformRedraw(){ if(g_hwnd) InvalidateRect(g_hwnd,NULL,FALSE); }
 
-// ---- dialogos (modais: respondem na hora pela fila) -----------------------
-static std::wstring PickFolder(HWND owner){
-    BROWSEINFOW bi={0}; bi.hwndOwner=owner; bi.lpszTitle=L"Escolha a pasta com suas musicas"; bi.ulFlags=BIF_NEWDIALOGSTYLE|BIF_RETURNONLYFSDIRS;
+// ---- dialogos (rodam numa thread STA propria) -----------------------------
+// O SHBrowseForFolder e o GetOpenFileName precisam de uma thread STA (OleInitialize).
+// A janela principal roda em MTA (CoInitializeEx no wWinMain, o que faz o streaming do
+// SoundCloud funcionar); nessa apartamento os dialogos de pasta/arquivo davam erro e
+// derrubavam o app. Entao cada dialogo roda na sua propria thread STA e responde pela
+// fila de eventos quando o usuario escolhe - a janela nao trava enquanto ele esta aberto.
+static std::atomic<bool> g_pickerBusy{false};
+
+static int CALLBACK BrowseInit(HWND h,UINT msg,LPARAM,LPARAM data){   // abre ja na pasta atual
+    if(msg==BFFM_INITIALIZED && data) SendMessageW(h,BFFM_SETSELECTIONW,TRUE,data);
+    return 0;
+}
+static std::wstring PickFolder(HWND owner,const std::wstring& initial){
+    BROWSEINFOW bi={0}; bi.hwndOwner=owner; bi.lpszTitle=L"Escolha a pasta"; bi.ulFlags=BIF_NEWDIALOGSTYLE|BIF_RETURNONLYFSDIRS;
+    if(!initial.empty()){ bi.lpfn=BrowseInit; bi.lParam=(LPARAM)initial.c_str(); }
     LPITEMIDLIST pidl=SHBrowseForFolderW(&bi); std::wstring result;
     if(pidl){wchar_t buf[MAX_PATH];if(SHGetPathFromIDListW(pidl,buf))result=buf;CoTaskMemFree(pidl);} return result;
 }
@@ -39,11 +52,8 @@ static std::wstring PickImageFile(HWND owner){
     ofn.lpstrFilter=L"Imagens\0*.jpg;*.jpeg;*.png;*.bmp\0Todos\0*.*\0";ofn.lpstrFile=file;ofn.nMaxFile=MAX_PATH;ofn.lpstrTitle=L"Escolha a imagem";ofn.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST;
     return GetOpenFileNameW(&ofn)?file:L"";
 }
-void PlatformPickFolderAsync(){ std::wstring f=PickFolder(g_hwnd); AppPost(EV_PICK_FOLDER,f,0); }
-void PlatformPickImageAsync(int evType,int ctx){ std::wstring f=PickImageFile(g_hwnd); AppPost(evType,f,ctx); }
-void PlatformPickFolderFor(int evType,int ctx){ std::wstring f=PickFolder(g_hwnd); AppPost(evType,f,ctx); }
-void PlatformPickAudioFilesAsync(int evType,int ctx){
-    std::vector<wchar_t> buf(65536,0); OPENFILENAMEW ofn={0}; ofn.lStructSize=sizeof(ofn); ofn.hwndOwner=g_hwnd;
+static std::wstring PickAudioFiles(HWND owner){
+    std::vector<wchar_t> buf(65536,0); OPENFILENAMEW ofn={0}; ofn.lStructSize=sizeof(ofn); ofn.hwndOwner=owner;
     ofn.lpstrFilter=L"Áudio\0*.mp3;*.flac;*.ogg;*.opus;*.m4a;*.wav;*.aac;*.wma;*.aiff;*.webm;*.mka\0Todos\0*.*\0";
     ofn.lpstrFile=buf.data(); ofn.nMaxFile=(DWORD)buf.size(); ofn.lpstrTitle=L"Escolha as músicas";
     ofn.Flags=OFN_FILEMUSTEXIST|OFN_PATHMUSTEXIST|OFN_ALLOWMULTISELECT|OFN_EXPLORER;
@@ -53,8 +63,27 @@ void PlatformPickAudioFilesAsync(int evType,int ctx){
         if(!*p) out=first;   // um arquivo so: caminho completo
         else while(*p){ std::wstring name=p; if(!out.empty()) out.push_back(L'\n'); out+=Config::Join(first,name); p+=name.size()+1; }
     }
-    AppPost(evType,out,ctx);
+    return out;
 }
+// roda o dialogo numa thread STA e devolve o resultado (vazio = cancelou) pela fila de eventos
+static void RunPicker(int evType,int ctx,std::function<std::wstring()> pick){
+    if(g_pickerBusy.exchange(true)){ AppPost(evType,L"",ctx); return; }   // um dialogo por vez
+    std::thread([evType,ctx,pick]{
+        std::wstring r;
+        RemixSafe("dialogo de pasta/arquivo",[&]{
+            HRESULT hr=OleInitialize(NULL);   // STA so nesta thread (a principal e MTA)
+            RemixSafe("escolher pasta/arquivo",[&]{ r=pick(); });
+            if(SUCCEEDED(hr)) OleUninitialize();
+        });
+        g_pickerBusy=false;
+        AppPost(evType,r,ctx);
+    }).detach();
+}
+static std::wstring DlFolderInit(){ std::wstring f=g_cfg.downloadFolder; return f.empty()?std::wstring():Config::FromPortable(f); }
+void PlatformPickFolderAsync(){ HWND o=g_hwnd; std::wstring init=Config::FromPortable(g_cfg.musicFolder); RunPicker(EV_PICK_FOLDER,0,[o,init]{ return PickFolder(o,init); }); }
+void PlatformPickImageAsync(int evType,int ctx){ HWND o=g_hwnd; RunPicker(evType,ctx,[o]{ return PickImageFile(o); }); }
+void PlatformPickFolderFor(int evType,int ctx){ HWND o=g_hwnd; std::wstring init=(evType==EV_PICK_DLFOLDER||evType==EV_PICK_DLONCE)?DlFolderInit():std::wstring(); RunPicker(evType,ctx,[o,init]{ return PickFolder(o,init); }); }
+void PlatformPickAudioFilesAsync(int evType,int ctx){ HWND o=g_hwnd; RunPicker(evType,ctx,[o]{ return PickAudioFiles(o); }); }
 std::wstring PlatformClipboardText(){
     std::wstring r; if(!OpenClipboard(g_hwnd)) return r;
     HANDLE h=GetClipboardData(CF_UNICODETEXT);
@@ -78,6 +107,7 @@ static std::wstring FfmpegPath(){
     for(auto& c:cands) if(GetFileAttributesW(c.c_str())!=INVALID_FILE_ATTRIBUTES){ cached=c; return cached; }
     wchar_t buf[MAX_PATH]; LPWSTR part=nullptr;
     if(SearchPathW(NULL,L"ffmpeg.exe",NULL,MAX_PATH,buf,&part)>0) cached=buf;
+    if(cached.empty()) cached=OFindTool(L"ffmpeg");   // winget (Links ou PATH do registro) e pasta tools ao lado do exe
     return cached;
 }
 bool PlatformHaveFfmpeg(){ return !FfmpegPath().empty(); }

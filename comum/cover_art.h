@@ -300,6 +300,7 @@ inline void Work() {
         std::string img; bool got = false;
         try { got = Extract(job.first, job.second, img); } catch (...) { got = false; }
         std::wstring fileName;
+        try {
         if (got) {
             std::error_code ec;
             std::wstring dir = Dir();
@@ -321,6 +322,7 @@ inline void Work() {
                 }
             }
         }
+        } catch (...) { got = false; PlatformLog("aviso: falha ao gravar uma capa embutida"); }
         std::function<void(const std::wstring&, const std::wstring&)> cb;
         {
             std::lock_guard<std::mutex> lk(St().m);

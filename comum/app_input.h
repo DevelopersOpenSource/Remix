@@ -3,6 +3,7 @@
 // A plataforma traduz WM_* / raylib para estas funcoes e depois redesenha.
 #include "app_core.h"
 #include "app_layout.h"
+#include <stdexcept>
 
 static bool IsEqId(int id){ return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8; }
 static const int Z_TRACK_RANGE=1000000, Z_EMPTY_ACTION=802;
@@ -536,6 +537,15 @@ static void RunAction(const std::string& a){
     else if(a=="plfolder"){ OpenPlaylistFolderMenu(g_openPl); }
     else if(a.rfind("linkadd:",0)==0){ ResolveLinkAsync(Utf8ToWide(a.substr(8)),(g_view==2&&g_openPl>=0)?g_playlists[(size_t)g_openPl].slug:L""); }
     else if(a.rfind("seek:",0)==0){ if(g_player.loaded) g_player.SeekMs((DWORD)atoi(a.c_str()+5)); }
+    else if(a.rfind("crash:",0)==0){   // testes do registro de erros: --after N:crash:av|throw|thread|param
+        std::string k=a.substr(6);
+        if(k=="av"){ volatile int* p=(int*)(uintptr_t)16; *p=1; }
+        else if(k=="throw") throw std::runtime_error("teste de excecao na janela");
+        else if(k=="thread") std::thread([]{ throw std::runtime_error("teste de excecao numa thread"); }).detach();
+#ifdef _WIN32
+        else if(k=="param"){ FILE* f=_wfopen(nullptr,L"rb"); if(f) fclose(f); PlatformLog("teste: o parametro invalido foi ignorado e o app continuou"); }
+#endif
+    }
     else if(a=="dump"){
         fprintf(stderr,"[remix] view=%d openPl=%d pick=%d tracks=%d current=%d playing=%d stream=%d pos=%lu len=%lu playlists=%d online=%d\n",g_view,g_openPl,(int)g_pickMode,(int)g_tracks.size(),g_current,(int)g_player.playing,(int)g_player.IsStream(),
             (unsigned long)(g_player.loaded?g_player.GetPositionMs():0),(unsigned long)(g_player.loaded?g_player.GetLengthMs():0),(int)g_playlists.size(),(int)OU().res.size());

@@ -61,7 +61,7 @@ static void WebSearchAsync(std::wstring q){
     wb.searching=true;
     { std::lock_guard<std::mutex> lk(wb.m); ClearWebResultsPlatform(); wb.sel=-1; wb.scroll=0; wb.status=L"Buscando imagens..."; }
     PlatformRedraw();
-    std::thread([q,gen](){
+    std::thread([q,gen](){ RemixSafe("busca de capa na internet",[&]{
         WebPick& wb=WP();
         std::string html=HttpGetBytes(L"www.bing.com",WebSearchPath(q));
         if(gen!=(unsigned)wb.gen.load())return;
@@ -96,7 +96,7 @@ static void WebSearchAsync(std::wstring q){
         }
         { std::lock_guard<std::mutex> lk(wb.m); if(gen==(unsigned)wb.gen.load()){wb.status=L"Clique numa imagem e aperte USAR ESSA.";wb.searching=false;} }
         AppPost(EV_REDRAW);
-    }).detach();
+    }); }).detach();
 }
 static void WebDownloadSelectedAsync(){
     WebPick& wb=WP();
@@ -109,7 +109,7 @@ static void WebDownloadSelectedAsync(){
         wb.status=L"Baixando imagem em tamanho cheio...";
     }
     PlatformRedraw();
-    std::thread([url](){
+    std::thread([url](){ RemixSafe("baixar capa da internet",[&]{
         std::wstring host,path;SplitUrl(url,host,path);
         std::wstring ctype;std::string data=HttpGetBytes(host,path,&ctype);
         auto&W=WDS();
@@ -126,7 +126,7 @@ static void WebDownloadSelectedAsync(){
             if(WriteBytesW(f,data)){ Gdiplus::Image chk(f.c_str()); if(chk.GetLastStatus()==Gdiplus::Ok){W.ok=true;W.path=f;} }
         }
         AppPost(EV_WEB_DOWNLOAD_DONE);
-    }).detach();
+    }); }).detach();
 }
 static void ConsumeWebDownload(){
     WebPick& wb=WP();

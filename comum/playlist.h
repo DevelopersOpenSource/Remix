@@ -318,8 +318,8 @@ inline std::wstring FindCoverInFolder(const std::filesystem::path& folder) {
     // Fallback: qualquer imagem solta na pasta serve (musica nova adicionada
     // herda a capa que o usuario deixou na pasta, com qualquer nome).
     std::wstring best;
-    for (auto& e : std::filesystem::directory_iterator(folder, std::filesystem::directory_options::skip_permission_denied, ec)) {
-        if (ec) break;
+    for (std::filesystem::directory_iterator it(folder, std::filesystem::directory_options::skip_permission_denied, ec), end; !ec && it != end; it.increment(ec)) {
+        const std::filesystem::directory_entry& e = *it;   // incremento com error_code: o range-for lancava excecao
         auto ext = e.path().extension().wstring();
         for (auto& c : ext) c = towlower(c);
         if (ext == L".jpg" || ext == L".jpeg" || ext == L".png" || ext == L".bmp" || ext == L".webp") {
@@ -496,7 +496,7 @@ inline int MigrateOversizedCovers() {
     for (fs::directory_iterator it(dir, fs::directory_options::skip_permission_denied, ec), end;
          it != end; it.increment(ec)) {
         if (ec) break;
-        if (!it->is_regular_file()) continue;
+        { std::error_code e2; if (!it->is_regular_file(e2)) continue; }
         auto ext = it->path().extension().wstring();
         for (auto& c : ext) c = towlower(c);
         if (ext == L".png" || ext == L".jpg" || ext == L".jpeg") files.push_back(it->path());

@@ -12,7 +12,7 @@ Name:           remix
 Version:        %{?remix_version}%{!?remix_version:1.2.0}
 Release:        %{?remix_release}%{!?remix_release:1}%{?dist}
 Summary:        Remix Player — player de música MP3/WAV com visual neon
-License:        Proprietary AND zlib AND MIT AND Bitstream-Vera AND Apache-2.0
+License:        Apache-2.0 AND zlib AND MIT AND Bitstream-Vera
 Source0:        remix-stage.tar.gz
 BuildArch:      x86_64
 ExclusiveArch:  x86_64
@@ -21,6 +21,9 @@ Requires:       hicolor-icon-theme
 Recommends:     libcurl
 Recommends:     (zenity or kdialog)
 Recommends:     pipewire-pulseaudio
+Recommends:     yt-dlp
+Recommends:     (ffmpeg or ffmpeg-free)
+Recommends:     (deno or nodejs)
 
 %description
 Player de música para desktop com biblioteca por pasta (ou varredura
@@ -51,16 +54,16 @@ cp -a usr %{buildroot}/
 %doc %{_docdir}/%{name}/
 
 %changelog
-* Sat Sep 05 2026 sodre <103298328+NinjaZinS2@users.noreply.github.com> - 1.2.0-1
+* Sat Sep 05 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.2.0-1
 - Nucleo compartilhado Windows/Linux (mesma logica nos dois sistemas)
 - Icone de volume com mudo (clique ou M), atalhos de teclado (espaco, setas, +/-, R, Del, F2)
 - Menu PASTA no cabecalho (recentes + escolher), menu de contexto (renomear/apagar/abrir pasta)
 - Modo leve, varredura padrao so em Musica/Downloads/Documentos/Area de trabalho
 - Botoes fechar/minimizar no cabecalho (Windows)
 
-* Sat Sep 05 2026 sodre <103298328+NinjaZinS2@users.noreply.github.com> - 1.1.0-1
+* Sat Sep 05 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.1.0-1
 - Autoplay, ordem da playlist (manual salva), equalizador 8 bandas, FLAC/OGG nativos e
   m4a/aac/opus/wma via ffmpeg, engine na taxa nativa do arquivo, tamanho de janela salvo,
   correcoes: play que virava seek, rolagem ao trocar de modo
-* Fri Sep 04 2026 sodre <103298328+NinjaZinS2@users.noreply.github.com> - 1.0.0-1
+* Fri Sep 04 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.0.0-1
 - Primeira versão Linux (raylib + miniaudio), mesma interface da versão Windows

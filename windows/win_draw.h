@@ -720,7 +720,7 @@ static void DrawSettings(Graphics& g,int w,int h){
         else { std::lock_guard<std::mutex> lk(OT().m);
             tools=(OT().ytdlp.empty()&&OT().ytPython.empty())?L"yt-dlp: NÃO ENCONTRADO":L"yt-dlp "+OT().vYt;
             tools+=OT().ffmpeg.empty()?L"   ·   ffmpeg: NÃO ENCONTRADO":L"   ·   ffmpeg "+OT().vFf;
-            tools+=OT().jsName.empty()?L"   ·   node/deno: não (o YouTube pode falhar)":L"   ·   "+OT().jsName+L" "+OT().vJs;
+            tools+=OT().jsName.empty()?(OT().jsOld.empty()?std::wstring(L"   ·   Deno/Node.js: não (o YouTube pode falhar)"):L"   ·   "+OT().jsOld+L" é antigo (precisa Deno 2.3+ ou Node 22+)"):L"   ·   "+OT().jsName+L" "+OT().vJs;
             if(!OT().spotdl.empty()) tools+=L"   ·   spotdl "+OT().vSpot; }
         SolidBrush warn(Color(255,235,150,110));
         TextTrim(g,tools,RectF((REAL)R_setOnMode.left,(REAL)R_setOnMode.top-24,(REAL)(R_setOnFmt.right-R_setOnMode.left),18),11,okT||!probed?&white:&warn,false,StringTrimmingEllipsisCharacter);
@@ -731,7 +731,7 @@ static void DrawSettings(Graphics& g,int w,int h){
         btn(R_setOnFolder,L"PASTA DOS DOWNLOADS...",!g_cfg.downloadFolder.empty());
         TextTrim(g,L"Downloads em "+OnlineDownloadBaseCached()+L"   ·   streaming fica só na memória (fechar o app não deixa arquivo pela metade)",RectF((REAL)R_setOnSrc.left,(REAL)R_setOnSrc.bottom+8,(REAL)(R_setOnFolder.right-R_setOnSrc.left),16),11,&gray,false,StringTrimmingEllipsisPath);
         btn(R_setOnRecheck,L"PROCURAR DE NOVO",false);
-        TextTrim(g,okT?L"Spotify, Deezer e Apple Music: o Remix lê a lista e acha cada música no YouTube Music.":L"Coloque yt-dlp.exe e ffmpeg.exe na pasta do Remix (ou no PATH); node ou deno ajuda o YouTube.",
+        TextTrim(g,okT?L"Spotify, Deezer e Apple Music: o Remix lê a lista e acha cada música no YouTube Music.":L"Rode o INSTALAR-DEPENDENCIAS.bat (na pasta do Remix.exe): instala yt-dlp, FFmpeg e Deno pelo winget.",
             RectF((REAL)R_setOnRecheck.right+14,(REAL)R_setOnRecheck.top,(REAL)(R_setOnFolder.right-R_setOnRecheck.right-14),(REAL)(R_setOnRecheck.bottom-R_setOnRecheck.top)),11,&gray,false,StringTrimmingEllipsisCharacter,true);
     }
     g.DrawString(L"Controles do sistema: teclas de mídia e o ícone na bandeja (ao lado do relógio).",-1,sm,PointF((REAL)(R_setQuit.right+14),(REAL)(R_setQuit.top+10)),&gray);

@@ -68,8 +68,7 @@ static void OnlineDownloadResult(int i){
     g_onlineInfo[t.url]=t;
     int pl=OnlineTargetPl(); std::wstring plName;
     if(pl>=0){ std::vector<OTrack> v{t}; AddOnlineItemsToPlaylist(pl,v); plName=g_playlists[(size_t)pl].name; AfterPlaylistChange(pl); }
-    QueueDownload(t,plName,OnlineDownloadBase(),g_cfg.onlineFormat);
-    SetStatus(L"Na fila de download: "+(t.title.empty()?t.url:t.title),2500);
+    StartDownloads({t},plName);
 }
 static void OpenPickOnlineMenu(int arg,int x,int y){   // arg = resultado (ou -1 = todos)
     std::vector<std::wstring> l; std::vector<int> a;
@@ -117,7 +116,7 @@ static bool RunMenuAction(int kind,int act,int arg){
     if(kind==CTX_TRACK){
         if(arg<0||arg>=(int)g_tracks.size()) return false;
         const Track& tr=g_tracks[(size_t)arg];
-        if(act==CA_DOWNLOAD){ OTrack t=OTrackFor(tr); const Playlist* p=OpenPlaylistPtr(); QueueDownload(t,p?p->name:L"",OnlineDownloadBase(),g_cfg.onlineFormat); SetStatus(L"Na fila de download: "+tr.title,2500); return true; }
+        if(act==CA_DOWNLOAD){ const Playlist* p=OpenPlaylistPtr(); StartDownloads({OTrackFor(tr)},p?p->name:L""); return true; }
         if(act==CA_OPEN_URL){ PlatformOpenFolder(tr.url.empty()?tr.path:tr.url); return true; }
         return false;
     }

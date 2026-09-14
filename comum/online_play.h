@@ -224,7 +224,13 @@ inline std::shared_ptr<StreamJob> StartStreamJob(const OTrack& t, bool prefetch)
     auto j = std::make_shared<StreamJob>();
     j->t = t; j->st = std::make_shared<PcmStream>(); j->prefetch = prefetch;
     { std::lock_guard<std::mutex> lk(SPool().m); j->id = SPool().nextId++; SPool().jobs.push_back(j); }
-    std::thread(StreamThread, j).detach();
+    std::thread([j] {
+        bool crashed = true;
+        RemixSafe("streaming", [&] { StreamThread(j); crashed = false; });
+        if (!crashed || j->stop.load()) return;
+        if (j->ready.load()) { std::lock_guard<std::mutex> lk(j->st->m); j->st->eof = true; j->phase = 4; }   // toca o que ja chegou
+        else { j->failAt = GetTickCount64(); j->phase = 5; AppPost(EV_ONLINE_FAIL, L"O streaming falhou (erro interno; veja o log).", j->id); }
+    }).detach();
     return j;
 }
 
@@ -311,7 +317,17 @@ inline int QueueDownload(const OTrack& t, const std::wstring& plName, const std:
     j->id = DQ().nextId++; j->t = t; j->plName = plName; j->fmt = fmt;
     j->dest = plName.empty() ? destBase : Config::Join(destBase, SafeFileName(plName));
     DQ().q.push_back(j); DQ().all.push_back(j);
-    if (!DQ().worker) { DQ().worker = true; std::thread(DownloadWorker).detach(); }
+    if (!DQ().worker) {
+        DQ().worker = true;
+        std::thread([] {
+            bool crashed = true;
+            RemixSafe("fila de downloads", [&] { DownloadWorker(); crashed = false; });
+            if (!crashed) return;
+            std::lock_guard<std::mutex> lk(DQ().m);
+            for (auto& d : DQ().all) if (d->status == 1) d->status = 3;
+            DQ().worker = false;
+        }).detach();
+    }
     return j->id;
 }
 inline std::shared_ptr<DlJob> FindJob(int id) { std::lock_guard<std::mutex> lk(DQ().m); for (auto& j : DQ().all) if (j->id == id) return j; return nullptr; }
@@ -441,11 +457,13 @@ inline void OnlineSearchAsync() {
     std::thread([q, where, gen, link] {
         OnlineUI& u = OU();
         std::vector<OTrack> out; std::wstring err, name;
+        RemixSafe("busca online", [&] {
         if (link) { OResolved rr = ResolveLink(q, nullptr); out = rr.items; err = rr.err; name = rr.name; }
         else OnlineSearch(q, where, out, err, nullptr, 20, [&](const OTrack& t) {   // resultados aparecem conforme o yt-dlp acha
             std::lock_guard<std::mutex> lk(u.m);
             if (gen != u.gen.load()) return;
             u.res.push_back(t); u.status = L"Buscando... " + std::to_wstring(u.res.size()) + L" até agora";
+        });
         });
         if (gen != u.gen.load()) return;
         {
@@ -464,7 +482,7 @@ struct ResolvedStore { std::mutex m; std::map<int, OResolved> map; int next = 1;
 inline ResolvedStore& RS() { static ResolvedStore* r = new ResolvedStore(); return *r; }
 inline int ResolveLinkAsync(const std::wstring& url, const std::wstring& target) {
     int id; { std::lock_guard<std::mutex> lk(RS().m); id = RS().next++; }
-    std::thread([url, target, id] { OResolved rr = ResolveLink(url, nullptr); if (rr.name.empty()) rr.name = L"Playlist online"; { std::lock_guard<std::mutex> lk(RS().m); RS().map[id] = rr; } AppPost(EV_ONLINE_RESOLVED, OPack({ target, url }), id); }).detach();
+    std::thread([url, target, id] { OResolved rr; RemixSafe("ler link", [&] { rr = ResolveLink(url, nullptr); }); if (rr.items.empty() && rr.err.empty()) rr.err = L"Não consegui ler esse link."; if (rr.name.empty()) rr.name = L"Playlist online"; { std::lock_guard<std::mutex> lk(RS().m); RS().map[id] = rr; } AppPost(EV_ONLINE_RESOLVED, OPack({ target, url }), id); }).detach();
     return id;
 }
 inline bool TakeResolved(int id, OResolved& out) { std::lock_guard<std::mutex> lk(RS().m); auto it = RS().map.find(id); if (it == RS().map.end()) return false; out = std::move(it->second); RS().map.erase(it); return true; }

@@ -20,6 +20,7 @@
 #include "win_web.h"
 #include "win_draw.h"
 #include "resource.h"
+#include "win_diag.h"
 
 #pragma comment(lib, "winmm.lib")
 #pragma comment(lib, "shell32.lib")
@@ -190,6 +191,7 @@ static UINT KcToVk(int kc){
 void PlatformUpdateGlobalHotkeys(){
     if(!g_hwnd) return;
     for(int a=0;a<HK_COUNT;a++) UnregisterHotKey(g_hwnd,100+a);
+    if(g_safeMode) return;   // modo seguro: sem atalhos globais
     for(int a=0;a<HK_COUNT;a++){
         const Hotkey& h=g_cfg.hk[a]; if(!h.global||!h.key) continue;
         UINT vk=KcToVk(h.key); if(!vk) continue;
@@ -200,7 +202,7 @@ void PlatformUpdateGlobalHotkeys(){
 static ULONGLONG g_lastTick=0;
 static bool g_editingText(){ return g_editArtist||(WP().open&&WP().editing)||(OU().open&&OU().editing); }
 
-LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+static LRESULT WndProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
     if(g_shellHookMsg&&msg==g_shellHookMsg&&wp==HSHELL_APPCOMMAND){ if(HandleAppCommand(GET_APPCOMMAND_LPARAM(lp))){ InvalidateRect(hwnd,NULL,FALSE); return TRUE; } }
     switch(msg){
     case WM_CLOSE: RequestClose(); return 0;   // X / Alt+F4: some e segue tocando (ou sai)
@@ -234,70 +236,103 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         return 0; }
     case WM_HOTKEY:{ int a=(int)wp-100; if(a>=0&&a<HK_COUNT){ RunHotkeyAction(a); InvalidateRect(hwnd,NULL,FALSE); } return 0; }
     case WM_TIMER:{ if(wp==2){ KillTimer(hwnd,2); DestroyWindow(hwnd); return 0; }
+        if(wp==3){ KillTimer(hwnd,3); DiagStartupOk(); return 0; }
         ULONGLONG now=GetTickCount64(); float dt=(float)(now-g_lastTick)/1000.f; g_lastTick=now; if(dt>0.1f)dt=0.1f; if(dt<=0)dt=0.04f;
         { RECT rc; GetClientRect(hwnd,&rc); if(rc.right>0&&rc.bottom>0&&(rc.right!=g_winW||rc.bottom!=g_winH)){ g_winW=rc.right; g_winH=rc.bottom; BuildLayout(); } }   // layout sempre no tamanho real
         DrainEvents(); Tick(dt); RunTimedActions(now-g_t0);
         static bool lastPerf=g_cfg.perfMode; if(lastPerf!=g_cfg.perfMode){ lastPerf=g_cfg.perfMode; SetTimer(hwnd,1,lastPerf?66:40,NULL); }
-        if(g_cfg.sysMedia&&!g_trayOn) TrayAdd(hwnd,g_hInst); else if(!g_cfg.sysMedia&&g_trayOn) TrayRemove();
+        if(g_cfg.sysMedia&&!g_trayOn&&!g_safeMode) TrayAdd(hwnd,g_hInst); else if(!g_cfg.sysMedia&&g_trayOn) TrayRemove();
         InvalidateRect(hwnd,NULL,FALSE); return 0; }
     case WM_APP_EVENT: DrainEvents(); InvalidateRect(hwnd,NULL,FALSE); return 0;
     case WM_PAINT:{PAINTSTRUCT ps;HDC h=BeginPaint(hwnd,&ps);OnPaint(h);EndPaint(hwnd,&ps);return 0;}
     case WM_ERASEBKGND:return 1;
-    case WM_DESTROY: KillTimer(hwnd,1); for(int a=0;a<HK_COUNT;a++) UnregisterHotKey(hwnd,100+a); TrayRemove(); if(g_shellHookMsg) DeregisterShellHookWindow(hwnd); CoreShutdown(); if(g_singleMutex){ReleaseMutex(g_singleMutex);CloseHandle(g_singleMutex);g_singleMutex=nullptr;} PostQuitMessage(0); return 0;
+    case WM_DESTROY: KillTimer(hwnd,1); for(int a=0;a<HK_COUNT;a++) UnregisterHotKey(hwnd,100+a); TrayRemove(); if(g_shellHookMsg) DeregisterShellHookWindow(hwnd); CoreShutdown(); DiagExit(); if(g_singleMutex){ReleaseMutex(g_singleMutex);CloseHandle(g_singleMutex);g_singleMutex=nullptr;} PostQuitMessage(0); return 0;
     }
     return DefWindowProcW(hwnd,msg,wp,lp);
 }
 
+// Excecao C++ dentro do WndProc atravessaria o user32 e derrubaria o Remix: registra no log e segue.
+LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
+    try { return WndProcImpl(hwnd,msg,wp,lp); }
+    catch(const std::exception& e){ DiagException(msg,e.what()); }
+    catch(...){ DiagException(msg,"excecao desconhecida"); }
+    if(msg==WM_PAINT){ PAINTSTRUCT ps; BeginPaint(hwnd,&ps); EndPaint(hwnd,&ps); }   // valida a area: sem isso repintaria sem parar
+    return 0;
+}
+
 int WINAPI wWinMain(HINSTANCE hInst,HINSTANCE, PWSTR, int nCmdShow){
-    CoInitializeEx(NULL,COINIT_MULTITHREADED);
+    CoInitializeEx(NULL,COINIT_MULTITHREADED);   // MTA: correcao do Nero-2077 p/ o streaming (SoundCloud). Os dialogos de pasta/arquivo rodam numa thread STA propria (win_sys.h).
     int argc=0;LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);std::wstring cmd,cmdName;
-    bool noSplash=false; int exitAfter=0;
+    bool noSplash=false, forceSafe=false; int exitAfter=0;
     for(int i=1;i<argc;i++){
         std::wstring a=argv[i];
         if((_wcsicmp(a.c_str(),L"--play-file")==0||_wcsicmp(a.c_str(),L"--play")==0)&&i+1<argc){cmd=argv[++i];}
         else if(_wcsicmp(a.c_str(),L"--after")==0&&i+1<argc){ std::string v=WideToUtf8(argv[++i]); size_t c=v.find(':'); if(c!=std::string::npos) g_timed.push_back({atoi(v.substr(0,c).c_str()),v.substr(c+1)}); }
         else if(_wcsicmp(a.c_str(),L"--home")==0&&i+1<argc){ std::wstring e=std::wstring(L"REMIX_HOME=")+argv[++i]; _wputenv(e.c_str()); }   // testes: pasta de config/biblioteca
         else if(_wcsicmp(a.c_str(),L"--no-splash")==0){ noSplash=true; }
+        else if(_wcsicmp(a.c_str(),L"--seguro")==0||_wcsicmp(a.c_str(),L"--safe")==0){ forceSafe=true; }
         else if(_wcsicmp(a.c_str(),L"--exit-after")==0&&i+1<argc){ exitAfter=_wtoi(argv[++i]); }
         else if(_wcsicmp(a.c_str(),L"--cmd")==0&&i+1<argc){ cmdName=argv[++i]; }
         else if(!a.empty()&&a[0]!=L'-') cmd=a;
     }
+    bool already=false;
     {   // instancia unica por pasta do app (--home/REMIX_HOME separa testes e copias portateis)
         std::wstring mname=L"RemixPlayer.SingleInstance";
         if(const wchar_t* hm=_wgetenv(L"REMIX_HOME")){ if(*hm){ unsigned long long x=1469598103934665603ULL; for(const wchar_t* p=hm;*p;++p){ x^=(unsigned long long)*p; x*=1099511628211ULL; } wchar_t b[24]; swprintf(b,24,L".%08llx",x&0xffffffffULL); mname+=b; } }
         g_singleMutex=CreateMutexW(NULL,TRUE,mname.c_str());
+        already=GetLastError()==ERROR_ALREADY_EXISTS;   // lido na hora: o destrutor da string pode trocar o ultimo erro
     }
-    bool already=GetLastError()==ERROR_ALREADY_EXISTS;
-    if(already){ SendToExisting(cmdName.empty()?L"PLAYFILE|"+cmd:L"CMD|"+cmdName); if(argv)LocalFree(argv); CloseHandle(g_singleMutex); g_singleMutex=nullptr; CoUninitialize(); return 0; }
+    if(already){   // passa o pedido para o Remix aberto; se a janela dele nao aparece em 5 s (travou abrindo?), avisa em vez de sair calado
+        std::wstring req=cmdName.empty()?L"PLAYFILE|"+cmd:L"CMD|"+cmdName; bool sent=false;
+        for(int t=0;t<25&&!(sent=SendToExisting(req));++t) Sleep(200);
+        if(!sent) DiagOtherInstanceStuck();
+        if(argv)LocalFree(argv); CloseHandle(g_singleMutex); g_singleMutex=nullptr; CoUninitialize(); return 0; }
     if(argv)LocalFree(argv);
-    GdiplusStartupInput gi;GdiplusStartup(&g_gdiToken,&gi,NULL);
-    g_cfg.Load();
-    CleanupCacheWin(72);
-    CoreInit();
+    DiagInit(forceSafe);   // remix-log.txt, captura de erros e modo seguro
+    DiagStage("GDI+");
+    { GdiplusStartupInput gi; if(GdiplusStartup(&g_gdiToken,&gi,NULL)!=Ok) DiagLine("aviso: o GDI+ nao iniciou"); }
+    DiagStage("config"); g_cfg.Load();
+    DiagStage("limpeza do cache"); CleanupCacheWin(72);
+    DiagStage("nucleo: temas, audio, playlists"); CoreInit();
+    DiagLine("audio: %s (%u Hz, backend %s)",Player::SilentOutput()?"NENHUMA saida de som (toca em silencio)":Player::HasAudio()?"dispositivo de som aberto":"SEM dispositivo de som",Player::EngineRate(),Player::BackendName());
     g_customChrome=true;   // janela sem borda: fechar/minimizar no cabecalho
-    std::thread([]{int n=MigrateOversizedCovers();if(n>0)AppPost(EV_THUMBS_INVALIDATE,L"",n);}).detach();
-    LoadFolderAndPlaylist();PlatformWatchStart(g_cfg.musicFolder);if(g_current>=0)PlayIndex(g_current,false);
-    RestoreOpenPlaylist();
     if(!cmd.empty())g_pendingPlay=cmd;
-    if(noSplash){ g_showSplash=false; }
+    if(noSplash||g_safeMode){ g_showSplash=false; }
     else {
+        DiagStage("splash");
         std::wstring splash=Config::Join(Config::Join(Config::AssetDir(),L"branding"),L"splash.png");g_splashImg=new Image(splash.c_str());if(g_splashImg->GetLastStatus()!=Ok){delete g_splashImg;g_splashImg=nullptr;}g_splashStart=GetTickCount64();
         Player::PlayOneShot(Config::Join(Config::Join(Config::AssetDir(),L"branding"),L"open.wav"));
     }
+    DiagStage("janela");
     WNDCLASSW wc={0};wc.lpfnWndProc=WndProc;wc.hInstance=hInst;wc.lpszClassName=L"MusicPlayerRemixWnd";wc.hCursor=LoadCursor(NULL,IDC_ARROW);wc.hIcon=LoadIconW(hInst,MAKEINTRESOURCEW(IDI_APPICON));wc.style=CS_HREDRAW|CS_VREDRAW;RegisterClassW(&wc);
     DWORD style=WS_POPUP|WS_THICKFRAME|WS_MINIMIZEBOX|WS_VISIBLE;
     int startW,startH; if(g_cfg.displayMode==L"vertical"){startW=460;startH=700;ClampToWork(startW,startH);} else NormalSize(startW,startH);
     g_hwnd=CreateWindowExW(WS_EX_APPWINDOW,wc.lpszClassName,L"Remix Player",style,CW_USEDEFAULT,CW_USEDEFAULT,startW,startH,NULL,NULL,hInst,NULL);
+    if(!g_hwnd){ DiagFatal(L"Não consegui criar a janela do Remix."); GdiplusShutdown(g_gdiToken); CoUninitialize(); return 1; }
     { COLORREF c=0xFFFFFFFEu; DwmSetWindowAttribute(g_hwnd,34,&c,sizeof(c)); }   // Win11: sem borda colorida (34 = DWMWA_BORDER_COLOR, valor = DWMWA_COLOR_NONE); no Win10 so retorna erro
     SetWindowPos(g_hwnd,NULL,0,0,0,0,SWP_FRAMECHANGED|SWP_NOMOVE|SWP_NOSIZE|SWP_NOZORDER|SWP_NOACTIVATE);   // recalcula a area cliente ja sem moldura
     { RECT rc;GetClientRect(g_hwnd,&rc); g_winW=rc.right; g_winH=rc.bottom; }
-    g_hInst=hInst; if(g_cfg.sysMedia) TrayAdd(g_hwnd,hInst);
+    g_hInst=hInst;
+    BuildLayout();
+    ShowWindow(g_hwnd,nCmdShow? nCmdShow:SW_SHOW); UpdateWindow(g_hwnd);   // a janela aparece antes de ler a biblioteca (pasta grande nao deixa so o "carregando")
+    DiagStage("biblioteca");
+    if(!g_safeMode) std::thread([]{ RemixSafe("reduzir capas antigas",[]{ int n=MigrateOversizedCovers(); if(n>0) AppPost(EV_THUMBS_INVALIDATE,L"",n); }); }).detach();
+    LoadFolderAndPlaylist(); if(!g_safeMode) PlatformWatchStart(g_cfg.musicFolder); if(g_current>=0) PlayIndex(g_current,false);
+    RestoreOpenPlaylist();
+    DiagLine("biblioteca: %d faixa(s)",(int)g_tracks.size());
+    DiagStage("bandeja, atalhos e teclas de midia");
+    if(g_cfg.sysMedia&&!g_safeMode) TrayAdd(g_hwnd,hInst);
     PlatformUpdateGlobalHotkeys();
     if(!cmdName.empty()) HandleCommand(L"CMD|"+cmdName);
-    g_shellHookMsg=RegisterWindowMessageW(L"SHELLHOOK"); if(!RegisterShellHookWindow(g_hwnd)) g_shellHookMsg=0;
-    BuildLayout();if(g_cfg.musicFolder.empty())StartAutoScan();ShowWindow(g_hwnd,nCmdShow? nCmdShow:SW_SHOW);UpdateWindow(g_hwnd);
+    if(!g_safeMode){ g_shellHookMsg=RegisterWindowMessageW(L"SHELLHOOK"); if(!RegisterShellHookWindow(g_hwnd)) g_shellHookMsg=0; }
+    BuildLayout(); if(g_cfg.musicFolder.empty()) StartAutoScan();
+    InvalidateRect(g_hwnd,NULL,FALSE);
     if(exitAfter>0) SetTimer(g_hwnd,2,(UINT)exitAfter,NULL);   // testes: fecha sozinho
+    SetTimer(g_hwnd,3,8000,NULL);   // 8 s aberto sem erro: a abertura deu certo (a proxima nao entra em modo seguro)
+    if(g_safeMode) SetStatus(L"Modo seguro: o Remix fechou sozinho na última abertura (sem splash, efeitos e bandeja). Detalhes em remix-log.txt.",12000);
+    else if(Player::SilentOutput()||!Player::HasAudio()) SetStatus(L"Nenhuma saída de som encontrada: conecte um fone ou caixa de som e abra o Remix de novo.",10000);
     if(!g_pendingPlay.empty())HandleCommand(L"PLAYFILE|"+g_pendingPlay);
+    DiagStage("aberto");
     MSG msg;while(GetMessageW(&msg,NULL,0,0)){TranslateMessage(&msg);DispatchMessageW(&msg);}
     if(g_coverImg)delete g_coverImg;if(g_splashImg)delete g_splashImg;PlatformClearThumbs();delete g_lastFrame;g_lastFrame=nullptr;
     GdiplusShutdown(g_gdiToken);CoUninitialize();return 0;

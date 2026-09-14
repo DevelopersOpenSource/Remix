@@ -4,6 +4,7 @@ REMIX PLAYER
 SO QUER USAR?   baixe em https://github.com/EchoGroupStudio/Remix/releases
                 Windows: zip portatil (extraia e abra o Remix.exe)
                 Linux: AppImage (qualquer distro), .deb, .rpm ou zip portatil
+                Musica online: rode INSTALAR-DEPENDENCIAS.bat (Windows) ou instalar-dependencias.sh (Linux)
 
   windows\      versao Windows: codigo, COMPILAR.bat (clique 2x) e RODAR.bat
   linux/        versao Linux: codigo, RODAR.sh, scripts de build e de pacotes (.deb/.rpm/AppImage)

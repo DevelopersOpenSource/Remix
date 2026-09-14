@@ -72,6 +72,7 @@ static bool g_showSettings = false;
 static bool g_showSplash = true;
 // Segundo plano: janela escondida com a musica tocando (fechar com bgOnClose).
 static bool g_hiddenToBg=false, g_bgAutoQuit=false, g_userPaused=false; static float g_bgIdleSec=0;
+static bool g_safeMode=false;   // Windows: a abertura anterior nao terminou -> sem splash, efeitos, bandeja e atalhos globais
 // ---- busca, vistas (biblioteca / playlists) e atalhos ----
 static bool g_searchFocus=false; static std::wstring g_searchBuf; static std::vector<int> g_visible;   // faixas visiveis (filtro da busca)
 static int g_view=0;                       // 0 = faixas da biblioteca, 1 = cards de playlists, 2 = faixas de uma playlist
@@ -108,7 +109,8 @@ enum : int {
     EV_NEXT_TRACK = 1, EV_REDRAW, EV_WEB_DOWNLOAD_DONE, EV_THUMBS_INVALIDATE, EV_COMMAND,
     EV_PICK_FOLDER, EV_PICK_IMAGE, EV_PICK_WALL, EV_TRANSCODED,
     EV_ART_READY, EV_ONLINE_META, EV_ONLINE_READY, EV_ONLINE_FAIL, EV_ONLINE_THUMB, EV_ONLINE_SEARCH, EV_ONLINE_RESOLVED, EV_ONLINE_JOB,
-    EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY
+    EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY,
+    EV_PICK_DLONCE   // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
 };
 #include "online_play.h"
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
@@ -257,7 +259,7 @@ static bool PtIn(const RECT& r, int x, int y){ return x>=r.left && x<=r.right &&
 static float S(float v){ return v * g_cfg.uiScale / 100.0f; }
 static int SI(int v){ return (int)std::lround(S((float)v)); }
 static float TextScale(int base, int pct){ return S((float)base) * pct / 100.0f; }
-static bool FxOn(){ return !g_cfg.perfMode; }     // efeitos pesados (particulas, glitch, corredor, blur)
+static bool FxOn(){ return !g_cfg.perfMode&&!g_safeMode; }     // efeitos pesados (particulas, glitch, corredor, blur)
 static void SetStatus(const std::wstring& s, int ms=2600){ g_status=s; g_statusUntil=GetTickCount64()+ms; }
 static bool StatusVisible(){ return !g_status.empty() && GetTickCount64() < g_statusUntil; }
 
@@ -636,7 +638,7 @@ static void PlayIndex(int idx,bool autoplay=true){
         }
         g_converting=true; g_pendingAutoplay=autoplay;
         std::thread([path,gen](){
-            std::wstring dst=PlatformTranscodeToWav(path);
+            std::wstring dst; RemixSafe("conversao com ffmpeg",[&]{ dst=PlatformTranscodeToWav(path); });
             AppPost(EV_TRANSCODED,dst,(int)gen);
         }).detach();
         return;
@@ -1086,6 +1088,11 @@ static void HandleEvent(int type,const std::wstring& s,int n){
     case EV_PICK_PL_ADDFOLDER: OnPickedAddFolder(s); break;
     case EV_PICK_NEWPL_FOLDER: OnPickedNewPlaylistFolder(s); break;
     case EV_PICK_DLFOLDER: if(!s.empty()){ g_cfg.downloadFolder=s; g_cfg.Save(); SetStatus(L"Downloads vão para: "+s,3000); } break;
+    case EV_PICK_DLONCE:
+        if(!s.empty()){ g_cfg.downloadFolder=s; g_cfg.Save(); QueueDownloadsInto(g_pendingDl.items,g_pendingDl.plName,s); }
+        else SetStatus(L"Download cancelado.",2000);
+        g_pendingDl=PendingDownloads{};
+        break;
     case EV_ONLINE_SEARCH: {   // miniaturas dos resultados em segundo plano
         std::vector<std::pair<std::wstring,std::wstring>> v;
         { std::lock_guard<std::mutex> lk(OU().m); for(auto& t:OU().res) if(!t.thumb.empty()) v.push_back({t.url,t.thumb}); }

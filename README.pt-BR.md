@@ -5,6 +5,16 @@ miniaudio nos dois sistemas.
 
 English version: [README.md](README.md). Programa pronto para baixar: [Releases](https://github.com/EchoGroupStudio/Remix/releases).
 
+## Créditos
+
+<p align="center">
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: coautor, ideia original e versão Windows" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): autor, streaming online e versão Linux" width="48%"></a>
+</p>
+
+A ideia do Remix e a versão Windows vieram do **[Nero-2077](https://github.com/Nero-2077)**; o streaming online e a
+versão Linux, do **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
+
 ## Pastas
 
 | Pasta | O que tem |
@@ -33,9 +43,11 @@ Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na 
 - Volume com icone de alto-falante (clique = mudo) e porcentagem ao lado.
 - Clique direito numa musica: tocar, trocar capa, renomear artista, **renomear o arquivo no
   disco**, abrir a pasta, **excluir (lixeira)** com confirmacao.
-- Atalhos: espaco (play/pause), ←/→ (anterior/proximo), ↑/↓ ou +/- (volume), M (mudo),
-  R (repetir), Del (excluir), F2 (renomear arquivo), Esc (fecha menus). A lista completa
-  aparece em Configuracoes > ATALHOS.
+- Atalhos, com duas teclas para não disparar sem querer: Ctrl+Espaço (tocar/pausar), Ctrl+←/→
+  (anterior/próxima), Ctrl+↑/↓ (volume), Ctrl+M (mudo), Ctrl+S (aleatório), Ctrl+R (repetir),
+  Ctrl+0 (reiniciar a faixa), Ctrl+Del (excluir), Alt+↑/↓ (mover na ordem manual), Ctrl+F (buscar),
+  F2 (renomear arquivo), Esc (fecha menus). Todos mudam em Configuracoes > ATALHOS; quem nunca
+  mexeu nos atalhos recebe esse padrão novo sozinho.
 - **MODO LEVE** em Configuracoes > EFEITOS: menos particulas/LED e 30 fps para PCs fracos.
 - **Busca** (caixa acima da lista ou Ctrl+F): filtra por nome/artista/arquivo; Enter toca a primeira.
 - **Playlists** (aba PLAYLISTS acima da lista): cada playlist e uma pasta em `playlists/`
@@ -139,10 +151,30 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
   pela metade (sem mexer nos de outro Remix aberto) e lembra a ultima musica online: ela aparece
   selecionada e o streaming recomeca do inicio ao apertar play.
 
-Precisa de **yt-dlp** e **ffmpeg** (e de preferencia **node** ou **deno**, que o YouTube passou a
-exigir). Linux: `sudo dnf install yt-dlp ffmpeg nodejs` (ou apt/pacman; `pip install -U yt-dlp`).
-Windows: `yt-dlp.exe` e `ffmpeg.exe` na pasta do Remix (ou no PATH). Configuracoes > ONLINE mostra o
-que foi encontrado. Mantenha o yt-dlp atualizado: o YouTube muda com frequencia.
+Precisa de **yt-dlp**, **ffmpeg** e de um "JavaScript runtime" que o YouTube passou a exigir (**Deno 2.3+**
+ou **Node.js 22+**). As versoes portateis trazem um instalador:
+
+- **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat` (na pasta do Remix). Ele mostra se e Windows 10 ou 11 e
+  instala yt-dlp, FFmpeg e Deno pelo **winget** (instalador oficial da Microsoft), so para o seu usuario e sem pedir
+  administrador. Sem winget (Windows 10 antigo, LTSC, PC de empresa) ele pode baixar os arquivos oficiais direto para
+  a pasta `tools` ao lado do `Remix.exe` com o `curl` e o `tar` que ja vem no Windows 10 1803+ e no 11, abrir a
+  Microsoft Store no "Instalador de Aplicativo" ou as paginas oficiais.
+- **Linux:** `bash instalar-dependencias.sh` (na pasta portatil). Reconhece a distro e usa o gerenciador dela (apt no
+  Debian/Ubuntu/Mint, dnf no Fedora/Nobara/RHEL, pacman no Arch/Manjaro/CachyOS, zypper no openSUSE, xbps no Void,
+  eopkg no Solus). Quando o yt-dlp ou o JavaScript runtime da distro sao antigos, em sistema imutavel (Bazzite,
+  Silverblue, SteamOS) ou sem sudo, baixa as versoes oficiais do yt-dlp, do Deno e do ffmpeg para `~/.local/bin` e
+  `~/.deno/bin`. No NixOS mostra o comando do `nix`; `--mostrar` so mostra o que faria.
+
+Depois e so abrir o Remix: ele acha os programas sozinho, sem reiniciar. Configuracoes > ONLINE mostra o que foi
+encontrado. Rode o instalador de novo de vez em quando: o YouTube muda e o yt-dlp precisa estar em dia.
+
+### Se o Remix fechar sozinho (Windows)
+
+O Remix grava o `remix-log.txt` ao lado do `Remix.exe` (ou em `%LOCALAPPDATA%\Remix`) com cada etapa da abertura,
+a versao do Windows, o dispositivo de som e o erro, e mostra um aviso em vez de sumir. A abertura seguinte entra em
+**modo seguro** (sem som de abertura, efeitos, bandeja e atalhos globais; para forcar: `Remix.exe --seguro`). Mande
+esse arquivo. Confira tambem se a pasta inteira foi extraida (nao abra o `Remix.exe` de dentro do `.zip`) e se o
+antivirus nao colocou o exe em quarentena.
 
 ## Capas dos proprios arquivos
 

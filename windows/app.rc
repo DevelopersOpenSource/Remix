@@ -20,11 +20,12 @@ BEGIN
     BEGIN
         BLOCK "041604b0"
         BEGIN
-            VALUE "CompanyName",      "Remix Player"
+            VALUE "CompanyName",      "EchoGroupStudio"
             VALUE "FileDescription",  "Remix Player - player de musica"
             VALUE "FileVersion",      "1.2.0.0"
             VALUE "InternalName",     "Remix"
-            VALUE "LegalCopyright",   "Remix Player (c) 2026"
+            VALUE "LegalCopyright",   "Copyright (c) 2026 Sodre / EchoGroupStudio. Apache License 2.0"
+            VALUE "Comments",         "Codigo aberto: https://github.com/EchoGroupStudio/Remix"
             VALUE "OriginalFilename", "Remix.exe"
             VALUE "ProductName",      "Remix Player"
             VALUE "ProductVersion",   "1.2.0"

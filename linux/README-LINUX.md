@@ -20,8 +20,11 @@ real e espectro por frequência, monitor da pasta em tempo real, instância
   de carregando, links do Spotify (página pública, sem chave), Deezer, Apple Music, YouTube
   e SoundCloud, **streaming só na memória** ou **download**, diário com limpeza automática
   ao abrir. Detalhes no [README principal](../README.pt-BR.md#musica-online-streaming-e-download).
-  Precisa de `yt-dlp`, `ffmpeg` e, de preferência, `nodejs`:
-  `sudo dnf install yt-dlp ffmpeg nodejs`.
+  Precisa de `yt-dlp`, `ffmpeg` e Deno 2.3+ (ou Node.js 22+): no zip portátil, rode
+  `bash instalar-dependencias.sh`. Ele reconhece a distro (Debian/Ubuntu/Mint, Fedora/Nobara/RHEL,
+  Arch/Manjaro/CachyOS, openSUSE, Void, Solus) e usa o gerenciador dela; baixa as versões oficiais
+  do yt-dlp, do Deno e do ffmpeg para a pasta pessoal quando a distro só tem versão antiga, é
+  imutável (Bazzite, Silverblue, SteamOS) ou não há sudo. No NixOS mostra o comando do nix.
 - **Fila de streaming**: a música atual e as próximas 2 carregam ao mesmo tempo, cada uma no
   seu canal (yt-dlp + ffmpeg + buffer na memória). Pular ou acabar a música toca a próxima na
   hora; na lista aparece TOCANDO / FILA: PRONTA / FILA: CARREGANDO.
@@ -36,11 +39,12 @@ real e espectro por frequência, monitor da pasta em tempo real, instância
 - **Windows e Linux agora rodam a mesma lógica** (`app_core.h`, `app_layout.h`,
   `app_input.h`): tudo abaixo vale para os dois. O Windows também passou a usar
   miniaudio (FLAC/OGG nativos, EQ, `ffmpeg.exe` opcional ao lado do exe).
-- **Volume** com ícone de alto-falante: clique (ou tecla M) muta/desmuta,
+- **Volume** com ícone de alto-falante: clique (ou Ctrl+M) muta/desmuta,
   porcentagem ao lado, cor segue o tema.
-- **Atalhos**: espaço (play/pause), ←/→ (anterior/próximo), ↑/↓ ou +/-
-  (volume), M (mudo), R (repetir), Del (excluir), F2 (renomear arquivo), Esc.
-  Lista em Configurações > ATALHOS.
+- **Atalhos** com duas teclas (não disparam sem querer): Ctrl+Espaço (play/pause),
+  Ctrl+←/→ (anterior/próxima), Ctrl+↑/↓ (volume), Ctrl+M (mudo), Ctrl+S (aleatório),
+  Ctrl+R (repetir), Ctrl+0 (reiniciar), Ctrl+Del (excluir), Alt+↑/↓ (mover), F2, Esc.
+  Lista e troca em Configurações > ATALHOS.
 - **PASTA** no cabeçalho: troca a biblioteca sem abrir as configurações
   (pastas recentes, escolher outra, voltar ao padrão).
 - **Clique direito** numa música: tocar, trocar capa, renomear artista,

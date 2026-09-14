@@ -53,7 +53,7 @@ struct OnlineTools {
     std::mutex m;
     std::atomic<bool> probed{ false }, probing{ false };
     std::wstring ytdlp, ytPython, spotdl, ffmpeg, jsName, jsPath;
-    std::wstring vYt, vSpot, vFf, vJs;
+    std::wstring vYt, vSpot, vFf, vJs, jsOld;   // jsOld: runtime JavaScript achado, mas antigo demais para o yt-dlp
 };
 inline OnlineTools& OT() { static OnlineTools* t = new OnlineTools(); return *t; }
 inline std::vector<std::wstring> OToolDirs() {
@@ -69,6 +69,22 @@ inline std::vector<std::wstring> OToolDirs() {
     if (!la.empty()) d.push_back(la + L"\\Microsoft\\WinGet\\Links");
     if (!up.empty()) { d.push_back(up + L"\\.deno\\bin"); d.push_back(up + L"\\scoop\\shims"); }
     if (!pd.empty()) d.push_back(pd + L"\\chocolatey\\bin");
+    // PATH gravado no registro: sem o modo desenvolvedor o winget poe a pasta do programa
+    // ali, e o Remix aberto pelo Explorer logo depois ainda nao recebeu esse PATH novo
+    auto regPath = [&](HKEY root, const wchar_t* key) {
+        const DWORD fl = RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND;
+        DWORD sz = 0;
+        if (RegGetValueW(root, key, L"Path", fl, NULL, NULL, &sz) != ERROR_SUCCESS || sz < 4) return;
+        std::vector<wchar_t> raw(sz / sizeof(wchar_t) + 2, 0);
+        if (RegGetValueW(root, key, L"Path", fl, NULL, raw.data(), &sz) != ERROR_SUCCESS) return;
+        std::vector<wchar_t> ex(32768, 0);
+        DWORD n = ExpandEnvironmentStringsW(raw.data(), ex.data(), (DWORD)ex.size());
+        split((n && n <= ex.size()) ? std::wstring(ex.data()) : std::wstring(raw.data()), L';');
+    };
+    regPath(HKEY_CURRENT_USER, L"Environment");
+    regPath(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
+    std::wstring pf = env(L"ProgramFiles");
+    if (!pf.empty()) d.push_back(pf + L"\\nodejs");
 #else
     const char* p = std::getenv("PATH"); if (p) split(Utf8ToWide(p), L':');
     const char* h = std::getenv("HOME");
@@ -93,10 +109,8 @@ inline std::wstring OFindTool(const std::wstring& name) {
     }
     return L"";
 }
-inline void ProbeOnlineTools() {
-    if (OT().probing.exchange(true)) { while (OT().probing.load()) std::this_thread::sleep_for(std::chrono::milliseconds(50)); return; }
+inline void ProbeOnlineToolsImpl() {
     std::wstring yt = OFindTool(L"yt-dlp"), sp = OFindTool(L"spotdl"), ff = OFindTool(L"ffmpeg"), js, jsn, py;
-    for (const wchar_t* n : { L"deno", L"node", L"bun" }) { std::wstring p = OFindTool(n); if (!p.empty()) { js = p; jsn = n; break; } }
 #ifndef _WIN32
     if (yt.empty() && !sp.empty()) {   // sem yt-dlp solto: usa o que veio junto com o spotdl (python -m yt_dlp)
         std::ifstream f{ std::filesystem::path(sp) }; std::string first; std::getline(f, first);
@@ -118,12 +132,27 @@ inline void ProbeOnlineTools() {
     std::wstring vSp = !sp.empty() ? ver({ sp, L"--version" }) : L"";
     std::wstring vFf = !ff.empty() ? ver({ ff, L"-version" }) : L"";
     { size_t k = vFf.find(L"version "); if (k != std::wstring::npos) { vFf = vFf.substr(k + 8); size_t e = vFf.find(L' '); if (e != std::wstring::npos) vFf = vFf.substr(0, e); } }
-    std::wstring vJs = !js.empty() ? ver({ js, L"--version" }) : L"";
+    std::wstring vJs, jsOld;   // o yt-dlp exige Deno >= 2.3, Node.js >= 22 ou Bun >= 1.2.11: mais antigo nao serve
+    for (const wchar_t* n : { L"deno", L"node", L"bun" }) {
+        std::wstring p = OFindTool(n); if (p.empty()) continue;
+        std::wstring v = ver({ p, L"--version" });
+        int a = 0, b = 0, c = 0;
+        { std::string s = WideToUtf8(v); size_t k = s.find_first_of("0123456789"); if (k != std::string::npos) sscanf(s.c_str() + k, "%d.%d.%d", &a, &b, &c); }
+        wchar_t vb[48]; swprintf(vb, 48, L"%d.%d.%d", a, b, c);
+        std::wstring nn(n);
+        bool okv = nn == L"deno" ? (a > 2 || (a == 2 && b >= 3)) : nn == L"node" ? a >= 22 : (a > 1 || (a == 1 && (b > 2 || (b == 2 && c >= 11))));
+        if (okv) { js = p; jsn = nn; vJs = vb; break; }
+        if (jsOld.empty()) jsOld = nn + L" " + vb;
+    }
     {
         std::lock_guard<std::mutex> lk(OT().m);
         OT().ytdlp = yt; OT().ytPython = py; OT().spotdl = sp; OT().ffmpeg = ff; OT().jsName = jsn; OT().jsPath = js;
-        OT().vYt = vYt; OT().vSpot = vSp; OT().vFf = vFf; OT().vJs = vJs;
+        OT().vYt = vYt; OT().vSpot = vSp; OT().vFf = vFf; OT().vJs = vJs; OT().jsOld = jsOld;
     }
+}
+inline void ProbeOnlineTools() {   // nunca deixa "probing" preso: quem espera ficaria parado para sempre
+    if (OT().probing.exchange(true)) { while (OT().probing.load()) std::this_thread::sleep_for(std::chrono::milliseconds(50)); return; }
+    RemixSafe("procurar yt-dlp/ffmpeg/deno", [] { ProbeOnlineToolsImpl(); });
     OT().probed = true;
     OT().probing = false;
 }

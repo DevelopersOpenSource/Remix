@@ -152,7 +152,21 @@ struct Config {
     std::wstring onlineFormat = L"mp3";    // downloads: mp3 | m4a | original
     int onlineSource = 1;                  // busca online: 0 YouTube Music, 1 YouTube, 2 SoundCloud
     std::wstring downloadFolder;           // vazio = <pasta Musicas>/Remix Online
+    bool askDlFolder = true;               // perguntar a pasta a cada download (comeca na ultima escolhida)
     void ResetHotkeys() { for (int i = 0; i < HK_COUNT; ++i) hk[i] = HkDefault(i); }
+    // O padrao dos atalhos virou combinacoes de duas teclas: quem estava no padrao antigo recebe o
+    // novo; os que a pessoa trocou ficam como estao. Um atalho novo que ja esteja em uso fica vazio.
+    void MigrateHotkeys() {
+        bool mig[HK_COUNT] = {};
+        for (int i = 0; i < HK_COUNT; ++i) { Hotkey o = HkDefaultAntigo(i); mig[i] = hk[i].key == o.key && hk[i].mods == o.mods; }
+        for (int i = 0; i < HK_COUNT; ++i) if (mig[i]) { hk[i].key = 0; hk[i].mods = 0; }
+        for (int i = 0; i < HK_COUNT; ++i) {
+            if (!mig[i]) continue;
+            Hotkey d = HkDefault(i); bool usado = false;
+            for (int j = 0; j < HK_COUNT && d.key; ++j) if (j != i && hk[j].key == d.key && hk[j].mods == d.mods) usado = true;
+            if (!usado) { hk[i].key = d.key; hk[i].mods = d.mods; }
+        }
+    }
     Config() { ResetHotkeys(); }
     // Pastas de musica usadas recentemente (menu PASTA), mais recente primeiro.
     std::vector<std::wstring> recentFolders;
@@ -372,6 +386,7 @@ struct Config {
         ResetHotkeys();
         std::vector<std::wstring> ls;
         if (!ReadAllUtf8Lines(ConfigPath(), ls)) { Save(); return; }
+        bool hkNovo = false;   // HotkeysVersion=2: atalhos ja no padrao de duas teclas
         for (auto raw : ls) {
             std::wstring line = Trim(raw);
             if (line.empty() || line[0] == L'[' || line[0] == L';') continue;
@@ -431,6 +446,8 @@ struct Config {
             else if (k == L"OnlineFormat") onlineFormat = (v == L"m4a" || v == L"original") ? v : L"mp3";
             else if (k == L"OnlineSource") onlineSource = std::max(0, std::min(2, _wtoi(v.c_str())));
             else if (k == L"DownloadFolder") downloadFolder = v.empty() ? L"" : FromPortable(v);
+            else if (k == L"AskDownloadFolder") askDlFolder = (v != L"0");
+            else if (k == L"HotkeysVersion") hkNovo = _wtoi(v.c_str()) >= 2;
             else if (k.rfind(L"Hk.", 0) == 0) { int a = HkIndexById(k.substr(3)); if (a >= 0) ParseHotkey(v, hk[a]); }
             else if (k == L"RecentFolders") {
                 recentFolders.clear();
@@ -444,6 +461,7 @@ struct Config {
                 }
             }
         }
+        if (!hkNovo) MigrateHotkeys();
         // Migracao do formato antigo: "square"/"cd"/"vertical" viviam num campo so.
         if (displayMode == L"square") { displayMode = L"normal"; artShape = L"square"; }
         else if (displayMode == L"cd") { displayMode = L"normal"; artShape = L"cd"; }
@@ -525,7 +543,9 @@ struct Config {
         ls.push_back(L"OnlineFormat=" + onlineFormat);
         swprintf(b, 64, L"OnlineSource=%d", onlineSource); ls.push_back(b);
         ls.push_back(L"DownloadFolder=" + (downloadFolder.empty() ? std::wstring() : ToPortable(downloadFolder)));
+        ls.push_back(std::wstring(L"AskDownloadFolder=") + (askDlFolder ? L"1" : L"0"));
         ls.push_back(L"[Atalhos]");
+        ls.push_back(L"HotkeysVersion=2");
         for (int i = 0; i < HK_COUNT; ++i) ls.push_back(std::wstring(L"Hk.") + HkId(i) + L"=" + HotkeyToString(hk[i]));
         {
             std::wstring r = L"RecentFolders=";

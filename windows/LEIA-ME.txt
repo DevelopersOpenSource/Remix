@@ -59,8 +59,15 @@ Formatos extras (m4a/aac/opus/wma): coloque um ffmpeg.exe ao lado do Remix.exe.
 MUSICA ONLINE (aba ONLINE, ou "+ ADICIONAR" dentro de uma playlist)
   Busca no YouTube Music, YouTube e SoundCloud; links do Spotify, Deezer, Apple Music,
   YouTube e SoundCloud; streaming so na memoria (nao grava nada) ou download.
-  Precisa de dois programas gratuitos na pasta do Remix.exe (ou no PATH):
-    yt-dlp.exe   https://github.com/yt-dlp/yt-dlp/releases/latest
-    ffmpeg.exe   https://www.gyan.dev/ffmpeg/builds/   (ou: winget install Gyan.FFmpeg)
-  Recomendado: Node.js (winget install OpenJS.NodeJS) - o YouTube exige um "JavaScript runtime".
+  Precisa de yt-dlp, FFmpeg e Deno (o YouTube exige um "JavaScript runtime").
+  Clique 2x em INSTALAR-DEPENDENCIAS.bat (vai junto no zip portatil): no Windows 11 e no 10
+  atualizado instala os tres pelo winget, so para o seu usuario e sem administrador; sem winget
+  baixa os arquivos oficiais para a pasta tools\ com o curl e o tar do proprio Windows (10 1803+).
+  Depois e so abrir o Remix (ele acha sozinho).
   Configuracoes > ONLINE mostra o que foi encontrado e para onde vao os downloads.
+
+SE O REMIX FECHAR SOZINHO
+  Ele grava o remix-log.txt ao lado do Remix.exe (ou em %LOCALAPPDATA%\Remix) e mostra o motivo; a
+  abertura seguinte entra em modo seguro. Mande o log. Para forcar o modo seguro: Remix.exe --seguro
+  Traduzir os enderecos do log ("Remix.exe+0x..." e "pilha") para funcao e linha do codigo, no Linux:
+    bash linux/traduzir-log-windows.sh remix-log.txt   (acha os simbolos do build certo em build/win/simbolos)

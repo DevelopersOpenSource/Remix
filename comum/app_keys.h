@@ -69,7 +69,26 @@ static bool ParseHotkey(std::wstring s,Hotkey& out){
 static const wchar_t* HkId(int a){ static const wchar_t* ids[HK_COUNT]={L"playpause",L"next",L"prev",L"volup",L"voldown",L"mute",L"restart",L"shuffle",L"repeat",L"search",L"delete",L"rename",L"moveup",L"movedown",L"close",L"quit",L"showhide"}; return (a>=0&&a<HK_COUNT)?ids[a]:L""; }
 static const wchar_t* HkLabel(int a){ static const wchar_t* l[HK_COUNT]={L"Tocar / pausar",L"Próxima faixa",L"Faixa anterior",L"Volume +",L"Volume -",L"Mudo",L"Reiniciar a faixa",L"Aleatório (liga/desliga)",L"Repetir (liga/desliga)",L"Buscar faixa",L"Excluir (lixeira)",L"Renomear arquivo",L"Mover p/ cima (ordem manual)",L"Mover p/ baixo (ordem manual)",L"Fechar painéis / cancelar",L"Sair do Remix",L"Mostrar / esconder janela"}; return (a>=0&&a<HK_COUNT)?l[a]:L""; }
 static int HkIndexById(const std::wstring& id){ for(int a=0;a<HK_COUNT;a++) if(KeyStrEqI(HkId(a),id.c_str())) return a; return -1; }
+// Padrao: combinacoes de duas teclas (como no Spotify). Teclas soltas como Espaco, S e as setas
+// disparavam sem querer. Ficam soltas so F2 (renomear) e Esc (fechar), que ninguem aperta a toa.
 static Hotkey HkDefault(int a){
+    Hotkey h;
+    switch(a){
+    case HK_PLAYPAUSE: h.key=KC_SPACE; h.mods=KM_CTRL; break;
+    case HK_NEXT: h.key=KC_RIGHT; h.mods=KM_CTRL; break; case HK_PREV: h.key=KC_LEFT; h.mods=KM_CTRL; break;
+    case HK_VOLUP: h.key=KC_UP; h.mods=KM_CTRL; break; case HK_VOLDOWN: h.key=KC_DOWN; h.mods=KM_CTRL; break;
+    case HK_MUTE: h.key='M'; h.mods=KM_CTRL; break; case HK_RESTART: h.key='0'; h.mods=KM_CTRL; break;
+    case HK_SHUFFLE: h.key='S'; h.mods=KM_CTRL; break; case HK_REPEAT: h.key='R'; h.mods=KM_CTRL; break;
+    case HK_SEARCH: h.key='F'; h.mods=KM_CTRL; break;
+    case HK_DELETE: h.key=KC_DELETE; h.mods=KM_CTRL; break; case HK_RENAME: h.key=KC_F2; break;
+    case HK_MOVEUP: h.key=KC_UP; h.mods=KM_ALT; break; case HK_MOVEDOWN: h.key=KC_DOWN; h.mods=KM_ALT; break;
+    case HK_CLOSE: h.key=KC_ESC; break; case HK_QUIT: h.key='Q'; h.mods=KM_CTRL; break; case HK_SHOWHIDE: h.key=0; break;
+    default: break;
+    }
+    return h;
+}
+// Padrao antigo (teclas soltas, ate a 1.2.0 publicada): so para migrar quem nunca mexeu nos atalhos.
+static Hotkey HkDefaultAntigo(int a){
     Hotkey h;
     switch(a){
     case HK_PLAYPAUSE: h.key=KC_SPACE; break; case HK_NEXT: h.key=KC_RIGHT; break; case HK_PREV: h.key=KC_LEFT; break;

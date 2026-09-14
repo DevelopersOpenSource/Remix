@@ -94,7 +94,7 @@ static void DrawSettings(int w,int h){
         else { std::lock_guard<std::mutex> lk(OT().m);
             tools=(OT().ytdlp.empty()&&OT().ytPython.empty())?L"yt-dlp: NÃO ENCONTRADO":L"yt-dlp "+OT().vYt;
             tools+=OT().ffmpeg.empty()?L"   ·   ffmpeg: NÃO ENCONTRADO":L"   ·   ffmpeg "+OT().vFf;
-            tools+=OT().jsName.empty()?L"   ·   node/deno: não (o YouTube pode falhar)":L"   ·   "+OT().jsName+L" "+OT().vJs;
+            tools+=OT().jsName.empty()?(OT().jsOld.empty()?std::wstring(L"   ·   Deno/Node.js: não (o YouTube pode falhar)"):L"   ·   "+OT().jsOld+L" é antigo (precisa Deno 2.3+ ou Node 22+)"):L"   ·   "+OT().jsName+L" "+OT().vJs;
             if(!OT().spotdl.empty()) tools+=L"   ·   spotdl "+OT().vSpot; }
         gfx::TextRect(tools,RectF((float)R_setOnMode.left,(float)R_setOnMode.top-24,(float)(R_setOnFmt.right-R_setOnMode.left),18),sm,okT||!probed?white:Argb(255,235,150,110),false,gfx::Near,false,gfx::EllipsisChar);
         btn(R_setOnMode,g_cfg.onlineMode==L"download"?L"AO TOCAR: BAIXAR":L"AO TOCAR: STREAMING",g_cfg.onlineMode==L"download");
@@ -104,7 +104,7 @@ static void DrawSettings(int w,int h){
         btn(R_setOnFolder,L"PASTA DOS DOWNLOADS...",!g_cfg.downloadFolder.empty());
         gfx::TextRect(L"Downloads em "+OnlineDownloadBaseCached()+L"   ·   streaming fica só na memória (fechar o app não deixa arquivo pela metade)",RectF((float)R_setOnSrc.left,(float)R_setOnSrc.bottom+8,(float)(R_setOnFolder.right-R_setOnSrc.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisPath);
         btn(R_setOnRecheck,L"PROCURAR DE NOVO",false);
-        gfx::TextRect(okT?L"Spotify, Deezer e Apple Music: o Remix lê a lista e acha cada música no YouTube Music.":L"Instale: sudo dnf install yt-dlp ffmpeg nodejs  (ou apt/pacman; ou pip install yt-dlp)",
+        gfx::TextRect(okT?L"Spotify, Deezer e Apple Music: o Remix lê a lista e acha cada música no YouTube Music.":L"Rode: bash instalar-dependencias.sh (zip portátil) - instala yt-dlp, ffmpeg, Deno e zenity pela sua distro",
             RectF((float)R_setOnRecheck.right+14,(float)R_setOnRecheck.top,(float)(R_setOnFolder.right-R_setOnRecheck.right-14),(float)(R_setOnRecheck.bottom-R_setOnRecheck.top)),sm,gray,false,gfx::Near,true,gfx::EllipsisChar);
     }
     gfx::Text(L"Controles do sistema: teclas de mídia e o applet de mídia do desktop (MPRIS).",(float)(R_setQuit.right+14),(float)(R_setQuit.top+10),sm,gray);

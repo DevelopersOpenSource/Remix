@@ -22,6 +22,11 @@
 /Musica/*
 !/Musica/LEIA-ME.txt
 
+# Diagnostico do Windows e ferramentas instaladas a mao (criados ao lado do app)
+/remix-log*.txt
+/remix-abrindo.tmp
+/tools/
+
 # Biblioteca de teste local (musicas com direitos autorais)
 /test/
 

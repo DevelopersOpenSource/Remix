@@ -10,7 +10,7 @@ static void OnStreamReady(int id,int durSec);
 // procura yt-dlp/ffmpeg/node em segundo plano (so quando o usuario chega perto do online)
 static void EnsureToolsAsync(){
     if(OT().probed.load()||OT().probing.load()) return;
-    std::thread([]{ ProbeOnlineTools(); AppPost(EV_TOOLS_READY); }).detach();
+    std::thread([]{ RemixSafe("procurar yt-dlp/ffmpeg",[]{ ProbeOnlineTools(); }); AppPost(EV_TOOLS_READY); }).detach();
 }
 // pasta dos downloads: a das configuracoes ou <pasta Musicas>/Remix Online
 static std::wstring OnlineDownloadBase(){
@@ -24,6 +24,22 @@ static std::wstring OnlineDownloadBaseCached(){   // para desenhar (nao le user-
     static std::wstring v; static ULONGLONG at=0; ULONGLONG now=GetTickCount64();
     if(at==0||now-at>1500){ v=OnlineDownloadBase(); at=now; }
     return v;
+}
+// baixar: junta as faixas e, se o usuario pediu (g_cfg.askDlFolder), pergunta a pasta antes.
+// A escolha vira a pasta padrao (a proxima ja abre nela). O download enquanto toca (modo
+// "download" ao dar play) nao pergunta: usa a pasta padrao para nao atrapalhar.
+struct PendingDownloads { std::vector<OTrack> items; std::wstring plName; };
+static PendingDownloads g_pendingDl;
+static void QueueDownloadsInto(const std::vector<OTrack>& items,const std::wstring& plName,const std::wstring& base){
+    int n=0; for(auto& t:items){ if(t.url.empty()) continue; QueueDownload(t,plName,base,g_cfg.onlineFormat); ++n; }
+    std::wstring dst=plName.empty()?base:Config::Join(base,SafeFileName(plName));
+    SetStatus(n?std::to_wstring(n)+(n==1?L" na fila de download  →  ":L" músicas na fila de download  →  ")+dst:std::wstring(L"Nada para baixar."),4500);
+}
+static void StartDownloads(std::vector<OTrack> items,const std::wstring& plName){
+    items.erase(std::remove_if(items.begin(),items.end(),[](const OTrack& t){ return t.url.empty(); }),items.end());
+    if(items.empty()){ SetStatus(L"Nada para baixar.",3000); return; }
+    if(g_cfg.askDlFolder){ g_pendingDl={items,plName}; SetStatus(L"Escolha a pasta para baixar…",3000); PlatformPickFolderFor(EV_PICK_DLONCE,0); }
+    else QueueDownloadsInto(items,plName,OnlineDownloadBase());
 }
 static std::wstring PlaylistCardSubtitle(int pi){
     const Playlist& p=g_playlists[(size_t)pi]; size_t on=0;
@@ -62,7 +78,7 @@ static Track TrackFromOTrack(const OTrack& t){
 static void FetchThumbsAsync(std::vector<std::pair<std::wstring,std::wstring>> v){
     if(v.empty()) return;
     if(v.size()>400) v.resize(400);
-    std::thread([v]{ for(auto& p:v){ if(p.second.empty()) continue; std::wstring f=FetchThumb(p.second); if(!f.empty()) AppPost(EV_ONLINE_THUMB,OPack({p.first,f})); } }).detach();
+    std::thread([v]{ for(auto& p:v){ if(p.second.empty()) continue; std::wstring f; RemixSafe("miniatura online",[&]{ f=FetchThumb(p.second); }); if(!f.empty()) AppPost(EV_ONLINE_THUMB,OPack({p.first,f})); } }).detach();
 }
 static std::set<std::wstring> g_thumbReady;   // miniaturas online ja no disco (a tela de busca so desenha estas)
 static int g_onlineFailRow=0;   // falhas seguidas (pula no maximo 3 indisponiveis)

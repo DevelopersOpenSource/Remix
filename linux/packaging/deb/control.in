@@ -4,9 +4,10 @@ Section: sound
 Priority: optional
 Architecture: @ARCH@
 Depends: libc6 (>= @GLIBC@)
-Recommends: libcurl4 | libcurl4t64 | libcurl3-gnutls, zenity | kdialog, hicolor-icon-theme
+Recommends: libcurl4 | libcurl4t64 | libcurl3-gnutls, zenity | kdialog, hicolor-icon-theme, ffmpeg, yt-dlp
+Suggests: nodejs
 Installed-Size: @SIZE@
-Maintainer: sodre <103298328+NinjaZinS2@users.noreply.github.com>
+Maintainer: EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com>
 Description: Remix Player - player de musica MP3/WAV com visual neon
  Player de musica para desktop com biblioteca por pasta (ou varredura
  automatica), capas personalizadas (arquivo local ou busca na internet),
