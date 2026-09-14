@@ -249,7 +249,7 @@ LRESULT CALLBACK WndProc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
 }
 
 int WINAPI wWinMain(HINSTANCE hInst,HINSTANCE, PWSTR, int nCmdShow){
-    CoInitializeEx(NULL,COINIT_APARTMENTTHREADED);
+    CoInitializeEx(NULL,COINIT_MULTITHREADED);
     int argc=0;LPWSTR* argv=CommandLineToArgvW(GetCommandLineW(),&argc);std::wstring cmd,cmdName;
     bool noSplash=false; int exitAfter=0;
     for(int i=1;i<argc;i++){
