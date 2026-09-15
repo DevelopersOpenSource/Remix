@@ -1,19 +1,29 @@
 @echo off
 setlocal EnableExtensions EnableDelayedExpansion
-title Remix Player - instalar dependencias
+title Remix Player - montar pasta Remix (libs + compilar + copiar tudo)
 set "HERE=%~dp0"
+set "SELF=%~f0"
 cd /d "%HERE%"
 set "AUTO="
-set "DIRETO="
 :args
 if "%~1"=="" goto args_fim
 if /i "%~1"=="/sim" set "AUTO=1"
-if /i "%~1"=="/direto" set "DIRETO=1"
 shift
 goto args
 :args_fim
-set "LINKS=%LOCALAPPDATA%\Microsoft\WinGet\Links"
-set "TOOLS=%HERE%tools"
+
+rem ---- onde estamos: arvore de codigo (windows\) ou dentro da pasta Remix montada? ----
+for %%I in ("%HERE%..") do set "ROOT=%%~fI"
+rem Modo PORTATIL: o bat foi copiado para dentro da propria pasta Remix, que tem
+rem assets\tools ao lado. Modo FONTE (a pasta windows\ do codigo): nao tem assets.
+rem Obs: a pasta movel normalmente mora DENTRO da arvore (Remix\ dentro de D:\Remix),
+rem entao o ".." dela aponta pro codigo - por isso o teste de assets\tools vem primeiro.
+set "SRC=0"
+if not exist "%HERE%assets\tools" if exist "%ROOT%\comum\config.h" if exist "%ROOT%\assets\branding" set "SRC=1"
+if "%SRC%"=="1" (set "OUT=%ROOT%\Remix") else (set "OUT=%HERE%.")
+for %%I in ("%OUT%") do set "OUT=%%~fI"
+set "TOOLS=%OUT%\assets\tools"
+for %%I in ("%TOOLS%") do set "TOOLS=%%~fI"
 
 rem ---- qual Windows: 10 (build 10240 a 21999) ou 11 (22000 em diante) ----
 set "BUILD=0"
@@ -22,93 +32,49 @@ set "WINNOME=Windows"
 if %BUILD% GEQ 10240 set "WINNOME=Windows 10"
 if %BUILD% GEQ 22000 set "WINNOME=Windows 11"
 
-rem ---- ferramentas do proprio Windows: winget (11 e 10 atualizado), curl e tar (10 1803 em diante) ----
+rem ---- ferramentas do proprio Windows: curl e tar (10 1803 em diante) ----
 set "CURL="
 if exist "%SystemRoot%\System32\curl.exe" set "CURL=%SystemRoot%\System32\curl.exe"
 if not defined CURL for /f "delims=" %%C in ('where curl.exe 2^>nul') do if not defined CURL set "CURL=%%C"
 set "TAR="
 if exist "%SystemRoot%\System32\tar.exe" set "TAR=%SystemRoot%\System32\tar.exe"
 if not defined TAR for /f "delims=" %%C in ('where tar.exe 2^>nul') do if not defined TAR set "TAR=%%C"
-set "WINGET="
-where winget >nul 2>nul && set "WINGET=1"
 
 echo ==============================================================
-echo    Remix Player - instalar dependencias (musica online)
+echo    Remix Player - montar a pasta Remix
 echo ==============================================================
 echo.
 echo  Sistema: %WINNOME% (build %BUILD%)
+if "%SRC%"=="1" (
+    echo  Modo: CODIGO FONTE - atualiza as libs, compila o Remix.exe e
+    echo        monta tudo na pasta movel:
+    echo        %OUT%
+) else (
+    echo  Modo: PASTA PORTATIL - so atualiza as libs musicais:
+    echo        %TOOLS%
+)
 echo.
-echo  O Remix toca as musicas do seu PC sem instalar nada.
-echo  Para BUSCAR, TOCAR ONLINE (streaming) e BAIXAR musicas ele usa
-echo  tres programas gratuitos e de codigo aberto:
+echo  O Remix toca as musicas do seu PC sem instalar nada. Para BUSCAR,
+echo  TOCAR ONLINE (streaming) e BAIXAR musicas ele usa tres programas
+echo  gratuitos e de codigo aberto, que ficam SO dentro da pasta Remix:
 echo.
 echo    yt-dlp  - encontra o audio no YouTube, YouTube Music e SoundCloud
-echo    FFmpeg  - converte o audio (e faz o Remix tocar M4A, AAC, Opus e WMA)
+echo    FFmpeg  - converte o audio (e toca M4A, AAC, Opus e WMA)
 echo    Deno    - sem ele o YouTube e o YouTube Music nao tocam
 echo.
+echo  Pasta das ferramentas: %TOOLS%
+echo.
 if %BUILD% GTR 0 if %BUILD% LSS 10240 goto antigo
-if defined DIRETO goto direto
-if defined WINGET goto comwinget
-goto semwinget
-
-:comwinget
-echo  Jeito recomendado: winget, o instalador oficial da Microsoft. Ele ja vem no
-echo  Windows 11 e nos Windows 10 atualizados. Instala so para o seu usuario, sem
-echo  pedir administrador.
-echo.
-if defined AUTO goto instalar
-choice /c SN /n /m " Instalar (ou atualizar) agora pelo winget? [S/N] "
-if errorlevel 2 goto cancelado
-:instalar
-echo.
-call :pacote yt-dlp.yt-dlp yt-dlp
-call :pacote Gyan.FFmpeg FFmpeg
-call :pacote DenoLand.Deno Deno
-call :conferir_tudo
-if not defined FALTA goto pronto
-echo  O winget nao deixou tudo pronto. Isso acontece com o winget desatualizado
-echo  ou em PCs de empresa.
-echo.
-if not defined CURL goto naopronto
-if not defined TAR goto naopronto
-if defined AUTO goto direto
-choice /c SN /n /m " Baixar o que falta direto dos sites oficiais para a pasta tools? [S/N] "
-if errorlevel 2 goto naopronto
-goto direto
-
-:semwinget
-if "%WINNOME%"=="Windows 11" goto semwinget11
-echo  O winget nao foi encontrado neste %WINNOME%.
-goto semwinget_menu
-:semwinget11
-echo  O winget deveria vir no Windows 11, mas nao foi encontrado. Normalmente e so
-echo  atualizar o "Instalador de Aplicativo" na Microsoft Store (opcao 2).
-:semwinget_menu
-echo.
-set "PODE_DIRETO="
-if defined CURL if defined TAR set "PODE_DIRETO=1"
-if defined PODE_DIRETO echo    1 - Baixar direto dos sites oficiais para a pasta "tools" ao lado do Remix.exe
-if defined PODE_DIRETO echo        usa o curl e o tar que ja vem no Windows; cerca de 200 MB
-if not defined PODE_DIRETO echo    1 - [indisponivel: este Windows nao tem curl e tar]
-echo    2 - Abrir a Microsoft Store no "Instalador de Aplicativo", que traz o winget;
-echo        depois de instalar, rode este arquivo de novo
-echo    3 - Instalar a mao: abre as paginas oficiais e a pasta "tools"
-echo    4 - Sair
-echo.
-if defined AUTO if defined PODE_DIRETO goto direto
-if defined AUTO goto cancelado
-choice /c 1234 /n /m " Escolha 1, 2, 3 ou 4: "
-if errorlevel 4 goto cancelado
-if errorlevel 3 goto manual
-if errorlevel 2 goto loja
-if defined PODE_DIRETO goto direto
-goto semwinget_menu
-
-:direto
 if not defined CURL goto semcurl
 if not defined TAR goto semcurl
+if defined AUTO goto baixar
+choice /c SN /n /m " Baixar (ou atualizar) as libs agora? [S/N] "
+if errorlevel 2 goto cancelado
+goto baixar
+
+:baixar
 echo ==============================================================
-echo  Baixando dos sites oficiais para a pasta tools:
+echo  Baixando dos sites oficiais para a pasta
 echo  %TOOLS%
 echo ==============================================================
 if not exist "%TOOLS%" mkdir "%TOOLS%"
@@ -121,13 +87,74 @@ if defined FALTA_ffmpeg call :baixar_ffmpeg
 rmdir /s /q "%TMPD%" >nul 2>nul
 echo.
 call :conferir_tudo
-if defined FALTA goto naopronto
-goto pronto
+if defined FALTA (
+    echo  Ainda falta:!FALTA!
+    echo  Rode este arquivo de novo. Se continuar faltando, baixe cada programa na
+    echo  pagina oficial e coloque o .exe em %TOOLS%
+    goto fim
+)
+if not "%SRC%"=="1" goto pronto
+goto compilar
+
+:compilar
+if not exist "%OUT%" mkdir "%OUT%"
+echo ==============================================================
+echo  Compilando o Remix.exe (MinGW-w64 / GCC)...
+echo  destino: %OUT%\Remix.exe  (dentro da propria pasta)
+echo ==============================================================
+call "%HERE%COMPILAR.bat" /so /saida "%OUT%"
+if errorlevel 1 goto compilar_erro
+goto montar
+
+:compilar_erro
+echo.
+echo  [ERRO] A compilacao falhou.
+echo  Dica: se o Remix estiver aberto, feche-o - inclusive pelo icone da bandeja,
+echo  perto do relogio - e rode este arquivo de novo. Veja as mensagens acima.
+goto fim
+
+:montar
+echo.
+echo ==============================================================
+echo  Montando a pasta movel:
+echo  %OUT%
+echo ==============================================================
+if not exist "%OUT%" mkdir "%OUT%"
+if not exist "%OUT%\assets\branding" mkdir "%OUT%\assets\branding"
+if not exist "%OUT%\assets\fonts" mkdir "%OUT%\assets\fonts"
+if not exist "%OUT%\assets\themes" mkdir "%OUT%\assets\themes"
+xcopy /e /y /q "%ROOT%\assets\branding" "%OUT%\assets\branding\" >nul
+xcopy /e /y /q "%ROOT%\assets\fonts" "%OUT%\assets\fonts\" >nul
+xcopy /e /y /q "%ROOT%\assets\themes" "%OUT%\assets\themes\" >nul
+if exist "%ROOT%\config.ini" (
+    copy /y "%ROOT%\config.ini" "%OUT%\config.ini" >nul
+) else (
+    >"%OUT%\config.ini" echo [General]
+    >>"%OUT%\config.ini" echo MusicFolder=Musica
+)
+if not exist "%OUT%\Musica" mkdir "%OUT%\Musica"
+if exist "%ROOT%\Musica\LEIA-ME.txt" copy /y "%ROOT%\Musica\LEIA-ME.txt" "%OUT%\Musica\LEIA-ME.txt" >nul
+copy /y "%HERE%LEIA-ME-PORTATIL.txt" "%OUT%\LEIA-ME.txt" >nul
+copy /y "%SELF%" "%OUT%\INSTALAR-DEPENDENCIAS.bat" >nul
+echo.
+echo  Pronto. Pasta Remix completa em:
+echo  %OUT%
+echo  Mova essa pasta para onde quiser: tudo fica junto nela.
+
+:pronto
+echo.
+echo  Libs ok em %TOOLS%
+echo  Abra o %OUT%\Remix.exe: ele encontra as ferramentas sozinho, em assets\tools.
+goto fim
 
 :semcurl
 echo  Este Windows nao tem o curl e o tar (eles vieram no Windows 10 versao 1803).
-echo  Use o winget ou instale a mao: rode este arquivo de novo e escolha a opcao 2 ou 3.
-goto fim
+echo  Use a Microsoft Store (Instalador de Aplicativo) ou instale a mao.
+echo.
+choice /c 123 /n /m " 1-Abrir a Microsoft Store  2-Abrir as paginas oficiais + a pasta de libs  3-Sair: "
+if errorlevel 3 goto cancelado
+if errorlevel 2 goto manual
+goto loja
 
 :antigo
 echo  Este Windows e anterior ao Windows 10 (build %BUILD%). O Remix e feito para
@@ -148,41 +175,17 @@ start "" "https://github.com/yt-dlp/yt-dlp/releases/latest"
 start "" "https://www.gyan.dev/ffmpeg/builds/"
 start "" "https://github.com/denoland/deno/releases/latest"
 start "" "%TOOLS%"
-echo  Coloque yt-dlp.exe, ffmpeg.exe e deno.exe na pasta tools que abriu.
-goto fim
-
-:pronto
-echo  Tudo pronto. Abra o Remix.exe: ele encontra esses programas sozinho.
-goto fim
-
-:naopronto
-echo  Ainda falta:!FALTA!
-echo  Rode este arquivo de novo. Se continuar faltando, instale a mao: baixe cada
-echo  programa na pagina oficial e coloque o .exe na pasta tools ao lado do Remix.exe.
+echo  Coloque yt-dlp.exe, ffmpeg.exe e deno.exe na pasta que abriu.
 goto fim
 
 :cancelado
-echo  Nada foi instalado.
+echo  Nada foi feito.
 :fim
 echo.
 if not defined AUTO pause
 exit /b 0
 
 rem ======================= subrotinas =======================
-
-:pacote
-echo --------------------------------------------------------------
-echo  %~2
-echo --------------------------------------------------------------
-call winget list --id %~1 -e --source winget --accept-source-agreements >nul 2>nul
-if errorlevel 1 (
-    call winget install --id %~1 -e --source winget --silent --accept-package-agreements --accept-source-agreements
-) else (
-    echo  Ja instalado. Procurando atualizacao...
-    call winget upgrade --id %~1 -e --source winget --silent --accept-package-agreements --accept-source-agreements
-)
-echo.
-exit /b 0
 
 :baixar_ytdlp
 echo.
@@ -222,14 +225,9 @@ exit /b 1
 :conferir_tudo
 set "QUIETO=%~1"
 if not defined QUIETO echo ==============================================================
-if not defined QUIETO echo  Conferindo
+if not defined QUIETO echo  Conferindo (so na pasta de libs do Remix)
 if not defined QUIETO echo ==============================================================
 set "FALTA="
-set "UPATH="
-set "MPATH="
-for /f "skip=2 tokens=2,*" %%A in ('reg query "HKCU\Environment" /v Path 2^>nul') do set "UPATH=%%B"
-for /f "skip=2 tokens=2,*" %%A in ('reg query "HKLM\SYSTEM\CurrentControlSet\Control\Session Manager\Environment" /v Path 2^>nul') do set "MPATH=%%B"
-call set "BUSCA=%TOOLS%;%LINKS%;%HERE%;%UPATH%;%MPATH%;%PATH%"
 call :conferir yt-dlp
 call :conferir ffmpeg
 call :conferir deno
@@ -239,9 +237,7 @@ exit /b 0
 :conferir
 set "ACHOU="
 set "FALTA_%~1="
-for %%D in ("!BUSCA:;=" "!") do (
-    if not defined ACHOU if not "%%~D"=="" if exist "%%~D\%~1.exe" set "ACHOU=%%~D\%~1.exe"
-)
+if not "%~1"=="" if exist "%TOOLS%\%~1.exe" set "ACHOU=%TOOLS%\%~1.exe"
 if defined ACHOU (
     if not defined QUIETO echo    [ok]     %~1   !ACHOU!
 ) else (

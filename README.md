@@ -40,11 +40,11 @@ Streaming, downloads and online search use free external tools that are **not bu
 and a JavaScript runtime, which YouTube now requires (**Deno 2.3+** or **Node.js 22+**). The portable versions
 include an installer:
 
-- **Windows:** double-click `INSTALAR-DEPENDENCIAS.bat` in the Remix folder. It shows whether this is Windows 10 or 11
-  and installs yt-dlp, FFmpeg and Deno with **winget** (Microsoft's package manager), for your user only and without
-  administrator rights. Without winget (older Windows 10, LTSC, company PCs) it can download the official files
-  straight into the `tools` folder next to `Remix.exe` with the `curl` and `tar` built into Windows 10 1803+ and 11,
-  open App Installer in the Microsoft Store, or open the official download pages.
+- **Windows:** double-click `INSTALAR-DEPENDENCIAS.bat` in the Remix folder. It downloads the official yt-dlp,
+  FFmpeg and Deno builds straight into `assets\tools` **inside** Remix, using the `curl` and `tar` built into
+  Windows 10 1803+ and 11 — nothing is installed globally (no pip, no winget, no PATH). Remix only loads these
+  tools from its own `assets\tools` folder. On Windows without `curl`/`tar` it opens App Installer in the
+  Microsoft Store or the official download pages.
 - **Linux:** `bash instalar-dependencias.sh` in the portable folder. It detects the distribution and uses its package
   manager (apt on Debian/Ubuntu/Mint, dnf on Fedora/Nobara/RHEL, pacman on Arch/Manjaro/CachyOS, zypper on openSUSE,
   xbps on Void, eopkg on Solus). When the packaged yt-dlp or JavaScript runtime is too old, on immutable systems

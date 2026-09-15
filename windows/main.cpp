@@ -32,7 +32,7 @@
 static ULONG_PTR g_gdiToken = 0;
 
 // ------------------------------------------------ hooks com janela ---------
-void PlatformLoadCover(const std::wstring& path){ if(g_coverImg){delete g_coverImg;g_coverImg=nullptr;} if(!path.empty()){ g_coverImg=new Image(path.c_str()); if(g_coverImg->GetLastStatus()!=Ok){delete g_coverImg;g_coverImg=nullptr;} } InvalidateBgCache(); }
+void PlatformLoadCover(const std::wstring& path){ if(g_coverImg){delete g_coverImg;g_coverImg=nullptr;} if(!path.empty()){ g_coverImg=new Image(path.c_str()); if(g_coverImg->GetLastStatus()!=Ok){delete g_coverImg;g_coverImg=nullptr;} } InvalidateBgCache(); InvalidateCdCache(); }
 void PlatformEvictThumb(const std::wstring& path){ auto it=g_thumbCache.find(path); if(it==g_thumbCache.end()) return; delete it->second; g_thumbCache.erase(it); }
 void PlatformClearThumbs(){ for(auto&kv:g_thumbCache) delete kv.second; g_thumbCache.clear(); }
 static void ClampToWork(int& w,int& h){

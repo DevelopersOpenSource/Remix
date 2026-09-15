@@ -82,8 +82,8 @@ if (-not $SoLinux) {
   Copy-Item 'README.pt-BR.md' "$pw\" -ErrorAction SilentlyContinue
   Copy-Item 'windows\INSTALAR-DEPENDENCIAS.bat' "$pw\"
   Copy-Item 'windows\LEIA-ME-PORTATIL.txt' "$pw\LEIA-ME.txt"
-  New-Item -ItemType Directory -Force -Path "$pw\tools" | Out-Null
-  "Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe e deno.exe se preferir instalar a mao (sem o winget).`r`nO Remix procura nesta pasta.`r`n" | Set-Content -Path "$pw\tools\LEIA-ME.txt" -Encoding ASCII
+  New-Item -ItemType Directory -Force -Path "$pw\assets\tools" | Out-Null
+  "Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe e deno.exe se preferir instalar a mao.`r`nO Remix procura nesta pasta.`r`n" | Set-Content -Path "$pw\assets\tools\LEIA-ME.txt" -Encoding ASCII
   "[General]`r`nMusicFolder=Musica`r`n" | Set-Content -Path "$pw\config.ini" -Encoding ASCII
   $zipW = Join-Path $Root "dist\remix-$Versao-windows-x64-portable.zip"
   if (Test-Path $zipW) { Remove-Item $zipW }

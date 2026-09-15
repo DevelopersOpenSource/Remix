@@ -99,15 +99,12 @@ bool PlatformTrash(const std::wstring& path){
 }
 void PlatformOpenFolder(const std::wstring& path){ ShellExecuteW(NULL,L"open",path.c_str(),NULL,NULL,SW_SHOWNORMAL); }
 
-// ---- ffmpeg (opcional): ao lado do exe, na BaseDir ou no PATH -------------
+// ---- ffmpeg (opcional): so dentro do Remix, em <app>\assets\tools -------------
 static std::wstring FfmpegPath(){
     static std::wstring cached; static bool tried=false;
     if(tried) return cached; tried=true;
-    std::wstring cands[]={ Config::Join(Config::ExeDir(),L"ffmpeg.exe"), Config::Join(Config::BaseDir(),L"ffmpeg.exe"), Config::Join(Config::Join(Config::BaseDir(),L"ffmpeg"),L"ffmpeg.exe") };
+    std::wstring cands[]={ Config::Join(Config::Join(Config::AssetDir(),L"tools"),L"ffmpeg.exe") };
     for(auto& c:cands) if(GetFileAttributesW(c.c_str())!=INVALID_FILE_ATTRIBUTES){ cached=c; return cached; }
-    wchar_t buf[MAX_PATH]; LPWSTR part=nullptr;
-    if(SearchPathW(NULL,L"ffmpeg.exe",NULL,MAX_PATH,buf,&part)>0) cached=buf;
-    if(cached.empty()) cached=OFindTool(L"ffmpeg");   // winget (Links ou PATH do registro) e pasta tools ao lado do exe
     return cached;
 }
 bool PlatformHaveFfmpeg(){ return !FfmpegPath().empty(); }

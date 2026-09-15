@@ -1,10 +1,25 @@
 @echo off
 setlocal enabledelayedexpansion
 title Remix Player - compilar (Windows, MinGW-w64)
-cd /d "%~dp0"
-set "COMUM=%~dp0..\comum"
+set "HERE=%~dp0"
+cd /d "%HERE%"
+set "ABRIR=1"
+set "SAIDA_PROX="
+set "SAIDA="
+:args
+if "%~1"=="" goto args_fim
+if /i "%~1"=="/so" set "ABRIR="
+if /i "%~1"=="/saida" set "SAIDA_PROX=1"
+if defined SAIDA_PROX if /i not "%~1"=="/saida" (
+    set "SAIDA=%~1"
+    set "SAIDA_PROX="
+)
+shift
+goto args
+:args_fim
+set "COMUM=%HERE%..\comum"
 REM pasta deste script com barras normais (C:/.../windows/): usada no -B abaixo
-set "BDIR=%~dp0"
+set "BDIR=%HERE%"
 set "BDIR=%BDIR:\=/%"
 
 echo ============================================
@@ -53,13 +68,21 @@ echo [3/3] Remix.exe - demora uns 30-60 segundos...
 REM -B: o GCC linka sozinho um "default-manifest.o"; com -B<esta pasta> ele usa o desta pasta
 REM     (o nosso manifesto) no lugar do padrao do compilador - sem manifesto duplicado.
 REM     Precisa ser caminho absoluto: relativo (-B./) o GCC do Windows nao aceita.
-"%GPP%" -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"%BDIR%" -I"%COMUM%" -I. main.cpp audio_backend.o app_res.o -o Remix.exe -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi
+set "EXEOUT=%HERE%Remix.exe"
+if defined SAIDA (
+    set "EXEOUT=%SAIDA%\Remix.exe"
+    if not exist "%SAIDA%" mkdir "%SAIDA%"
+)
+"%GPP%" -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"%BDIR%" -I"%COMUM%" -I. main.cpp audio_backend.o app_res.o -o "%EXEOUT%" -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi
 if errorlevel 1 goto :falhou
 del /q audio_backend.o 2>nul
 
 echo.
-echo Pronto: Remix.exe atualizado nesta pasta. Abrindo o player...
-start "" Remix.exe
+echo Pronto: %EXEOUT%
+if defined ABRIR (
+    echo Abrindo o player...
+    start "" "%EXEOUT%"
+)
 exit /b 0
 
 :falhou

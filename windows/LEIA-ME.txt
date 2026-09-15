@@ -54,15 +54,17 @@ Compilar na mao (terminal MSYS2 UCRT64, dentro desta pasta)
   gcc -O2 -w -c -I../comum ../comum/audio_backend.c -o audio_backend.o
   g++ -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"$(cygpath -m "$PWD")/" -I../comum -I. main.cpp audio_backend.o app_res.o -o Remix.exe -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi
 
-Formatos extras (m4a/aac/opus/wma): coloque um ffmpeg.exe ao lado do Remix.exe.
+Formatos extras (m4a/aac/opus/wma) e musica online: coloque yt-dlp.exe, ffmpeg.exe e deno.exe
+na pasta assets\tools do Remix (o INSTALAR-DEPENDENCIAS.bat faz isso).
+O Remix so carrega essas ferramentas de assets\tools -- nada de instalacao global no sistema.
 
 MUSICA ONLINE (aba ONLINE, ou "+ ADICIONAR" dentro de uma playlist)
   Busca no YouTube Music, YouTube e SoundCloud; links do Spotify, Deezer, Apple Music,
   YouTube e SoundCloud; streaming so na memoria (nao grava nada) ou download.
   Precisa de yt-dlp, FFmpeg e Deno (o YouTube exige um "JavaScript runtime").
-  Clique 2x em INSTALAR-DEPENDENCIAS.bat (vai junto no zip portatil): no Windows 11 e no 10
-  atualizado instala os tres pelo winget, so para o seu usuario e sem administrador; sem winget
-  baixa os arquivos oficiais para a pasta tools\ com o curl e o tar do proprio Windows (10 1803+).
+  Clique 2x em INSTALAR-DEPENDENCIAS.bat (vai junto no zip portatil): ele baixa os tres dos sites
+  oficiais para a pasta assets\tools do Remix com o curl e o tar do proprio Windows (10 1803+),
+  sem instalar nada no sistema -- o Remix so carrega de assets\tools.
   Depois e so abrir o Remix (ele acha sozinho).
   Configuracoes > ONLINE mostra o que foi encontrado e para onde vao os downloads.
 

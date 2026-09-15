@@ -168,6 +168,10 @@ static Image* GetThumb(const std::wstring& path){
 // ---- fundo (wallpaper / capa embaçada) em cache de bitmap ----
 static Image* g_wallImg=nullptr; static std::wstring g_wallLoadedPath; static Bitmap* g_bgCache=nullptr; static DWORD g_bgKey=0;
 static void InvalidateBgCache(){ if(g_bgCache){delete g_bgCache;g_bgCache=nullptr;} }
+// caches do CD grande girando (offscreen rotacionado + capa reduzida p/ transformar barato)
+static Bitmap* g_cdCache=nullptr; static int g_cdCacheN=0; static float g_cdRot=-9999.f; static Image* g_cdImgKey=nullptr;
+static Bitmap* g_cdSrc=nullptr; static Image* g_cdSrcKey=nullptr;
+static void InvalidateCdCache(){ if(g_cdCache){delete g_cdCache;g_cdCache=nullptr;} if(g_cdSrc){delete g_cdSrc;g_cdSrc=nullptr;} g_cdImgKey=nullptr; g_cdSrcKey=nullptr; }
 static Image* GetWallpaperImage(){
     if(g_cfg.bgWallpaper.empty()){ if(g_wallImg){delete g_wallImg;g_wallImg=nullptr;g_wallLoadedPath.clear();} return nullptr; }
     if(!g_wallImg||g_wallLoadedPath!=g_cfg.bgWallpaper){
@@ -211,6 +215,42 @@ static void DrawCoverCircle(Graphics& g,Image* img,Rect r,Pen* pen,float rotatio
     SolidBrush disc(Color(255,18,20,30));g.FillEllipse(&disc,(REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);
     if(img&&img->GetLastStatus()==Ok){GraphicsPath clip;clip.AddEllipse((REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);Region old;g.GetClip(&old);g.SetClip(&clip);g.DrawImage(img,r.X,r.Y,r.Width,r.Height);g.SetClip(&old);}
     SolidBrush hole(Color(255,7,9,18));float hr=r.Width*.11f;g.FillEllipse(&hole,(REAL)(cx-hr),(REAL)(cy-hr),(REAL)(hr*2),(REAL)(hr*2));g.DrawEllipse(pen,(REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);g.ResetTransform();
+}
+// CD grande girando: desenha num offscreen so quando o angulo quantizado muda e reusa
+// isso nos outros frames (o DrawImage rotacionado + clip era o que derrubava o FPS).
+// A capa ainda e reduzida para ~768px antes de transformar: capa 4K reamostrada todo
+// frame era o custo principal (girava travado com capas grandes).
+static void DrawBigCd(Graphics& g,Image* img,Rect r,Pen* pen,float rotation){
+    int n=r.Width>0?r.Width:1;
+    float q=1.2f, qrot=(float)std::lround(rotation/q)*q;
+    if(!g_cdCache||g_cdCacheN!=n||g_cdImgKey!=img||std::fabs(g_cdRot-qrot)>0.001f){
+        if(!g_cdCache||g_cdCacheN!=n){ delete g_cdCache; g_cdCache=nullptr; }
+        if(g_cdSrcKey!=img||!g_cdSrc){   // reduz a capa uma vez para a transformada ficar barata
+            delete g_cdSrc; g_cdSrc=nullptr;
+            if(img&&img->GetLastStatus()==Ok){
+                int iw=img->GetWidth(),ih=img->GetHeight(),mx=std::max(iw,ih),cap=768;
+                int sw=iw*std::min(cap,mx)/mx, sh=ih*std::min(cap,mx)/mx;
+                if(sw<1)sw=1; if(sh<1)sh=1;
+                g_cdSrc=new Bitmap(sw,sh,PixelFormat32bppARGB);
+                Graphics sg(g_cdSrc); sg.SetInterpolationMode(InterpolationModeHighQualityBilinear);
+                sg.Clear(Color(0,0,0,0)); sg.DrawImage(img,0,0,sw,sh);
+            }
+            g_cdSrcKey=img;
+        }
+        if(!g_cdCache) g_cdCache=new Bitmap(n,n,PixelFormat32bppARGB);
+        Graphics cg(g_cdCache);
+        cg.SetSmoothingMode(SmoothingModeAntiAlias);
+        cg.Clear(Color(0,0,0,0));
+        float ccx=n/2.f,ccy=n/2.f;
+        cg.TranslateTransform(ccx,ccy);cg.RotateTransform(qrot);cg.TranslateTransform(-ccx,-ccy);
+        SolidBrush disc(Color(255,18,20,30));cg.FillEllipse(&disc,(REAL)0,(REAL)0,(REAL)n,(REAL)n);
+        if(g_cdSrc){GraphicsPath clip;clip.AddEllipse((REAL)0,(REAL)0,(REAL)n,(REAL)n);Region old;cg.GetClip(&old);cg.SetClip(&clip);cg.DrawImage(g_cdSrc,0,0,n,n);cg.SetClip(&old);}
+        SolidBrush hole(Color(255,7,9,18));float hr=n*.11f;cg.FillEllipse(&hole,ccx-hr,ccy-hr,hr*2,hr*2);
+        if(pen)cg.DrawEllipse(pen,(REAL)0,(REAL)0,(REAL)n,(REAL)n);
+        cg.ResetTransform();
+        g_cdCacheN=n; g_cdImgKey=img; g_cdRot=qrot;
+    }
+    g.DrawImage(g_cdCache,(REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);
 }
 // ---- pecas novas do cabecalho ----
 static void DrawPill(Graphics& g,const RECT& r,const std::wstring& t,bool on,float px){
@@ -401,7 +441,7 @@ static void DrawNormal(Graphics& g,int w,int h){
         bool isCd=g_cfg.artShape==L"cd";
         int asize=R_art.right-R_art.left; int x0=R_art.left;
         Rect cvr(R_art.left,R_art.top,asize,asize);
-        if(isCd){ DrawCoverCircle(g,g_coverImg,cvr,&ap,g_player.playing?g_rotation:0);
+        if(isCd){ DrawBigCd(g,g_coverImg,cvr,&ap,g_player.playing?g_rotation:0);
             if(g_cfg.particlesOn&&FxOn()){ GraphicsPath ep; ep.AddEllipse((REAL)cvr.X+4,(REAL)cvr.Y+4,(REAL)cvr.Width-8,(REAL)cvr.Height-8); Region eOld; g.GetClip(&eOld); g.SetClip(&ep);
                 DrawParticles(g,RectF((REAL)cvr.X+6,(REAL)cvr.Y+6,(REAL)cvr.Width-12,(REAL)cvr.Height-12),ResolveCustom(g_cfg.particlesColor),tSec,1.7f); g.SetClip(&eOld); } }
         else{
@@ -584,7 +624,7 @@ static void DrawVertical(Graphics& g,int w,int h){
     if(g_cfg.artShape==L"square"){
         SolidBrush plate(Color(255,16,19,32)); DrawRoundRect(g,art,14,&plate,&ap);
         if(g_coverImg&&g_coverImg->GetLastStatus()==Ok){ Region old; g.GetClip(&old); g.SetClip(Rect(art.X+3,art.Y+3,art.Width-6,art.Height-6)); g.DrawImage(g_coverImg,art.X+3,art.Y+3,art.Width-6,art.Height-6); g.SetClip(&old); }
-    } else DrawCoverCircle(g,g_coverImg,art,&ap,g_player.playing?g_rotation:0);
+    } else DrawBigCd(g,g_coverImg,art,&ap,g_player.playing?g_rotation:0);
     if(g_cfg.particlesOn&&FxOn()){
         Region pOld; g.GetClip(&pOld);
         GraphicsPath vp; Rect vclip(art.X+3,art.Y+3,art.Width-6,art.Height-6);
@@ -740,9 +780,9 @@ static void DrawSettings(Graphics& g,int w,int h){
     btn(R_setEqOn,g_cfg.eqOn?L"EQUALIZADOR: LIGADO":L"EQUALIZADOR: DESLIGADO",g_cfg.eqOn);
     btn(R_setEqReset,L"ZERAR",false);
     auto isEq=[&](int id){return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8;};
-    auto sval=[&](int id)->int{if(isEq(id))return g_cfg.eq[id-Z_EQ_BASE];switch(id){case Z_UI_SCALE:return g_cfg.uiScale;case Z_TITLE_SCALE:return g_cfg.titleScale;case Z_ARTIST_SCALE:return g_cfg.artistScale;case Z_VERTICAL_SCALE:return g_cfg.verticalScale;case Z_PLAYER_SIZE_SLIDER:return g_cfg.playerScale;case Z_LED_BRIGHT:return g_cfg.ledBrightness;case Z_RUNNER_SPEED:return g_cfg.runnerSpeed;case Z_PART_SPEED:return g_cfg.particlesSpeed;default:return g_cfg.ledSpeed;}};
+    auto sval=[&](int id)->int{if(isEq(id))return g_cfg.eq[id-Z_EQ_BASE];switch(id){case Z_UI_SCALE:return g_cfg.uiScale;case Z_TITLE_SCALE:return g_cfg.titleScale;case Z_ARTIST_SCALE:return g_cfg.artistScale;case Z_VERTICAL_SCALE:return g_cfg.verticalScale;case Z_PLAYER_SIZE_SLIDER:return g_cfg.playerScale;case Z_LED_BRIGHT:return g_cfg.ledBrightness;case Z_RUNNER_SPEED:return g_cfg.runnerSpeed;case Z_PART_SPEED:return g_cfg.particlesSpeed;case Z_CD_SPEED:return g_cfg.cdSpeed;default:return g_cfg.ledSpeed;}};
     static const wchar_t* eqNames[8]={L"60 Hz (sub-grave)",L"150 Hz (grave)",L"400 Hz",L"1 kHz (voz)",L"2.5 kHz",L"6 kHz (presença)",L"10 kHz",L"15 kHz (brilho)"};
-    auto sname=[&](int id)->const wchar_t*{if(isEq(id))return eqNames[id-Z_EQ_BASE];switch(id){case Z_UI_SCALE:return L"Escala geral";case Z_TITLE_SCALE:return L"Nome da musica";case Z_ARTIST_SCALE:return L"Nome do artista";case Z_VERTICAL_SCALE:return L"Escala do vertical";case Z_PLAYER_SIZE_SLIDER:return L"Tamanho do player";case Z_LED_BRIGHT:return L"Brilho do LED";case Z_RUNNER_SPEED:return L"Velocidade da linha (corredor)";case Z_PART_SPEED:return L"Velocidade das particulas";default:return L"Velocidade do LED";}};
+    auto sname=[&](int id)->const wchar_t*{if(isEq(id))return eqNames[id-Z_EQ_BASE];switch(id){case Z_UI_SCALE:return L"Escala geral";case Z_TITLE_SCALE:return L"Nome da musica";case Z_ARTIST_SCALE:return L"Nome do artista";case Z_VERTICAL_SCALE:return L"Escala do vertical";case Z_PLAYER_SIZE_SLIDER:return L"Tamanho do player";case Z_LED_BRIGHT:return L"Brilho do LED";case Z_RUNNER_SPEED:return L"Velocidade da linha (corredor)";case Z_PART_SPEED:return L"Velocidade das particulas";case Z_CD_SPEED:return L"Velocidade de giro do CD";default:return L"Velocidade do LED";}};
     for(auto&s:g_setSliders){
         int val=sval(s.id); bool eq=isEq(s.id);
         SolidBrush knob((eq&&!g_cfg.eqOn)?Color(255,90,94,118):accent);

@@ -154,11 +154,11 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
 Precisa de **yt-dlp**, **ffmpeg** e de um "JavaScript runtime" que o YouTube passou a exigir (**Deno 2.3+**
 ou **Node.js 22+**). As versoes portateis trazem um instalador:
 
-- **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat` (na pasta do Remix). Ele mostra se e Windows 10 ou 11 e
-  instala yt-dlp, FFmpeg e Deno pelo **winget** (instalador oficial da Microsoft), so para o seu usuario e sem pedir
-  administrador. Sem winget (Windows 10 antigo, LTSC, PC de empresa) ele pode baixar os arquivos oficiais direto para
-  a pasta `tools` ao lado do `Remix.exe` com o `curl` e o `tar` que ja vem no Windows 10 1803+ e no 11, abrir a
-  Microsoft Store no "Instalador de Aplicativo" ou as paginas oficiais.
+- **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat` (na pasta do Remix). Ele baixa os arquivos oficiais do
+  yt-dlp, do FFmpeg e do Deno direto para a pasta `assets\tools` **dentro do Remix**, com o `curl` e o `tar` que ja
+  vem no Windows 10 1803+ e no 11 — nada e instalado no sistema (nem pip, nem winget, nem PATH). O Remix so carrega
+  essas ferramentas da propria pasta `assets\tools`. Sem `curl`/`tar` (Windows 10 antigo, LTSC, PC de empresa) ele
+  abre a Microsoft Store no "Instalador de Aplicativo" ou as paginas oficiais.
 - **Linux:** `bash instalar-dependencias.sh` (na pasta portatil). Reconhece a distro e usa o gerenciador dela (apt no
   Debian/Ubuntu/Mint, dnf no Fedora/Nobara/RHEL, pacman no Arch/Manjaro/CachyOS, zypper no openSUSE, xbps no Void,
   eopkg no Solus). Quando o yt-dlp ou o JavaScript runtime da distro sao antigos, em sistema imutavel (Bazzite,
@@ -226,8 +226,8 @@ gcc -O2 -w -c -I../comum ../comum/audio_backend.c -o audio_backend.o
 g++ -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"$(cygpath -m "$PWD")/" -I../comum -I. main.cpp audio_backend.o app_res.o -o Remix.exe -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi
 ```
 
-Para tocar M4A/AAC/Opus/WMA etc. no Windows, deixe um `ffmpeg.exe` ao lado do `Remix.exe`
-(ou na pasta `ffmpeg\` do app, ou no PATH). Sem ele, MP3/WAV/FLAC/OGG continuam funcionando.
+Para tocar M4A/AAC/Opus/WMA etc. no Windows, coloque um `ffmpeg.exe` na pasta `assets\tools` do Remix
+(para baixar, rode o `INSTALAR-DEPENDENCIAS.bat`). Sem ele, MP3/WAV/FLAC/OGG continuam funcionando.
 
 ## Compilar tudo (Windows + Linux) com um script
 

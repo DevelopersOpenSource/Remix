@@ -1,0 +1,19 @@
+[+0 ms] Remix Player 1.2.0 (Windows) - log de diagnostico
+[+15 ms] build: 6AA8CA0D (compilado em 2026-09-15 04:31 UTC)
+[+15 ms] data: 2026-09-15 01:31:10
+[+15 ms] windows: Windows 11 Pro 25H2 (build 26200.9445) | 12 processador(es) | tela 1920x1080 | DPI 96
+[+15 ms] exe: D:\Remix\windows\Remix.exe
+[+15 ms] pasta do app: D:\Remix
+[+15 ms] etapa: GDI+
+[+15 ms] etapa: config
+[+31 ms] etapa: limpeza do cache
+[+31 ms] etapa: nucleo: temas, audio, playlists
+[+109 ms] audio: dispositivo de som aberto (48000 Hz, backend WASAPI)
+[+109 ms] etapa: splash
+[+109 ms] etapa: janela
+[+203 ms] etapa: biblioteca
+[+219 ms] biblioteca: 0 faixa(s)
+[+219 ms] etapa: bandeja, atalhos e teclas de midia
+[+219 ms] etapa: aberto
+[+8234 ms] inicializacao ok: 8 s aberto sem erro
+[+60937 ms] saida normal
