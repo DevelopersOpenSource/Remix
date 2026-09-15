@@ -208,6 +208,7 @@ static void OnStreamMeta(const std::wstring& s,int id){
     const PlEntry* e=FindOnlineEntry(url);
     PlaylistsUpdateOnline(url,(e&&!e->title.empty())?L"":v[1],(e&&!e->artist.empty())?L"":v[2],dur,v[4],v[6],L"");
     if(id==g_curStreamId&&g_nowPlayingValid&&g_nowPlaying.path==url) g_lastOnlineTitle=g_nowPlaying.title;
+    if(id==g_curStreamId&&dur>0&&g_player.loaded&&g_player.IsStream()) g_player.SetStreamLengthMs((DWORD)(dur)*1000);   // duracao real chegou: corrige lenFrames/cachedLenMs (a onda usa isso)
 }
 static void OnOnlineThumb(const std::wstring& s){
     auto v=OUnpack(s); if(v.size()<2||v[1].empty()) return;

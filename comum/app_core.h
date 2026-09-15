@@ -114,7 +114,9 @@ enum : int {
 };
 // Analise incremental do streaming (online_play.h entrega o PCM; esta converte em
 // onda/espectro e a UI publica em WS() para a musica online mostrar como a local).
-void StreamWavePump(int jobId, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
+// O dono passa o job do canal: a analise roda sem prender o SPool() (so st->m -> w.m).
+struct StreamJob;
+void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
 #include "online_play.h"
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
@@ -298,6 +300,7 @@ static COLORREF ResolveCustom(const std::wstring& id){
 }
 
 // ---- waves organicas --------------------------------------------------
+static double g_streamAheadMs=0;   // ate onde o streaming ja decodificou (ms absolutos da musica); 0 = ainda nao chegou
 static float Hash01(float n){ float s=sinf(n)*43758.5453f; return s-floorf(s); }
 static float VNoise(float x){
     float i=floorf(x),f=x-i; f=f*f*(3.0f-2.0f*f);
@@ -317,6 +320,10 @@ static float AudioWaveBar(int i,int count,DWORD posMs,DWORD lenMs,float t){
     float p=count>1?(float)i/(count-1):0.f;
     DWORD look=std::min<DWORD>(lenMs/1000*35,14000);
     DWORD back=std::min<DWORD>(lenMs/1000*6,2500);
+    if(g_player.IsStream()){   // online: nao "espiar" trecho que o streaming ainda nao baixou/decodificou
+        double avail=g_streamAheadMs-(double)posMs; if(avail<0)avail=0;
+        look=(DWORD)std::min<double>((double)look,std::max(300.0,avail));
+    }
     double center=(double)posMs-back+(double)look*p;
     float norm=(float)(center/std::max<double>(1,(double)lenMs));
     norm=std::max(0.f,std::min(1.f,norm));
@@ -485,22 +492,21 @@ static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
 
 // ---- analise incremental do streaming (a musica online mostra a onda/espectro real) ----
 // O canal de streaming chama este aqui com o PCM que chega; a UI publica em WS() no Tick.
-void StreamWavePump(int jobId,const int16_t* s16,size_t nSamples,uint64_t absFirstFrame){
-    std::shared_ptr<StreamJob> j=FindStreamId(jobId);
-    if(!j||!j->wa)return;
-    StreamWave& w=*j->wa;
+void StreamWavePump(StreamJob* jp,const int16_t* s16,size_t nSamples,uint64_t absFirstFrame){
+    if(!jp||!jp->wa)return;
+    StreamJob& j=*jp; StreamWave& w=*j.wa;
     std::lock_guard<std::mutex> lk(w.m);
     if(w.started&&absFirstFrame!=w.firstAbs+w.fed){   // seek/reinicio: o PCM novo nao emenda com o anterior
         w.started=false; w.env.clear(); w.spec.clear(); w.envAcc=0; w.envN=0; w.specSince=0; w.rpos=0; w.fed=0; ++w.gen;
     }
-    if(!w.started){ w.firstAbs=absFirstFrame; w.rate=j->st&&j->st->rate?j->st->rate:48000; w.envHop=std::max(256u,(uint32_t)(w.rate/20)); w.specHop=w.envHop; w.started=true; }
+    if(!w.started){ w.firstAbs=absFirstFrame; w.rate=j.st&&j.st->rate?j.st->rate:48000; w.envHop=std::max(256u,(uint32_t)(w.rate/20)); w.specHop=w.envHop; w.started=true; }
     const int NB=48;
     for(size_t k=0;k+1<nSamples;k+=2){
         float l=(float)s16[k],r=(float)s16[k+1];
         float v=(l+r)*0.5f/32768.f; if(v<0.f)v=-v;
         if(v>w.envAcc)w.envAcc=v;
         ++w.envN;
-        float mono=std::min(32767.f,std::max(-32767.f,(l+r)*0.5f));   // janela (mono s16)
+        float mono=(l+r)*0.5f/32768.f;   // janela (mono) em [-1,1], mesma escala da musica local
         w.ring[w.rpos]=mono; w.rpos=(w.rpos+1)%2048;
         ++w.specSince;
         if(w.specSince>=(size_t)w.specHop){
@@ -522,14 +528,21 @@ void StreamWavePump(int jobId,const int16_t* s16,size_t nSamples,uint64_t absFir
 // Publica o que ja chegou do streaming em WS() (mesmo formato da musica local). Throttled.
 static int g_pubStreamId=0; static unsigned long g_pubGen=0; static size_t g_pubSpecN=(size_t)-1; static ULONGLONG g_pubDataAt=0;
 static void PublishStreamWave(){
-    if(!g_player.loaded||!g_player.IsStream()){ g_pubStreamId=0; g_pubDataAt=0; return; }
+    if(!g_player.loaded||!g_player.IsStream()){ g_pubStreamId=0; g_pubDataAt=0; g_streamAheadMs=0; return; }
     std::shared_ptr<StreamJob> j=FindStreamId(g_curStreamId);
     if(!j||!j->wa)return;
     StreamWave& w=*j->wa;
     std::lock_guard<std::mutex> lk(w.m);
     if(!w.started)return;
     if(j->id!=g_pubStreamId||w.gen!=g_pubGen){ g_pubStreamId=j->id; g_pubGen=w.gen; g_pubSpecN=(size_t)-1; g_pubDataAt=0; }
-    uint64_t rate=w.rate?w.rate:48000, lenFrames=j->st?j->st->lenFrames.load():0;
+    uint64_t rate=w.rate?w.rate:48000;
+    uint64_t L0=j->st?j->st->lenFrames.load():0;          // duracao real (metadados), quando se sabe
+    uint64_t received=w.firstAbs+(uint64_t)w.env.size()*(uint64_t)w.envHop;   // o que ja chegou
+    if(L0==0&&received>0&&g_player.IsStream()){           // sem duracao (URL direta/radio): "duracao" = o que ja chegou
+        g_player.SetStreamLengthMs((DWORD)std::min<uint64_t>(received*1000ULL/rate,0xFFFFFFFFULL));
+    }
+    uint64_t lenFrames=L0?L0:received;                    // denominador da onda: total real ou (crescente) o recebido
+    g_streamAheadMs=(double)received*1000.0/(double)rate; // pontos de dados que ja existem em WS().data/spec
     // espectro: grade de ~50 ms a partir do inicio da musica (gridStart cobre pausa/seeks)
     if(!w.spec.empty()&&w.spec.size()!=g_pubSpecN){
         size_t gridStart=(size_t)((w.firstAbs*1000ULL/rate)/50);

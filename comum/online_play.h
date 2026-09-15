@@ -186,7 +186,7 @@ inline void StreamThread(std::shared_ptr<StreamJob> j) {
                 st->pcm.resize(old + whole / 2);
                 memcpy(&st->pcm[old], carry.data(), whole);
                 carry.erase(0, whole);
-                StreamWavePump(j->id, &st->pcm[old], whole / 2, st->baseFrame + old / 2);   // alimenta a analise de onda/espectro (app_core.h)
+                StreamWavePump(j.get(), &st->pcm[old], whole / 2, st->baseFrame + old / 2);   // alimenta a analise de onda/espectro (app_core.h)
                 if (st->pcm.size() / 2 > KEEP + (uint64_t)60 * rate) {   // descarta de uma vez o que ja tocou ha mais de 1 min
                     uint64_t cur = st->readCursor.load(), keep = cur > (uint64_t)60 * rate ? cur - (uint64_t)60 * rate : 0;
                     if (keep > st->baseFrame) { uint64_t drop = std::min<uint64_t>(keep - st->baseFrame, st->pcm.size() / 2); st->pcm.erase(st->pcm.begin(), st->pcm.begin() + (size_t)drop * 2); st->baseFrame += drop; }

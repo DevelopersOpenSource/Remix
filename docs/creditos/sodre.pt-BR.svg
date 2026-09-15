@@ -1,5 +1,5 @@
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="484" height="200" viewBox="0 0 484 200" role="img" aria-label="Sodre (NinjaZinS2): co-desenvolvedor do Remix, playlists, streaming e versão Linux">
-<title>Sodre (NinjaZinS2): co-desenvolvedor do Remix, playlists, streaming e versão Linux</title>
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="484" height="200" viewBox="0 0 484 200" role="img" aria-label="Sodre (NinjaZinS2): autor do Remix, streaming online e versão Linux">
+<title>Sodre (NinjaZinS2): autor do Remix, streaming online e versão Linux</title>
 <defs>
 <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#0B1228"/><stop offset="1" stop-color="#050712"/></linearGradient>
 <linearGradient id="acc" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#2896FF"/><stop offset="1" stop-color="#8B5CF6"/></linearGradient>
@@ -36,15 +36,13 @@
 <circle cx="376" cy="42" r="11" fill="#0C2545" stroke="#2896FF" stroke-width="1.6"/>
 <path d="M372.8 36.4 L382 42 L372.8 47.6 Z" fill="#2896FF"/>
 <text x="450" y="46.6" text-anchor="end" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="13" font-weight="800" letter-spacing="2" fill="#2896FF">REMIX</text>
-<text x="184" y="48" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="2.6" fill="#6FA8FF">CO-DESENVOLVEDOR</text>
+<text x="184" y="48" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="2.6" fill="#6FA8FF">AUTOR</text>
 <text x="184" y="80" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" fill="#EBECF2">Sodre.exe/.rpm/.deb</text>
 <text x="184" y="102" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#8A93AD">github.com/NinjaZinS2</text>
-<rect x="184.0" y="118" width="84.6" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
-<text x="226.3" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="65.8" lengthAdjust="spacingAndGlyphs">PLAYLISTS</text>
-<rect x="276.6" y="118" width="84.6" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
-<text x="318.9" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="65.8" lengthAdjust="spacingAndGlyphs">STREAMING</text>
-<rect x="369.2" y="118" width="55.0" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
-<text x="396.7" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="36.2" lengthAdjust="spacingAndGlyphs">LINUX</text>
+<rect x="184.0" y="118" width="136.4" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
+<text x="252.2" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="117.6" lengthAdjust="spacingAndGlyphs">STREAMING ONLINE</text>
+<rect x="328.4" y="118" width="106.8" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
+<text x="381.8" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="88.0" lengthAdjust="spacingAndGlyphs">VERSÃO LINUX</text>
 <rect x="184" y="166.5" width="264" height="3" rx="1.5" fill="#1A2140"/>
 <rect x="184" y="166.5" width="100.3" height="3" rx="1.5" fill="url(#acc)"/>
 <circle cx="284.3" cy="168" r="5" fill="#2896FF"/>
