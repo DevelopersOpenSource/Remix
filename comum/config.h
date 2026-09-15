@@ -100,6 +100,7 @@ struct Config {
     std::wstring theme = L"azul";
     std::wstring displayMode = L"normal"; // normal | vertical  (layout)
     std::wstring artShape = L"square";    // square | cd       (aparencia da capa)
+    int cdSpeed = 33;                     // velocidade de giro do CD, % da antiga (100 = original; padrao ~3x mais lento)
     int listMode = 0;                     // 0 = grade de cards, 1 = lista simples
     int ledBrightness = 100;
     int ledSpeed = 75;
@@ -398,6 +399,7 @@ struct Config {
             else if (k == L"Theme") theme = v;
             else if (k == L"DisplayMode") displayMode = v;
             else if (k == L"ArtShape") artShape = v;
+            else if (k == L"CdSpeed") cdSpeed = _wtoi(v.c_str());
             else if (k == L"ListMode") listMode = _wtoi(v.c_str());
             else if (k == L"Brightness") ledBrightness = _wtoi(v.c_str());
             else if (k == L"Speed") ledSpeed = _wtoi(v.c_str());
@@ -467,6 +469,7 @@ struct Config {
         else if (displayMode == L"cd") { displayMode = L"normal"; artShape = L"cd"; }
         else if (displayMode == L"vertical") { if (artShape != L"square") artShape = L"cd"; }
         if (artShape != L"square" && artShape != L"cd") artShape = L"square";
+        cdSpeed = std::max(0, std::min(200, cdSpeed));
         if (sortMode != L"title" && sortMode != L"artist" && sortMode != L"file" && sortMode != L"date" && sortMode != L"manual") sortMode = L"title";
         Clamp();
     }
@@ -496,6 +499,7 @@ struct Config {
         ls.push_back(L"Theme=" + theme);
         ls.push_back(L"DisplayMode=" + displayMode);
         ls.push_back(L"ArtShape=" + artShape);
+        swprintf(b, 64, L"CdSpeed=%d", cdSpeed); ls.push_back(b);
         swprintf(b, 64, L"ListMode=%d", listMode ? 1 : 0); ls.push_back(b);
         swprintf(b, 64, L"Volume=%d", volume); ls.push_back(b);
         ls.push_back(L"Shuffle="); ls.back() += shuffle ? L"1" : L"0";

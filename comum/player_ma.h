@@ -285,6 +285,7 @@ public:
         return true;
     }
     bool IsStream() const { return streamDs != nullptr; }
+    std::shared_ptr<PcmStream> SharedStream() const { return streamKeep; }   // buffer vivo do streaming (para a analise de onda/espectro)
     void SetStreamLengthMs(DWORD ms) { if (streamDs) { cachedLenMs = ms; streamDs->st->lenFrames = (uint64_t)ms * streamDs->st->rate / 1000; } }
 
     void Close() {

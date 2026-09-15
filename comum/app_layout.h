@@ -41,12 +41,13 @@ static void LayoutSettings(int w,int h){
         y+=152;
     };
     auto sectMode=[&](int x,int& y,int cw){
-        sect(x,y,cw,118,L"MODO DE EXIBIÇÃO");
+        sect(x,y,cw,186,L"MODO DE EXIBIÇÃO");
         int mw3=(cw-60)/3;
         R_settingsModeSquare={x+20,y+58,x+20+mw3,y+94};
         R_settingsModeCd={x+30+mw3,y+58,x+30+mw3*2,y+94};
         R_settingsModeVertical={x+40+mw3*2,y+58,x+cw-20,y+94};
-        y+=138;
+        slider(Z_CD_SPEED,x+20,y+122,cw-110,0,200);
+        y+=208;
     };
     auto sectThemes=[&](int x,int& y,int cw){
         sect(x,y,cw,120,L"TEMAS");

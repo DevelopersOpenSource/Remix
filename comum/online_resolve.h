@@ -60,31 +60,10 @@ inline std::vector<std::wstring> OToolDirs() {
     std::vector<std::wstring> d;
     auto split = [&](const std::wstring& list, wchar_t sep) { size_t st = 0; while (st <= list.size()) { size_t e = list.find(sep, st); std::wstring x = list.substr(st, e == std::wstring::npos ? std::wstring::npos : e - st); if (!x.empty()) d.push_back(x); if (e == std::wstring::npos) break; st = e + 1; } };
 #ifdef _WIN32
-    d.push_back(Config::ExeDir()); d.push_back(Config::Join(Config::ExeDir(), L"tools"));
-    d.push_back(Config::BaseDir()); d.push_back(Config::Join(Config::BaseDir(), L"tools")); d.push_back(Config::Join(Config::BaseDir(), L"ffmpeg"));
-    std::vector<wchar_t> buf(32768);
-    if (GetEnvironmentVariableW(L"PATH", buf.data(), (DWORD)buf.size())) split(buf.data(), L';');
-    auto env = [&](const wchar_t* n) -> std::wstring { wchar_t b[1024]; DWORD k = GetEnvironmentVariableW(n, b, 1024); return (k && k < 1024) ? std::wstring(b) : L""; };
-    std::wstring la = env(L"LOCALAPPDATA"), up = env(L"USERPROFILE"), pd = env(L"ProgramData");
-    if (!la.empty()) d.push_back(la + L"\\Microsoft\\WinGet\\Links");
-    if (!up.empty()) { d.push_back(up + L"\\.deno\\bin"); d.push_back(up + L"\\scoop\\shims"); }
-    if (!pd.empty()) d.push_back(pd + L"\\chocolatey\\bin");
-    // PATH gravado no registro: sem o modo desenvolvedor o winget poe a pasta do programa
-    // ali, e o Remix aberto pelo Explorer logo depois ainda nao recebeu esse PATH novo
-    auto regPath = [&](HKEY root, const wchar_t* key) {
-        const DWORD fl = RRF_RT_REG_SZ | RRF_RT_REG_EXPAND_SZ | RRF_NOEXPAND;
-        DWORD sz = 0;
-        if (RegGetValueW(root, key, L"Path", fl, NULL, NULL, &sz) != ERROR_SUCCESS || sz < 4) return;
-        std::vector<wchar_t> raw(sz / sizeof(wchar_t) + 2, 0);
-        if (RegGetValueW(root, key, L"Path", fl, NULL, raw.data(), &sz) != ERROR_SUCCESS) return;
-        std::vector<wchar_t> ex(32768, 0);
-        DWORD n = ExpandEnvironmentStringsW(raw.data(), ex.data(), (DWORD)ex.size());
-        split((n && n <= ex.size()) ? std::wstring(ex.data()) : std::wstring(raw.data()), L';');
-    };
-    regPath(HKEY_CURRENT_USER, L"Environment");
-    regPath(HKEY_LOCAL_MACHINE, L"SYSTEM\\CurrentControlSet\\Control\\Session Manager\\Environment");
-    std::wstring pf = env(L"ProgramFiles");
-    if (!pf.empty()) d.push_back(pf + L"\\nodejs");
+    // Versao Windows: as ferramentas musicais (yt-dlp, ffmpeg, deno) ficam SO dentro do
+    // Remix, em <app>\/assets\tools -- nada de instalacao global (pip, winget, chocolatey,
+    // PATH, scoop...): o app nao procura fora dele.
+    d.push_back(Config::Join(Config::AssetDir(), L"tools"));
 #else
     const char* p = std::getenv("PATH"); if (p) split(Utf8ToWide(p), L':');
     const char* h = std::getenv("HOME");

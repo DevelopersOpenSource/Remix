@@ -82,7 +82,7 @@ cp README.md "$PW/" 2>/dev/null || true
 cp README.pt-BR.md "$PW/" 2>/dev/null || true
 cp windows/INSTALAR-DEPENDENCIAS.bat "$PW/INSTALAR-DEPENDENCIAS.bat"
 cp windows/LEIA-ME-PORTATIL.txt "$PW/LEIA-ME.txt"
-mkdir -p "$PW/tools" && printf 'Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe e deno.exe se preferir instalar a mao (sem o winget).\r\nO Remix procura nesta pasta.\r\n' > "$PW/tools/LEIA-ME.txt"
+mkdir -p "$PW/assets/tools" && printf 'Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe e deno.exe se preferir instalar a mao.\r\nO Remix procura nesta pasta.\r\n' > "$PW/assets/tools/LEIA-ME.txt"
 printf '[General]\r\nMusicFolder=Musica\r\n' > "$PW/config.ini"
 OUT="dist/remix-$VER-windows-x64-portable.zip"; rm -f "$OUT"
 (cd "$ROOT/build/portable-win" && zip -qr "$ROOT/$OUT" "remix-$VER-windows-x64")

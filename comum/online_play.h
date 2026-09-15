@@ -27,9 +27,24 @@ inline std::vector<std::wstring> OUnpack(const std::wstring& s) { std::vector<st
 static const int STREAM_PREFETCH_SEC = 75;
 static const int STREAM_AHEAD_SEC = 6 * 60;
 static const int STREAM_KEEP_SEC = 10 * 60;   // buffer total antes de descartar o que ja tocou
+// Analise incremental do streaming: o canal decodifica e entrega o PCM aqui; o app_core
+// converte em envelope (onda) e espectro (barras), igual ao que a musica local mostra.
+struct StreamWave {
+    std::mutex m;
+    bool started = false; unsigned long gen = 0;
+    uint64_t firstAbs = 0;            // frame absoluto do primeiro dado analisado
+    uint32_t rate = 48000;
+    int envHop = 2400, specHop = 2400;// *frames* (~50 ms por bucket/banda)
+    size_t fed = 0;                   // frames mono ja analisados (para detectar salto/seek)
+    float envAcc = 0; size_t envN = 0;
+    std::vector<float> env;           // um valor por envHop, 0..1
+    float ring[2048]; size_t rpos = 0; size_t specSince = 0;
+    std::vector<float> spec;          // frames*48 bandas (a cada specHop)
+};
 struct StreamJob {
     int id = 0; OTrack t;
     std::shared_ptr<PcmStream> st;
+    std::shared_ptr<StreamWave> wa;   // frente de analise (criada abaixo)
     std::atomic<bool> stop{ false }, prefetch{ false }, ready{ false };
     std::atomic<int> phase{ 0 };                  // 1 procurando, 2 conectando, 3 recebendo, 4 recebido inteiro, 5 erro, 6 pronta esperando a vez
     std::atomic<int> durSec{ 0 };
@@ -171,6 +186,7 @@ inline void StreamThread(std::shared_ptr<StreamJob> j) {
                 st->pcm.resize(old + whole / 2);
                 memcpy(&st->pcm[old], carry.data(), whole);
                 carry.erase(0, whole);
+                StreamWavePump(j->id, &st->pcm[old], whole / 2, st->baseFrame + old / 2);   // alimenta a analise de onda/espectro (app_core.h)
                 if (st->pcm.size() / 2 > KEEP + (uint64_t)60 * rate) {   // descarta de uma vez o que ja tocou ha mais de 1 min
                     uint64_t cur = st->readCursor.load(), keep = cur > (uint64_t)60 * rate ? cur - (uint64_t)60 * rate : 0;
                     if (keep > st->baseFrame) { uint64_t drop = std::min<uint64_t>(keep - st->baseFrame, st->pcm.size() / 2); st->pcm.erase(st->pcm.begin(), st->pcm.begin() + (size_t)drop * 2); st->baseFrame += drop; }
@@ -222,7 +238,7 @@ inline void StreamThread(std::shared_ptr<StreamJob> j) {
 }
 inline std::shared_ptr<StreamJob> StartStreamJob(const OTrack& t, bool prefetch) {
     auto j = std::make_shared<StreamJob>();
-    j->t = t; j->st = std::make_shared<PcmStream>(); j->prefetch = prefetch;
+    j->t = t; j->st = std::make_shared<PcmStream>(); j->prefetch = prefetch; j->wa = std::make_shared<StreamWave>();
     { std::lock_guard<std::mutex> lk(SPool().m); j->id = SPool().nextId++; SPool().jobs.push_back(j); }
     std::thread([j] {
         bool crashed = true;

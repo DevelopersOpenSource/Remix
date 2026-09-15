@@ -171,7 +171,7 @@ static void OnMouseDragSlider(int x){
         float frac=(float)(x-s.r.left)/(float)std::max<int>(1,s.r.right-s.r.left);frac=std::max(0.f,std::min(1.f,frac));
         int val=(int)std::lround(s.minv+frac*(s.maxv-s.minv));
         if(IsEqId(s.id)){ g_cfg.eq[s.id-Z_EQ_BASE]=val; ApplyEqNow(); break; }
-        switch(s.id){case Z_UI_SCALE:g_cfg.uiScale=val;break;case Z_TITLE_SCALE:g_cfg.titleScale=val;break;case Z_ARTIST_SCALE:g_cfg.artistScale=val;break;case Z_VERTICAL_SCALE:g_cfg.verticalScale=val;break;case Z_PLAYER_SIZE_SLIDER:g_cfg.playerScale=val;break;case Z_LED_BRIGHT:g_cfg.ledBrightness=val;break;case Z_LED_SPEED:g_cfg.ledSpeed=val;break;case Z_RUNNER_SPEED:g_cfg.runnerSpeed=val;break;case Z_PART_SPEED:g_cfg.particlesSpeed=val;break;default:g_cfg.ledSpeed=val;break;}
+        switch(s.id){case Z_UI_SCALE:g_cfg.uiScale=val;break;case Z_TITLE_SCALE:g_cfg.titleScale=val;break;case Z_ARTIST_SCALE:g_cfg.artistScale=val;break;case Z_VERTICAL_SCALE:g_cfg.verticalScale=val;break;case Z_PLAYER_SIZE_SLIDER:g_cfg.playerScale=val;break;case Z_LED_BRIGHT:g_cfg.ledBrightness=val;break;case Z_LED_SPEED:g_cfg.ledSpeed=val;break;case Z_RUNNER_SPEED:g_cfg.runnerSpeed=val;break;case Z_PART_SPEED:g_cfg.particlesSpeed=val;break;case Z_CD_SPEED:g_cfg.cdSpeed=val;break;default:g_cfg.ledSpeed=val;break;}
         break;
     }
     g_cfg.Clamp();BuildLayout();
@@ -367,7 +367,7 @@ static void OnLButtonDown(int x,int y){
         if(g_player.loaded&&g_player.GetLengthMs()>0){float frac=(float)(x-R_waveDragRect.left)/(float)std::max<int>(1,R_waveDragRect.right-R_waveDragRect.left);frac=std::max(0.f,std::min(1.f,frac));g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}
         return;
     }
-    if(id==Z_UI_SCALE||id==Z_TITLE_SCALE||id==Z_ARTIST_SCALE||id==Z_VERTICAL_SCALE||id==Z_PLAYER_SIZE_SLIDER||id==Z_LED_BRIGHT||id==Z_LED_SPEED||id==Z_RUNNER_SPEED||id==Z_PART_SPEED||IsEqId(id)){g_dragSeek=id;OnMouseDragSlider(x);return;}
+    if(id==Z_UI_SCALE||id==Z_TITLE_SCALE||id==Z_ARTIST_SCALE||id==Z_VERTICAL_SCALE||id==Z_PLAYER_SIZE_SLIDER||id==Z_LED_BRIGHT||id==Z_LED_SPEED||id==Z_RUNNER_SPEED||id==Z_PART_SPEED||id==Z_CD_SPEED||IsEqId(id)){g_dragSeek=id;OnMouseDragSlider(x);return;}
     if(g_showSettings) return;
     if(id>=Z_COVER_BASE&&id<Z_COVER_BASE+Z_TRACK_RANGE){int i=id-Z_COVER_BASE;if(i>=0&&i<(int)g_tracks.size()){
         RECT anchor=(i<(int)R_cardCoverButtons.size()&&R_cardCoverButtons[i].right>R_cardCoverButtons[i].left)?R_cardCoverButtons[i]:R_verticalCoverButton;

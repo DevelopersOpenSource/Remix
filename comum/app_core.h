@@ -112,6 +112,9 @@ enum : int {
     EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY,
     EV_PICK_DLONCE   // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
 };
+// Analise incremental do streaming (online_play.h entrega o PCM; esta converte em
+// onda/espectro e a UI publica em WS() para a musica online mostrar como a local).
+void StreamWavePump(int jobId, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
 #include "online_play.h"
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
@@ -157,7 +160,7 @@ enum : int {
     Z_SETTINGS_DEFAULT, Z_SETTINGS_CUSTOM, Z_SETTINGS_MODE_SQUARE, Z_SETTINGS_MODE_CD, Z_SETTINGS_MODE_VERTICAL,
     Z_RUNNER_TOGGLE=600, Z_RUNNER_SPEED=605, Z_RUNNER_COLOR_BASE=610, Z_BTN_PLAY_BASE=630, Z_BTN_NAV_BASE=650,
     Z_PARTICLES_TOGGLE=670, Z_GLITCH_TOGGLE=671, Z_PLAYER_SIZE_SLIDER=672, Z_AUTOCOLOR_TOGGLE=673,
-    Z_SET_WALL_CHOOSE=674, Z_CLR_WALLPAPER=675, Z_COVERBLUR_TOGGLE=676,
+    Z_SET_WALL_CHOOSE=674, Z_CLR_WALLPAPER=675, Z_COVERBLUR_TOGGLE=676, Z_CD_SPEED=677,
     Z_PART_SPEED=680, Z_LED_COLOR_BASE=684, Z_PART_COLOR_BASE=704,
     Z_EQ_BASE=740, Z_SET_AUTOPLAY=760, Z_SET_SORT=761, Z_SET_SORTDIR=762, Z_EQ_ON=763, Z_EQ_RESET=764,
     Z_AUTOPLAY=765, Z_SORT=766, Z_VOL_ICON=767, Z_FOLDER_BTN=768, Z_CONFIRM_YES=769, Z_CONFIRM_NO=770, Z_PERF_TOGGLE=771, Z_BG_TOGGLE=772, Z_QUIT_BTN=773, Z_SYSMEDIA_TOGGLE=774, Z_TAB_TRACKS=780, Z_TAB_PLAYLISTS=781, Z_SEARCH_BOX=782, Z_SEARCH_CLEAR=783, Z_PL_BACK=784, Z_PL_NEW=785, Z_HK_RESET=786,
@@ -478,6 +481,82 @@ static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
     float rise=1.f-powf(1.f-.55f,tick), fall=1.f-powf(.86f,tick);
     for(int k=0;k<48;k++){float o=W.bands[k],t=v[k];W.bands[k]=(t>o)?o+(t-o)*rise:o+(t-o)*fall;}
     W.hasSpec=true;
+}
+
+// ---- analise incremental do streaming (a musica online mostra a onda/espectro real) ----
+// O canal de streaming chama este aqui com o PCM que chega; a UI publica em WS() no Tick.
+void StreamWavePump(int jobId,const int16_t* s16,size_t nSamples,uint64_t absFirstFrame){
+    std::shared_ptr<StreamJob> j=FindStreamId(jobId);
+    if(!j||!j->wa)return;
+    StreamWave& w=*j->wa;
+    std::lock_guard<std::mutex> lk(w.m);
+    if(w.started&&absFirstFrame!=w.firstAbs+w.fed){   // seek/reinicio: o PCM novo nao emenda com o anterior
+        w.started=false; w.env.clear(); w.spec.clear(); w.envAcc=0; w.envN=0; w.specSince=0; w.rpos=0; w.fed=0; ++w.gen;
+    }
+    if(!w.started){ w.firstAbs=absFirstFrame; w.rate=j->st&&j->st->rate?j->st->rate:48000; w.envHop=std::max(256u,(uint32_t)(w.rate/20)); w.specHop=w.envHop; w.started=true; }
+    const int NB=48;
+    for(size_t k=0;k+1<nSamples;k+=2){
+        float l=(float)s16[k],r=(float)s16[k+1];
+        float v=(l+r)*0.5f/32768.f; if(v<0.f)v=-v;
+        if(v>w.envAcc)w.envAcc=v;
+        ++w.envN;
+        float mono=std::min(32767.f,std::max(-32767.f,(l+r)*0.5f));   // janela (mono s16)
+        w.ring[w.rpos]=mono; w.rpos=(w.rpos+1)%2048;
+        ++w.specSince;
+        if(w.specSince>=(size_t)w.specHop){
+            w.specSince=0;
+            float re[2048],im[2048];
+            for(int i=0;i<2048;i++){ float a=6.2831853f*(float)i/2047.f; re[i]=w.ring[(w.rpos+i)%2048]*(.5f-.5f*cosf(a)); im[i]=0.f; }
+            FftMag(re,im,2048);
+            float mag[1024]; for(int i=0;i<1024;i++)mag[i]=sqrtf(re[i]*re[i]+im[i]*im[i])/(2048.f/4.f);
+            float bands[NB]; SpecBands(mag,1024,w.rate,bands);
+            w.spec.insert(w.spec.end(),bands,bands+NB);
+        }
+    }
+    if(w.envN>=(size_t)w.envHop){
+        w.env.push_back(std::max(0.06f,std::min(1.f,sqrtf(std::max(0.f,w.envAcc)))));
+        w.envN=0; w.envAcc=0;
+    }
+    w.fed+=nSamples/2;
+}
+// Publica o que ja chegou do streaming em WS() (mesmo formato da musica local). Throttled.
+static int g_pubStreamId=0; static unsigned long g_pubGen=0; static size_t g_pubSpecN=(size_t)-1; static ULONGLONG g_pubDataAt=0;
+static void PublishStreamWave(){
+    if(!g_player.loaded||!g_player.IsStream()){ g_pubStreamId=0; g_pubDataAt=0; return; }
+    std::shared_ptr<StreamJob> j=FindStreamId(g_curStreamId);
+    if(!j||!j->wa)return;
+    StreamWave& w=*j->wa;
+    std::lock_guard<std::mutex> lk(w.m);
+    if(!w.started)return;
+    if(j->id!=g_pubStreamId||w.gen!=g_pubGen){ g_pubStreamId=j->id; g_pubGen=w.gen; g_pubSpecN=(size_t)-1; g_pubDataAt=0; }
+    uint64_t rate=w.rate?w.rate:48000, lenFrames=j->st?j->st->lenFrames.load():0;
+    // espectro: grade de ~50 ms a partir do inicio da musica (gridStart cobre pausa/seeks)
+    if(!w.spec.empty()&&w.spec.size()!=g_pubSpecN){
+        size_t gridStart=(size_t)((w.firstAbs*1000ULL/rate)/50);
+        std::vector<float> whole(gridStart+w.spec.size());
+        memcpy(&whole[gridStart],w.spec.data(),w.spec.size()*sizeof(float));
+        { std::lock_guard<std::mutex> lkf(WS().fm); if(j->id==g_pubStreamId&&w.gen==g_pubGen){ WS().spec.swap(whole); WS().specHopMs=50; } }
+        g_pubSpecN=w.spec.size();
+    }
+    // onda: 320 buckets do que ja chegou (com janela equivalente por fração)
+    ULONGLONG now=GetTickCount64();
+    if(!w.env.empty()&&lenFrames>0&&(g_pubDataAt==0||now-g_pubDataAt>400)){
+        g_pubDataAt=now;
+        const size_t buckets=320;
+        std::vector<float> data(buckets,0.f);
+        double flen=(double)lenFrames, first=(double)w.firstAbs, last=(double)w.firstAbs+(double)w.env.size()*(double)w.envHop;
+        for(size_t i=0;i<buckets;i++){
+            double c=buckets>1?(double)i/(double)(buckets-1):0.; c*=flen;
+            double half=flen/(double)buckets*1.45, a=std::max(0.,c-half), b=std::min(flen,c+half);
+            if(b<first)continue;
+            size_t e0=a>first?(size_t)((a-first)/(double)w.envHop):0, e1=b<last?(size_t)((b-first)/(double)w.envHop):w.env.size();
+            if(e1>w.env.size())e1=w.env.size();
+            float mx=0.f; for(size_t e=e0;e<e1;e++)if(w.env[e]>mx)mx=w.env[e];
+            if(mx>0.f)data[i]=std::max(0.06f,std::min(1.f,mx));
+        }
+        std::lock_guard<std::mutex> lock(WS().m);
+        if(j->id==g_pubStreamId&&w.gen==g_pubGen){ WS().data.swap(data); WS().path=L"stream"; }
+    }
 }
 
 // ---- biblioteca ------------------------------------------------------------
@@ -1128,7 +1207,7 @@ static void Tick(float dt){
         ConsumeAutoScan(); PollFolderWatch(); UpdateStreamQueue(); TickJournal();
         float sm=.4f+(g_cfg.ledSpeed/100.f)*1.6f;
         float k=dt/0.04f;
-        if(g_player.playing&&g_cfg.artShape==L"cd")g_rotation+=1.2f*sm*k;
+        if(g_player.playing&&g_cfg.artShape==L"cd")g_rotation+=1.2f*sm*k*(g_cfg.cdSpeed/100.f);
         if(g_rotation>360)g_rotation-=360;
         g_glowPhase+=.08f*sm*k;
         g_runnerPhase+=(.0022f+.0135f*(g_cfg.runnerSpeed/100.f))*sm*k;
@@ -1141,6 +1220,7 @@ static void Tick(float dt){
             else g_player.Pause();
         }
     }
+    PublishStreamWave();
     UpdateSpecBands(g_player.loaded&&g_player.playing, g_player.loaded?g_player.GetPositionMs():0, dt);
 }
 // Inicializacao comum (depois de carregar config e antes da janela).
