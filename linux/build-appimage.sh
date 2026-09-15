@@ -21,20 +21,18 @@ if [ ! -f "$RUNTIME" ]; then
 fi
 chmod +x "$TOOL"
 [ -x build/remix ] || bash linux/build.sh
-# texto enviado pelo site do GitHub a partir do Windows chega com CRLF; o .desktop quebra com isso
-semcr() { install -Dm"$1" /dev/null "$3" && tr -d '\r' < "$2" > "$3"; }
 
 APP="$ROOT/build/AppDir"; rm -rf "$APP"
 install -Dm755 build/remix "$APP/usr/bin/remix"; strip --strip-unneeded "$APP/usr/bin/remix" 2>/dev/null || true
 for f in splash.png open.wav icon.png; do install -Dm644 "assets/branding/$f" "$APP/usr/share/remix/assets/branding/$f"; done
 for f in assets/fonts/*.ttf; do install -Dm644 "$f" "$APP/usr/share/remix/assets/fonts/$(basename "$f")"; done
-for f in assets/themes/*.ini; do semcr 644 "$f" "$APP/usr/share/remix/assets/themes/$(basename "$f")"; done
-semcr 644 linux/remix.desktop "$APP/usr/share/applications/remix.desktop"
-semcr 644 linux/remix.desktop "$APP/remix.desktop"
+for f in assets/themes/*.ini; do install -Dm644 "$f" "$APP/usr/share/remix/assets/themes/$(basename "$f")"; done
+install -Dm644 linux/remix.desktop "$APP/usr/share/applications/remix.desktop"
+install -Dm644 linux/remix.desktop "$APP/remix.desktop"
 for d in linux/icons/*/; do sz="$(basename "$d")"; install -Dm644 "$d/remix.png" "$APP/usr/share/icons/hicolor/$sz/apps/remix.png"; done
 install -Dm644 linux/icons/256x256/remix.png "$APP/remix.png"
 ln -sf remix.png "$APP/.DirIcon"
-semcr 644 linux/packaging/copyright "$APP/usr/share/doc/remix/copyright"
+install -Dm644 linux/packaging/copyright "$APP/usr/share/doc/remix/copyright"
 cat > "$APP/AppRun" <<'RUN'
 #!/bin/sh
 HERE="$(dirname "$(readlink -f "$0")")"

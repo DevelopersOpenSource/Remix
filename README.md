@@ -15,13 +15,12 @@ Spotify, Deezer and Apple Music** links.
 ## Credits
 
 <p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: author of Remix, original idea and Windows version" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): co-developer, playlists, streaming and Linux version" width="48%"></a>
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: co-author, original idea and Windows version" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): author, online streaming and Linux version" width="48%"></a>
 </p>
 
-**[Nero-2077](https://github.com/Nero-2077)** created Remix: the original idea and the Windows version.
-**Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) joined later as co-developer: worked on the Windows version,
-proposed and built playlists and online music (streaming and downloads), and brought Remix to Linux.
+The idea for Remix and the Windows version came from **[Nero-2077](https://github.com/Nero-2077)**; online streaming
+and the Linux version from **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
 
 ## Download
 

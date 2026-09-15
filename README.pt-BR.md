@@ -8,13 +8,12 @@ English version: [README.md](README.md). Programa pronto para baixar: [Releases]
 ## Créditos
 
 <p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: autor do Remix, ideia original e versão Windows" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming e versão Linux" width="48%"></a>
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: coautor, ideia original e versão Windows" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): autor, streaming online e versão Linux" width="48%"></a>
 </p>
 
-**[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows.
-**Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) entrou depois como co-desenvolvedor: participou da versão Windows,
-sugeriu e desenvolveu as playlists e a música online (streaming e downloads) e levou o Remix para o Linux.
+A ideia do Remix e a versão Windows vieram do **[Nero-2077](https://github.com/Nero-2077)**; o streaming online e a
+versão Linux, do **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
 
 ## Pastas
 
