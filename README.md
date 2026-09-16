@@ -118,6 +118,10 @@ bash linux/build-windows.sh              # cross-compiles windows/Remix.exe with
 Double-click `windows\COMPILAR.bat`. It uses MinGW-w64 GCC (MSYS2 UCRT64, WinLibs, Scoop or Chocolatey)
 and explains how to install it when missing. Manual commands: [windows/LEIA-ME.txt](windows/LEIA-ME.txt).
 
+## Android (work in progress)
+
+The plan for the Android port (reusing the raylib shell, pinned toolchain under `third_party/android`, APK built without Gradle) is in [docs/ANDROID.md](docs/ANDROID.md) (Portuguese); `docs/android-exemplo.zip` holds the example `android/` folder.
+
 ## Project layout
 
 | Folder | Contents |

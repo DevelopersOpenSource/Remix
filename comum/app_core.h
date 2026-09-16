@@ -276,7 +276,8 @@ struct WebDlState{std::mutex m;std::wstring path;bool ok=false;};
 static WebDlState& WDS(){static WebDlState* s=new WebDlState();return *s;}
 
 static bool PtIn(const RECT& r, int x, int y){ return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom; }
-static float S(float v){ return v * g_cfg.uiScale / 100.0f; }
+static float g_dpiMul = 1.f;   // casca: densidade da tela (celular = 2x..4x); 1 no desktop
+static float S(float v){ return v * g_cfg.uiScale / 100.0f * g_dpiMul; }
 static int SI(int v){ return (int)std::lround(S((float)v)); }
 static float TextScale(int base, int pct){ return S((float)base) * pct / 100.0f; }
 static bool FxOn(){ return !g_cfg.perfMode&&!g_safeMode; }     // efeitos pesados (particulas, glitch, corredor, blur)

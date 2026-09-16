@@ -277,6 +277,10 @@ da biblioteca ou mexia em escala/LED/modo (IDs de clique repetidos); PASTA com u
 aberta trocava a biblioteca inteira; aviso de lista vazia por cima da barra; trocar de pasta
 durante uma varredura podia deixar a lista vazia; `--home` abre instancia separada.
 
+## Android (em andamento)
+
+A estrutura para o porte Android (casca raylib reaproveitada, toolchain pinado em `third_party/android`, APK sem Gradle) esta em [docs/ANDROID.md](docs/ANDROID.md); o zip `docs/android-exemplo.zip` traz a pasta `android/` de exemplo.
+
 ## Linux (portátil, .deb, .rpm e AppImage)
 
 A versao Linux vive em `linux/` (raylib) e compartilha com o Windows o nucleo inteiro que

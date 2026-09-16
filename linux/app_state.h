@@ -4,7 +4,11 @@
 // em app_core.h (compartilhada com o Windows).
 #include "app_core.h"
 #include "gfx.h"
+#if defined(__ANDROID__)
+#include "sys_android.h"   // casca Android (docs/ANDROID.md): mesma API sys::, sem zenity/inotify/socket
+#else
 #include "sys_linux.h"
+#endif
 #include <ctime>
 
 using gfx::RectF;
