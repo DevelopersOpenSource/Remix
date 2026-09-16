@@ -18,7 +18,7 @@
 param(
   [switch]$SoWindows,
   [switch]$SoLinux,
-  [string]$Versao = '1.2.0'
+  [string]$Versao = '1.2.1'
 )
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)   # raiz do projeto (pasta de cima)
