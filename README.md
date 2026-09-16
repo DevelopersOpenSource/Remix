@@ -85,6 +85,7 @@ inside the `.zip`) and that your antivirus did not quarantine it.
 - Streaming or download can be chosen globally or per playlist. A small journal in the cache lets the app clean up interrupted downloads on the next start.
 
 **Look and feel**
+- Three interface styles (Settings > INTERFACE STYLE): **Classic** (the original look: theme-colored outlines, LED glow, transport on every card), **Clean** (neutral grays, flat surfaces, theme color only on what is playing, no LED) and **Spotify + LED** (Clean with the LED glow and light runner on). The choice is saved as `Style=` in config.ini.
 - Square, CD or compact vertical layout; grid or list; themes; LED glow, particles and glitch effects (with a light mode for slower PCs); 8-band equalizer.
 
 **Desktop integration**

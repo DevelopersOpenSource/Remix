@@ -6,7 +6,7 @@
 #   dist/*-linux-x86_64-portable.zip pasta portatil Linux
 #   dist/Remix-*-x86_64.AppImage     AppImage (um arquivo, qualquer distro)
 #   dist/windows/Remix.exe + windows/Remix.exe + dist/*-windows-x64-portable.zip   (cross-compilado com MinGW-w64)
-# Uso: bash linux/build-all.sh   (REMIX_VERSION=1.2.1 bash linux/build-all.sh para mudar a versao)
+# Uso: bash linux/build-all.sh   (REMIX_VERSION=1.3.0 bash linux/build-all.sh para mudar a versao)
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"

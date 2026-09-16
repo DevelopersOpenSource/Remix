@@ -266,7 +266,7 @@ int main(int argc,char** argv){
         if(exitAfter>0&&GetTickCount64()-t0>=(ULONGLONG)exitAfter) break;
         if(g_quit) break;
         if(g_hiddenToBg){ PollInputEvents(); WaitTime(0.05); continue; }   // 2o plano: sem desenhar
-        Vector2 mp=GetMousePosition(); int mx=(int)mp.x,my=(int)mp.y;
+        Vector2 mp=GetMousePosition(); int mx=(int)mp.x,my=(int)mp.y; g_mouseX=mx; g_mouseY=my;
         if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) OnLButtonDown(mx,my);
         else if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)&&g_dragSeek!=-1) OnMouseDrag(mx);
         if(IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) OnLButtonUp();

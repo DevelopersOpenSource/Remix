@@ -223,7 +223,10 @@ static LRESULT WndProcImpl(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp){
         if(!g_showSplash&&!AnyOverlay()&&!g_showSettings&&PtIn(R_titlebar,p.x,p.y)&&HitTest(p.x,p.y)<0)return HTCAPTION;return HTCLIENT;}
     case WM_LBUTTONDOWN:{ int x=(SHORT)LOWORD(lp),y=(SHORT)HIWORD(lp); OnLButtonDown(x,y); if(g_dragSeek!=-1) SetCapture(hwnd); InvalidateRect(hwnd,NULL,FALSE); return 0; }
     case WM_RBUTTONDOWN:{ int x=(SHORT)LOWORD(lp),y=(SHORT)HIWORD(lp); OnRButtonDown(x,y); InvalidateRect(hwnd,NULL,FALSE); return 0; }
-    case WM_MOUSEMOVE:{ if((wp&MK_LBUTTON)&&g_dragSeek!=-1){ OnMouseDrag((SHORT)LOWORD(lp)); InvalidateRect(hwnd,NULL,FALSE); } return 0; }
+    case WM_MOUSEMOVE:{ g_mouseX=(SHORT)LOWORD(lp); g_mouseY=(SHORT)HIWORD(lp);   // destaque sob o cursor (estilos novos); o timer redesenha
+        { TRACKMOUSEEVENT tme{sizeof(tme),TME_LEAVE,hwnd,0}; TrackMouseEvent(&tme); }
+        if((wp&MK_LBUTTON)&&g_dragSeek!=-1){ OnMouseDrag((SHORT)LOWORD(lp)); InvalidateRect(hwnd,NULL,FALSE); } return 0; }
+    case WM_MOUSELEAVE:{ g_mouseX=g_mouseY=-9999; return 0; }
     case WM_LBUTTONUP: if(g_dragSeek!=-1){ OnLButtonUp(); ReleaseCapture(); } return 0;
     case WM_MOUSEWHEEL:{ int d=GET_WHEEL_DELTA_WPARAM(wp); OnWheel(d/120); InvalidateRect(hwnd,NULL,FALSE); return 0; }
     case WM_CHAR:{ wchar_t c=(wchar_t)wp;

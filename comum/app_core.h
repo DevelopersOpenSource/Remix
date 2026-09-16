@@ -60,6 +60,17 @@ static void ClearWebResultsPlatform();
 
 // ------------------------------------------------------------ estado -------
 static Config g_cfg;
+#include "app_ui.h"
+// Estilo ativo (configuracoes > ESTILO). O LED e o corredor so existem no classico e no spotify.
+static inline const UiPal& UI(){ return UiPalFor(g_cfg.uiStyle); }
+static inline bool UiClassic(){ return g_cfg.uiStyle==UI_CLASSICO; }
+static inline bool UiGlow(){ return g_cfg.uiStyle!=UI_LIMPO; }
+static inline int  UiLed(){ return UiGlow()?g_cfg.ledBrightness:0; }
+static inline bool UiRunner(){ return UiGlow()&&g_cfg.runnerOn; }
+// Posicao do mouse (cada casca atualiza no seu laco): destaque do card/linha sob o
+// cursor e botoes que so aparecem ali (estilos novos).
+static int g_mouseX=-9999, g_mouseY=-9999;
+static inline bool UiHot(const RECT& r){ return g_mouseX>=r.left&&g_mouseX<r.right&&g_mouseY>=r.top&&g_mouseY<r.bottom; }
 static std::vector<Theme> g_themes;
 static Theme g_theme;
 static std::vector<Track> g_tracks;
@@ -168,6 +179,7 @@ enum : int {
     Z_AUTOPLAY=765, Z_SORT=766, Z_VOL_ICON=767, Z_FOLDER_BTN=768, Z_CONFIRM_YES=769, Z_CONFIRM_NO=770, Z_PERF_TOGGLE=771, Z_BG_TOGGLE=772, Z_QUIT_BTN=773, Z_SYSMEDIA_TOGGLE=774, Z_TAB_TRACKS=780, Z_TAB_PLAYLISTS=781, Z_SEARCH_BOX=782, Z_SEARCH_CLEAR=783, Z_PL_BACK=784, Z_PL_NEW=785, Z_HK_RESET=786,
     Z_TAB_ONLINE=787, Z_PL_ADD=788, Z_PICK_DONE=789, Z_PICK_CANCEL=790, Z_ACTIVITY=791, Z_SET_ON_MODE=792, Z_SET_ON_FMT=793, Z_SET_ON_SRC=794,
     Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810,
+    Z_SETTINGS_STYLE_BASE=820,   // +0 classico, +1 limpo, +2 spotify
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
     Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
@@ -183,6 +195,7 @@ static std::vector<RECT> R_cardCoverButtons;
 static std::vector<RECT> R_cardSeekRects;
 static RECT R_settingsPanel, R_settingsDefault, R_settingsCustom, R_settingsClose;
 static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
+static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spotify
 static RECT R_verticalCoverButton;
 static RECT R_playerPanel;
 static int g_panelArt = 300;
@@ -210,6 +223,8 @@ static int g_setContentH = 0;
 static std::vector<std::pair<RECT,std::wstring>> g_setSections;
 static RECT R_wavePanel, R_waveDragRect, R_shapeTgl, R_listBtn;
 static int g_gridCols = 0, g_contentH = 0;
+static int g_headerH = 0, g_sideW = 0;   // faixas solidas do cabecalho e da lateral (estilos novos)
+static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
 static std::vector<RECT> R_rowUp, R_rowDown;
 static RECT R_setAutoplay, R_setSort, R_setSortDir, R_setEqOn, R_setEqReset;

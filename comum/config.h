@@ -98,6 +98,7 @@ inline bool WriteAllUtf8Lines(const std::wstring& path, const std::vector<std::w
 struct Config {
     std::wstring musicFolder;
     std::wstring theme = L"azul";
+    int uiStyle = 1;                      // estilo da interface: 0 classico, 1 limpo, 2 spotify+LED (app_ui.h)
     std::wstring displayMode = L"normal"; // normal | vertical  (layout)
     std::wstring artShape = L"square";    // square | cd       (aparencia da capa)
     int cdSpeed = 33;                     // velocidade de giro do CD, % da antiga (100 = original; padrao ~3x mais lento)
@@ -398,6 +399,7 @@ struct Config {
             if (k == L"MusicFolder") musicFolder = FromPortable(v);
             else if (k == L"Theme") theme = v;
             else if (k == L"DisplayMode") displayMode = v;
+            else if (k == L"Style") uiStyle = _wtoi(v.c_str());
             else if (k == L"ArtShape") artShape = v;
             else if (k == L"CdSpeed") cdSpeed = _wtoi(v.c_str());
             else if (k == L"ListMode") listMode = _wtoi(v.c_str());
@@ -465,6 +467,7 @@ struct Config {
         }
         if (!hkNovo) MigrateHotkeys();
         // Migracao do formato antigo: "square"/"cd"/"vertical" viviam num campo so.
+        uiStyle = std::max(0, std::min(2, uiStyle));
         if (displayMode == L"square") { displayMode = L"normal"; artShape = L"square"; }
         else if (displayMode == L"cd") { displayMode = L"normal"; artShape = L"cd"; }
         else if (displayMode == L"vertical") { if (artShape != L"square") artShape = L"cd"; }
@@ -498,6 +501,7 @@ struct Config {
         ls.push_back(L"MusicFolder=" + ToPortable(musicFolder));
         ls.push_back(L"Theme=" + theme);
         ls.push_back(L"DisplayMode=" + displayMode);
+        swprintf(b, 64, L"Style=%d", uiStyle); ls.push_back(b);
         ls.push_back(L"ArtShape=" + artShape);
         swprintf(b, 64, L"CdSpeed=%d", cdSpeed); ls.push_back(b);
         swprintf(b, 64, L"ListMode=%d", listMode ? 1 : 0); ls.push_back(b);

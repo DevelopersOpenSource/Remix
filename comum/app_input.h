@@ -55,6 +55,7 @@ static int HitTest(int x,int y){
         if(PtIn(R_settingsModeSquare,x,y)) return Z_SETTINGS_MODE_SQUARE;
         if(PtIn(R_settingsModeCd,x,y)) return Z_SETTINGS_MODE_CD;
         if(PtIn(R_settingsModeVertical,x,y)) return Z_SETTINGS_MODE_VERTICAL;
+        for(int k=0;k<UI_STYLE_COUNT;k++) if(PtIn(R_settingsStyle[k],x,y)) return Z_SETTINGS_STYLE_BASE+k;
         for(auto&s:g_setSliders) if(PtIn(s.hit,x,y)) return s.id;
         if(PtIn(R_setEffect,x,y)) return Z_LED_EFFECT;
         if(PtIn(R_setParticles,x,y)) return Z_PARTICLES_TOGGLE;
@@ -142,8 +143,11 @@ static int HitTest(int x,int y){
         if(R_rowUp[i].right>R_rowUp[i].left&&PtIn(R_rowUp[i],x,y))return Z_ROW_UP_BASE+(int)i;
         if(R_rowDown[i].right>R_rowDown[i].left&&PtIn(R_rowDown[i],x,y))return Z_ROW_DOWN_BASE+(int)i;
     }
-    // Botoes de transporte dos cards ANTES da zona de seek.
-    if(g_cfg.listMode==0) for(size_t i=0;i<R_cardRects.size();++i){
+    // Estilos novos: botao de play sobre a capa (faixa atual: pausa/continua; outra: toca).
+    if(!UiClassic()&&g_cfg.listMode==0) for(size_t i=0;i<R_cardPlayBtns.size();++i)
+        if(R_cardPlayBtns[i].right>R_cardPlayBtns[i].left&&PtIn(R_cardPlayBtns[i],x,y)) return (int)i==g_current?Z_PLAYPAUSE:(Z_TRACK_BASE+(int)i);
+    // Classico: botoes de transporte dos cards ANTES da zona de seek.
+    if(UiClassic()&&g_cfg.listMode==0) for(size_t i=0;i<R_cardRects.size();++i){
         RECT rr=R_cardRects[i];if(rr.right-rr.left<=0)continue;
         int ccx=(rr.left+rr.right)/2, cy=rr.bottom-SI(40);
         bool cur=(int)i==g_current;
@@ -318,6 +322,9 @@ static void OnLButtonDown(int x,int y){
         else if(id==Z_SETTINGS_MODE_CD){g_cfg.displayMode=L"normal";g_cfg.artShape=L"cd";}
         else {g_cfg.displayMode=L"vertical";}
         g_cfg.Save();g_showSettings=false;g_listScroll=0;g_setScroll=0;PlatformResizeForMode();return;}
+    if(id>=Z_SETTINGS_STYLE_BASE&&id<Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT){
+        g_cfg.uiStyle=id-Z_SETTINGS_STYLE_BASE; g_cfg.Save(); g_listScroll=0; BuildLayout();
+        SetStatus(std::wstring(L"Estilo: ")+UiStyleName(g_cfg.uiStyle),2200); return; }
     if(id==Z_LED_EFFECT){g_cfg.ledEffect=g_cfg.ledEffect==L"respiracao"?L"pulso":g_cfg.ledEffect==L"pulso"?L"estatico":L"respiracao";g_cfg.Save();return;}
     if(id==Z_PARTICLES_TOGGLE){g_cfg.particlesOn=!g_cfg.particlesOn;g_cfg.Save();return;}
     if(id==Z_GLITCH_TOGGLE){g_cfg.glitchOn=!g_cfg.glitchOn;g_cfg.Save();return;}
@@ -483,6 +490,7 @@ static void RunAction(const std::string& a){
     else if(a=="list"){g_cfg.listMode=1;BuildLayout();}
     else if(a=="grid"){g_cfg.listMode=0;BuildLayout();}
     else if(a=="settings"){g_showSettings=!g_showSettings;}
+    else if(a.rfind("style:",0)==0){g_cfg.uiStyle=std::max(0,std::min(2,atoi(a.c_str()+6)));BuildLayout();}
     else if(a=="next")NextTrack();
     else if(a=="play")TogglePlayPause();
     else if(a=="autoplay"){g_cfg.autoplay=!g_cfg.autoplay;}

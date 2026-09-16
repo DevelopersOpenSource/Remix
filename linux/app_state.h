@@ -16,11 +16,14 @@ static std::map<std::wstring, Img*> g_thumbCache;
 
 static inline Color ToGdi(COLORREF c, BYTE a=255){ return gfx::Col(c, a); }
 static inline Color Argb(int a,int r,int g,int b){ return gfx::ARGB(a,r,g,b); }
+// Cor por estilo: no classico a cor original; nos estilos novos o token da paleta.
+static inline Color Cs(Color classico,COLORREF novo,BYTE a=255){ return UiClassic()?classico:ToGdi(novo,a); }
 static RectF RF(const RECT& r){ return gfx::FromRECT(r); }
 static RectFC RC(const RectF& r){ return RectFC{r.X,r.Y,r.Width,r.Height}; }
-static const Color C_WHITE = gfx::ARGB(255,235,236,242);
-static const Color C_GRAY  = gfx::ARGB(255,145,147,160);
-static const Color C_GRAY2 = gfx::ARGB(255,150,152,165);
+// Texto: segue a paleta do estilo ativo (app_ui.h). No classico sao as cores originais.
+#define C_WHITE (ToGdi(UI().text))
+#define C_GRAY  (ToGdi(UI().textDim))
+#define C_GRAY2 (ToGdi(UI().textFaint))
 
 static void DrawRoundRect(const RectF& r, float radius, const Color* fill, const Color* pen, float penW=1.f){ gfx::RoundRect(r, radius, fill, pen, penW); }
 

@@ -9,7 +9,7 @@
 %global __brp_check_rpaths %{nil}
 
 Name:           remix
-Version:        %{?remix_version}%{!?remix_version:1.2.1}
+Version:        %{?remix_version}%{!?remix_version:1.3.0}
 Release:        %{?remix_release}%{!?remix_release:1}%{?dist}
 Summary:        Remix Player — player de música MP3/WAV com visual neon
 License:        Apache-2.0 AND zlib AND MIT AND Bitstream-Vera
@@ -54,6 +54,9 @@ cp -a usr %{buildroot}/
 %doc %{_docdir}/%{name}/
 
 %changelog
+* Tue Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.3.0-1
+- Estilo da interface: Classico (original), Limpo e Spotify + LED, escolhido nas configuracoes
+
 * Mon Sep 15 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.2.1-1
 - Onda e espectro corretos na musica online (streaming)
 - Pacotes montados sem CRLF; creditos no README

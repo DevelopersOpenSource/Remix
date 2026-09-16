@@ -33,6 +33,13 @@ static void LayoutSettings(int w,int h){
         return rows;
     };
     auto sect=[&](int x,int y,int cw,int hh,const wchar_t*t){ g_setSections.push_back({{x,y,x+cw,y+hh},t}); };
+    // ESTILO: classico / limpo / spotify+LED (3 botoes iguais + uma linha de explicacao)
+    auto sectStyle=[&](int x,int& y,int cw){
+        sect(x,y,cw,124,L"ESTILO DA INTERFACE");
+        int bw=(cw-60)/3;
+        for(int k=0;k<UI_STYLE_COUNT;k++){ int bx=x+20+k*(bw+10); R_settingsStyle[k]={bx,y+52,bx+bw,y+88}; }
+        y+=144;
+    };
     // secoes comuns as duas larguras
     auto sectLibrary=[&](int x,int& y,int cw){
         sect(x,y,cw,132,L"BIBLIOTECA");
@@ -159,7 +166,7 @@ static void LayoutSettings(int w,int h){
     if(wide){
         int colW=(R-L-40)/2, xr=L+colW+40;
         int y=top;
-        sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
+        sectStyle(L,y,colW); sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
         sectColors(L,y,colW); sectBackground(L,y,colW); sectPlayback(L,y,colW); sectShortcuts(L,y,colW);
         int ry=top;
         sectOnline(xr,ry,colW); sectScales(xr,ry,colW); sectLed(xr,ry,colW); sectButtons(xr,ry,colW); sectRunner(xr,ry,colW); sectEq(xr,ry,colW);
@@ -167,7 +174,7 @@ static void LayoutSettings(int w,int h){
     } else {
         int cw=R-L;
         int cy=top;
-        sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
+        sectStyle(L,cy,cw); sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
         sectColors(L,cy,cw); sectScales(L,cy,cw); sectLed(L,cy,cw); sectButtons(L,cy,cw); sectRunner(L,cy,cw);
         sectBackground(L,cy,cw); sectPlayback(L,cy,cw); sectEq(L,cy,cw); sectShortcuts(L,cy,cw);
         g_setContentH=cy-py;
@@ -180,7 +187,8 @@ static void BuildLayout(){
     int w=g_winW,h=g_winH;
     R_titlebar={0,0,w,44}; R_close={0,0,0,0}; R_min={0,0,0,0};
     R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_volIcon={0,0,0,0};
-    R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_themeCircles.clear();
+    R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_cardPlayBtns.clear(); R_themeCircles.clear();
+    g_headerH=0; g_sideW=0;
     R_rowUp.clear(); R_rowDown.clear();
     R_libBar=R_tabTracks=R_tabPlaylists=R_searchBox=R_searchClear=R_plBack=R_plNew={0,0,0,0};
     R_tabOnline=R_plAdd=R_plMode=R_pickDone=R_pickCancel=R_onlineInfo={0,0,0,0};
@@ -225,6 +233,7 @@ static void BuildLayout(){
         g_listScroll=0;
     } else {
         int headerH=SI(56), margin=SI(24);
+        g_headerH=headerH;
         R_heart={w-SI(96)-chrome,SI(12),w-SI(60)-chrome,SI(50)}; R_gear={w-SI(58)-chrome,SI(10),w-SI(14)-chrome,SI(54)};
         R_listBtn={w-SI(152)-chrome,SI(10),w-SI(100)-chrome,SI(54)};
         R_shapeTgl={SI(92),SI(8),SI(92)+(int)S(170),SI(52)};
@@ -246,7 +255,7 @@ static void BuildLayout(){
         R_art={margin+pad,panelY+pad,margin+pad+art,panelY+pad+art};
         int x0=R_art.left;
         int ay=R_art.bottom+SI(30);
-        int wy=ay+SI(34), wb=wy+SI(38);
+        int wy=UiClassic()?ay+SI(34):ay+SI(38), wb=UiClassic()?wy+SI(38):wy+SI(26);   // estilos novos: onda discreta
         R_wavePanel={x0,wy,x0+art,wb};
         int sy2=wb+SI(18);
         R_seek={x0,sy2-9,x0+art,sy2+9};
@@ -261,6 +270,7 @@ static void BuildLayout(){
         R_vol={x0+SI(30),tcy+SI(46),x0+art-SI(44),tcy+SI(52)};
         R_runnerSlider={R_playerPanel.right-SI(22),R_playerPanel.bottom-SI(22),R_playerPanel.right,R_playerPanel.bottom};
         int gx=R_playerPanel.right+SI(18);
+        if(!UiClassic()){ g_sideW=R_playerPanel.right+margin; gx=g_sideW+SI(20); }   // coluna solida + divisoria
         int gw=w-margin-gx;
         if(gw>=SI(280)){
             // barra da biblioteca: abas MUSICAS/PLAYLISTS (ou voltar + nome da playlist) e a busca
@@ -308,7 +318,7 @@ static void BuildLayout(){
                     else { int bw2=(cardW-SI(40))/2; R_plPlay.push_back({x+SI(16),y+cardH-SI(50),x+SI(16)+bw2,y+cardH-SI(16)}); R_plShuf.push_back({x+SI(24)+bw2,y+cardH-SI(50),x+cardW-SI(16),y+cardH-SI(16)}); }
                 }
             } else {
-                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0});
+                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0});
                 R_rowUp.assign(g_tracks.size(),RECT{0,0,0,0}); R_rowDown.assign(g_tracks.size(),RECT{0,0,0,0});
                 if(g_cfg.listMode!=0){
                     int rowH=SI(64);
@@ -322,7 +332,7 @@ static void BuildLayout(){
                         R_cardRects[i]=rr;
                         if(manual){ R_rowUp[i]={rr.right-SI(74),rr.top+SI(6),rr.right-SI(44),rr.top+SI(28)}; R_rowDown[i]={rr.right-SI(74),rr.top+SI(30),rr.right-SI(44),rr.top+SI(52)}; }
                     }
-                } else {
+                } else if(UiClassic()){
                     int cols=gw>=SI(760)?3:(gw>=SI(500)?2:1);
                     g_gridCols=cols;
                     int gapX=SI(20),gapY=SI(18),cardH=SI(225);
@@ -339,6 +349,28 @@ static void BuildLayout(){
                         // so a linha da barra de seek (nao invade os botoes de transporte)
                         R_cardSeekRects[i]={x+SI(180),y+SI(140),x+cardW-SI(22),y+SI(160)};
                         if(manual){ R_rowUp[i]={x+cardW-SI(42),y+SI(50),x+cardW-SI(14),y+SI(72)}; R_rowDown[i]={x+cardW-SI(42),y+SI(76),x+cardW-SI(14),y+SI(98)}; }
+                    }
+                } else {
+                    // Estilos novos: card em pe (capa grande, nome e artista embaixo). O transporte
+                    // fica so no player; sobre a capa aparece um botao de play quando o mouse passa.
+                    int gapX=SI(18),gapY=SI(20);
+                    int cols=std::max(1,(gw+gapX)/(SI(190)+gapX)); if(cols>6) cols=6;
+                    g_gridCols=cols;
+                    int cardW=(gw-(cols-1)*gapX)/cols;
+                    int cover=cardW-SI(20);
+                    int cardH=cover+SI(74);
+                    g_contentH=(int)(((int)g_visible.size()+cols-1)/cols)*(cardH+gapY);
+                    g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
+                    for(size_t vi=0;vi<g_visible.size();++vi){
+                        size_t i=(size_t)g_visible[vi];
+                        int row=(int)vi/cols,col=(int)vi%cols;
+                        int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
+                        if(y>h||y+cardH<gridTop-SI(40)) continue;
+                        R_cardRects[i]={x,y,x+cardW,y+cardH};
+                        R_cardCoverButtons[i]={x+cardW-SI(44),y+SI(14),x+cardW-SI(18),y+SI(40)};
+                        R_cardSeekRects[i]={0,0,0,0};   // sem seek no card: quem arrasta e a barra do player
+                        R_cardPlayBtns[i]={x+SI(10)+cover-SI(52),y+SI(10)+cover-SI(52),x+SI(10)+cover-SI(8),y+SI(10)+cover-SI(8)};
+                        if(manual){ R_rowUp[i]={x+SI(10),y+cover-SI(40),x+SI(38),y+cover-SI(16)}; R_rowDown[i]={x+SI(42),y+cover-SI(40),x+SI(70),y+cover-SI(16)}; }
                     }
                 }
             }

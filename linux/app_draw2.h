@@ -5,13 +5,13 @@
 #include "app_web.h"
 
 static void DrawSettings(int w,int h){
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(255,5,7,17));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(255,5,7,17),UI().bg));
     RECT rp=R_settingsPanel; int px=rp.left,py=rp.top,pw=rp.right-rp.left,ph=rp.bottom-rp.top;
     Color accent=ToGdi(g_theme.accent);
-    Color white=C_WHITE, gray=C_GRAY2, ab=accent, dim=Argb(255,30,33,48);
+    Color white=C_WHITE, gray=C_GRAY2, ab=accent, dim=Cs(Argb(255,30,33,48),UI().border);
     // Escala FIXA nas configuracoes.
     const float h1=22, lab=13, sm=11, st=14, fBtn=12;
-    gfx::Text(L"CONFIGURAÇÕES",(float)(px+28),(float)(py+20),h1,ab,true);
+    gfx::Text(L"CONFIGURAÇÕES",(float)(px+28),(float)(py+20),h1,UiClassic()?ab:white,true);
     gfx::Text(L"×",(float)(R_settingsClose.left+8),(float)(py+14),S(20),white);
     // conteudo com clip e scroll
     gfx::PushClip(RectF((float)(px+6),(float)(py+56),(float)(pw-12),(float)(ph-64)));
@@ -22,12 +22,19 @@ static void DrawSettings(int w,int h){
     auto btn=[&](RECT rr,const std::wstring& t,bool on){
         RectF b=RF(rr);
         if(b.Width<10||b.Height<10) return;
+        if(!UiClassic()){   // estilos novos: chapa lisa; ligado = tom mais claro, texto branco e um risco do tema embaixo
+            Color fb=ToGdi(on?UI().surfaceHi:UI().surface);
+            DrawRoundRect(b,S(UI_R_PILL),&fb,nullptr);
+            gfx::TextRect(t,b,fBtn,on?white:ToGdi(UI().textDim),true,gfx::Center,true);
+            if(on) gfx::FillRect(b.X+b.Width*.28f,b.Y+b.Height-2.f,b.Width*.44f,2.f,ToGdi(g_theme.accent));
+            return;
+        }
         if(on){
             RectF glow(b.X-2,b.Y-2,b.Width+4,b.Height+4);
             gfx::StrokeRoundRect(glow,14,4.f,ToGdi(g_theme.accent,60));
         }
-        Color fb=on?ToGdi(g_theme.accent,78):Argb(255,18,21,38);
-        Color bp=on?ToGdi(g_theme.accent):Argb(255,64,69,97);
+        Color fb=on?ToGdi(g_theme.accent,78):Cs(Argb(255,18,21,38),UI().surfaceHi);
+        Color bp=on?ToGdi(g_theme.accent):Cs(Argb(255,64,69,97),UI().borderHi);
         DrawRoundRect(b,10,&fb,&bp,on?2.f:1.3f);
         RectF hl(b.X+4,b.Y+2,b.Width-8,b.Height*0.44f);
         Color hb=Argb(on?30:12,255,255,255);
@@ -36,15 +43,18 @@ static void DrawSettings(int w,int h){
     };
     // caixas de secao com titulo
     {
-        Color sfb=Argb(255,12,15,29), sbp=Argb(255,38,42,64), dv=Argb(255,32,36,56);
+        Color sfb=Cs(Argb(255,12,15,29),UI().bar), sbp=Cs(Argb(255,38,42,64),UI().border), dv=Cs(Argb(255,32,36,56),UI().border);
         for(auto&s:g_setSections){
             RectF sr=RF(s.first);
-            DrawRoundRect(sr,12,&sfb,&sbp,1.f);
-            gfx::Text(s.second,sr.X+16,sr.Y+12,st,ab,true);
+            if(UiClassic()) DrawRoundRect(sr,12,&sfb,&sbp,1.f); else DrawRoundRect(sr,S(UI_R_CARD),&sfb,nullptr);
+            gfx::Text(s.second,sr.X+16,sr.Y+12,st,UiClassic()?ab:white,true);
             gfx::Line(sr.X+14,sr.Y+40,sr.X+sr.Width-14.f,sr.Y+40,1.f,dv);
         }
     }
-    for(auto&lp:g_setLabels) gfx::Text(lp.second,(float)lp.first.left,(float)lp.first.top,lab,ab,true);
+    for(auto&lp:g_setLabels) gfx::Text(lp.second,(float)lp.first.left,(float)lp.first.top,lab,UiClassic()?ab:gray,true);
+    // estilo da interface
+    for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
+    gfx::Text(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",(float)R_settingsStyle[0].left,(float)R_settingsStyle[0].bottom+10,sm,gray);
     // biblioteca
     std::wstring mode=g_cfg.musicFolder.empty()?L"PADRÃO — detectar músicas do PC":L"PASTA PERSONALIZADA";
     gfx::Text(mode,(float)R_settingsDefault.left,(float)(R_settingsDefault.top-18),sm,white);
@@ -59,8 +69,8 @@ static void DrawSettings(int w,int h){
     for(size_t i=0;i<R_themeCirclesSettings.size()&&i<g_themes.size();++i){
         auto&r=R_themeCirclesSettings[i]; bool sel=g_themes[i].id==g_cfg.theme;
         RectF rr=RF(r);
-        gfx::FillEllipse(rr,ToGdi(g_themes[i].accent,90));
-        gfx::StrokeEllipse(rr,sel?2.4f:1.3f,sel?C_WHITE:ToGdi(g_themes[i].accent));
+        if(UiClassic()){ gfx::FillEllipse(rr,ToGdi(g_themes[i].accent,90)); gfx::StrokeEllipse(rr,sel?2.4f:1.3f,sel?C_WHITE:ToGdi(g_themes[i].accent)); }
+        else { gfx::FillEllipse(rr,ToGdi(g_themes[i].accent)); if(sel) gfx::StrokeEllipse(RectF(rr.X-3,rr.Y-3,rr.Width+6,rr.Height+6),2.f,C_WHITE); }
     }
     btn(R_setParticles,L"PARTÍCULAS: "+std::wstring(g_cfg.particlesOn?L"LIGADO":L"DESLIGADO"),g_cfg.particlesOn);
     btn(R_setGlitch,L"GLITCH",g_cfg.glitchOn);
@@ -120,7 +130,8 @@ static void DrawSettings(int w,int h){
     auto sname=[&](int id)->const wchar_t*{if(isEq(id))return eqNames[id-Z_EQ_BASE];switch(id){case Z_UI_SCALE:return L"Escala geral";case Z_TITLE_SCALE:return L"Nome da musica";case Z_ARTIST_SCALE:return L"Nome do artista";case Z_VERTICAL_SCALE:return L"Escala do vertical";case Z_PLAYER_SIZE_SLIDER:return L"Tamanho do player";case Z_LED_BRIGHT:return L"Brilho do LED";case Z_RUNNER_SPEED:return L"Velocidade da linha (corredor)";case Z_PART_SPEED:return L"Velocidade das particulas";case Z_CD_SPEED:return L"Velocidade de giro do CD";default:return L"Velocidade do LED";}};
     for(auto&s:g_setSliders){
         int val=sval(s.id); bool eq=isEq(s.id);
-        Color knob=(eq&&!g_cfg.eqOn)?Argb(255,90,94,118):ab;
+        Color knob=(eq&&!g_cfg.eqOn)?Cs(Argb(255,90,94,118),UI().borderHi):(UiClassic()?ab:white);
+        Color fillC=(eq&&!g_cfg.eqOn)?knob:(UiClassic()?ab:ToGdi(UI().textDim));   // novos: preenchimento cinza claro, botao branco
         gfx::Text(sname(s.id),(float)s.r.left,(float)s.r.top-16,sm,gray);
         RectF tr((float)s.r.left,(float)s.r.top,(float)(s.r.right-s.r.left),7);
         DrawRoundRect(tr,3,&dim,nullptr);
@@ -128,14 +139,15 @@ static void DrawSettings(int w,int h){
         int fill=(int)((s.r.right-s.r.left)*std::max(0.f,std::min(1.f,q)));
         if(eq){ // preenche a partir do centro (0 dB)
             int mid=(s.r.right-s.r.left)/2; int a=std::min(mid,fill), b=std::max(mid,fill);
-            if(b-a>1){RectF fr((float)(s.r.left+a),(float)s.r.top,(float)(b-a),7);DrawRoundRect(fr,3,&knob,nullptr);}
-            gfx::Line((float)(s.r.left+mid),(float)s.r.top-3,(float)(s.r.left+mid),(float)s.r.top+10,1,Argb(255,70,74,95));
-        } else if(fill>2){RectF fr((float)s.r.left,(float)s.r.top,(float)fill,7);DrawRoundRect(fr,3,&ab,nullptr);}
+            if(b-a>1){RectF fr((float)(s.r.left+a),(float)s.r.top,(float)(b-a),7);DrawRoundRect(fr,3,&fillC,nullptr);}
+            gfx::Line((float)(s.r.left+mid),(float)s.r.top-3,(float)(s.r.left+mid),(float)s.r.top+10,1,Cs(Argb(255,70,74,95),UI().borderHi));
+        } else if(fill>2){RectF fr((float)s.r.left,(float)s.r.top,(float)fill,7);DrawRoundRect(fr,3,&fillC,nullptr);}
         gfx::FillEllipse((float)(s.r.left+fill-7),(float)(s.r.top-3),14.f,14.f,knob);
         wchar_t bv[24]; if(eq) swprintf(bv,24,L"%+d dB",val); else swprintf(bv,24,L"%d%%",val);
         gfx::Text(bv,(float)(s.r.right+10),(float)(s.r.top-5),sm,white);
     }
     btn(R_setEffect,L"Efeito: "+g_cfg.ledEffect+L" ▾",false);
+    if(!UiGlow()) gfx::Text(L"No estilo Limpo o LED e o corredor ficam desligados (escolha Clássico ou Spotify + LED).",(float)R_setEffect.right+14,(float)R_setEffect.top+8,sm,gray);
     // linhas de cor (indice 0 = segue tema)
     auto rowIdAt=[&](size_t i)->std::wstring{
         if(i==0) return L"";
@@ -158,7 +170,7 @@ static void DrawSettings(int w,int h){
             }
             bool sel=((i==0&&cur.empty())||(i>0&&!cur.empty()&&cur==id));
             BYTE ringA=dimmed?(BYTE)60:(BYTE)255;
-            gfx::StrokeEllipse(rr,sel?2.2f:1.1f,sel?Argb(255,240,242,250):Argb(ringA,90,94,115));
+            gfx::StrokeEllipse(rr,sel?2.2f:1.1f,sel?Cs(Argb(255,240,242,250),UI().text):Cs(Argb(ringA,90,94,115),UI().textFaint,ringA));
         }
     };
     btn(R_setAutoColor,g_cfg.autoColor?L"CORES: AUTOMÁTICO (segue o tema)":L"CORES: MANUAIS",g_cfg.autoColor);
@@ -177,7 +189,7 @@ static void DrawSettings(int w,int h){
 }
 
 static void DrawSplash(int w,int h){
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(255,3,4,10));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(255,3,4,10),UI().bg));
     if(g_splashImg&&g_splashImg->ok){
         float iw=(float)g_splashImg->w,ih=(float)g_splashImg->h,sc=std::min((w-80)/iw,(h-100)/ih),dw=iw*sc,dh=ih*sc;
         gfx::DrawImg(g_splashImg,RectF((w-dw)/2,(h-dh)/2-8,dw,dh));
@@ -185,11 +197,11 @@ static void DrawSplash(int w,int h){
 }
 
 static void DrawArtistEditor(int w,int h){
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(170,2,4,10));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(170,2,4,10),UI().bg,170));
     LayoutEditor(w,h);
     int bx=R_editBox.left, by=R_editBox.top, bw=R_editBox.right-R_editBox.left, bh=R_editBox.bottom-R_editBox.top;
     RectF box((float)bx,(float)by,(float)bw,(float)bh);
-    Color pb=Argb(255,12,15,30), apn=ToGdi(g_theme.accent);
+    Color pb=Cs(Argb(255,12,15,30),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
     DrawRoundRect(box,14,&pb,&apn,2);
     const float lab=S(13), sm=S(10), txt=S(14);
     Color abr=ToGdi(g_theme.accent), white=C_WHITE, gray=C_GRAY2;
@@ -202,7 +214,7 @@ static void DrawArtistEditor(int w,int h){
     else t=(g_editMode==1?L"Arquivo: ":L"Faixa: ")+(g_editTrack>=0&&g_editTrack<(int)g_tracks.size()?(g_editMode==1?std::filesystem::path(g_tracks[g_editTrack].path).filename().wstring():g_tracks[g_editTrack].title):L"");
     gfx::TextRect(t,RectF((float)(bx+22),(float)(by+46),(float)(bw-44),16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
     RectF line((float)(bx+22),(float)(by+74),(float)(bw-44),36);
-    Color lb=Argb(255,20,23,38); DrawRoundRect(line,8,&lb,nullptr);
+    Color lb=Cs(Argb(255,20,23,38),UI().surfaceHi); DrawRoundRect(line,8,&lb,nullptr);
     float tpx=(float)(bx+32), tpy=(float)(by+82);
     gfx::PushClip(line);
     float emw=gfx::TextWidth(g_editBuf,txt), eoff=emw>(float)(bw-64)?emw-(float)(bw-64):0.f;   // texto longo (link): mostra o final
@@ -216,8 +228,8 @@ static void DrawArtistEditor(int w,int h){
     gfx::PopClip();
     auto ebtnC=[&](RECT r,const wchar_t*s,bool primary){
         RectF b=RF(r);
-        Color fb=primary?ToGdi(g_theme.accent,60):Argb(255,24,27,42);
-        Color p=primary?ToGdi(g_theme.accent):Argb(255,70,74,95);
+        Color fb=primary?Cs(ToGdi(g_theme.accent,60),g_theme.accent):Cs(Argb(255,24,27,42),UI().surfaceHi);
+        Color p=primary?Cs(ToGdi(g_theme.accent),g_theme.accent):Cs(Argb(255,70,74,95),UI().borderHi);
         DrawRoundRect(b,8,&fb,&p,1.5f);
         gfx::TextRect(s,b,sm,primary?abr:gray,false,gfx::Center,true);
     };
@@ -227,38 +239,38 @@ static void DrawArtistEditor(int w,int h){
 }
 
 static void DrawImgMenu(int w,int h){
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(150,2,4,10));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(150,2,4,10),UI().bg,150));
     RectF box=RF(R_imgBox);
-    Color pb=Argb(255,12,15,30), apn=ToGdi(g_theme.accent);
+    Color pb=Cs(Argb(255,12,15,30),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
     DrawRoundRect(box,S(12),&pb,&apn,1.6f);
     const float lab=S(11);
     {
         RectF rf=RF(R_imgLocal);
-        Color fb=Argb(255,20,23,38), ln=Argb(255,58,62,86);
+        Color fb=Cs(Argb(255,20,23,38),UI().surfaceHi), ln=Cs(Argb(255,58,62,86),UI().borderHi);
         DrawRoundRect(rf,S(8),&fb,&ln,1.f);
         gfx::TextRect(L"Imagem deste computador",rf,lab,C_WHITE,true,gfx::Center,true);
     }
     {
         RectF rf=RF(R_imgWeb);
-        Color fb=Argb(255,20,23,38), ln=ToGdi(g_theme.accent);
+        Color fb=Cs(Argb(255,20,23,38),g_theme.accent), ln=ToGdi(g_theme.accent);
         DrawRoundRect(rf,S(8),&fb,&ln,1.2f);
-        gfx::TextRect(L"Buscar na internet",rf,lab,ToGdi(g_theme.accent),true,gfx::Center,true);
+        gfx::TextRect(L"Buscar na internet",rf,lab,UiClassic()?ToGdi(g_theme.accent):ToGdi(UI().bg),true,gfx::Center,true);
     }
 }
 
 static void DrawWebPick(int w,int h){
     WebPick& wb=WP();
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(190,2,4,10));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(190,2,4,10),UI().bg,190));
     RECT&b=wb.box;int bw=b.right-b.left,bh=b.bottom-b.top;
     RectF box=RF(b);
-    Color pb=Argb(255,10,13,26), apn=ToGdi(g_theme.accent);
+    Color pb=Cs(Argb(255,10,13,26),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
     DrawRoundRect(box,S(14),&pb,&apn,1.8f);
     const float lab=S(11), sm=S(10);
     Color white=C_WHITE, gray=C_GRAY2, ab=ToGdi(g_theme.accent);
     // caixa de busca
     {
         RectF q=RF(wb.qbox);
-        Color qb=Argb(255,18,21,36), qp=wb.editing?ToGdi(g_theme.accent):Argb(255,58,62,88);
+        Color qb=Cs(Argb(255,18,21,36),UI().surfaceHi), qp=wb.editing?ToGdi(g_theme.accent):Cs(Argb(255,58,62,88),UI().borderHi);
         DrawRoundRect(q,S(9),&qb,&qp,wb.editing?1.8f:1.2f);
         std::wstring show=wb.query.empty()&&!wb.editing?L"Pesquisar (nome da musica)...":wb.query;
         gfx::PushClip(q);
@@ -272,9 +284,9 @@ static void DrawWebPick(int w,int h){
     }
     { // botao buscar
         RectF s=RF(wb.btnSearch);
-        Color sb=ToGdi(g_theme.accent,55), sp=ToGdi(g_theme.accent);
+        Color sb=Cs(ToGdi(g_theme.accent,55),g_theme.accent), sp=ToGdi(g_theme.accent);
         DrawRoundRect(s,S(9),&sb,&sp,1.4f);
-        gfx::TextRect(L"BUSCAR",s,lab,ab,true,gfx::Center,true);
+        gfx::TextRect(L"BUSCAR",s,lab,UiClassic()?ab:ToGdi(UI().bg),true,gfx::Center,true);
     }
     gfx::TextRect(L"✕",RF(wb.btnClose),S(13),white,false,gfx::Center,true);
     // grade com clip
@@ -285,7 +297,7 @@ static void DrawWebPick(int w,int h){
             RECT c=wb.cells[i];if(c.right-c.left<=0)continue;
             bool sel=wb.sel==(int)i;
             RectF cell=RF(c);
-            Color cb=Argb(255,16,19,34), cpn=sel?ToGdi(g_theme.accent):Argb(255,45,49,72);
+            Color cb=Cs(Argb(255,16,19,34),UI().surfaceHi), cpn=sel?ToGdi(g_theme.accent):Cs(Argb(255,45,49,72),UI().borderHi);
             DrawRoundRect(cell,S(8),&cb,&cpn,sel?2.4f:1.1f);
             Img* im=WebThumb(wb.res[i]); // sobe a miniatura (textura) na thread principal
             if(im&&im->ok){
@@ -307,12 +319,12 @@ static void DrawWebPick(int w,int h){
     {
         bool can=false;{std::lock_guard<std::mutex> lk(wb.m);can=(wb.sel>=0&&!wb.downloading);}
         RectF u=RF(wb.btnUse);
-        Color ub=can?ToGdi(g_theme.accent,80):Argb(255,22,25,40);
-        Color up=can?ToGdi(g_theme.accent):Argb(255,70,74,95);
+        Color ub=can?Cs(ToGdi(g_theme.accent,80),g_theme.accent):Cs(Argb(255,22,25,40),UI().surfaceHi);
+        Color up=can?ToGdi(g_theme.accent):Cs(Argb(255,70,74,95),UI().borderHi);
         DrawRoundRect(u,S(9),&ub,&up,1.6f);
-        gfx::TextRect(L"USAR ESSA",u,lab,can?ab:gray,true,gfx::Center,true);
+        gfx::TextRect(L"USAR ESSA",u,lab,can?(UiClassic()?ab:ToGdi(UI().bg)):gray,true,gfx::Center,true);
         RectF cn=RF(wb.btnCancel);
-        Color nb=Argb(255,20,23,38), np=Argb(255,70,74,95);
+        Color nb=Cs(Argb(255,20,23,38),UI().surfaceHi), np=Cs(Argb(255,70,74,95),UI().borderHi);
         DrawRoundRect(cn,S(9),&nb,&np,1.4f);
         gfx::TextRect(L"CANCELAR",cn,lab,gray,true,gfx::Center,true);
     }
@@ -322,10 +334,10 @@ static void DrawWebPick(int w,int h){
 static void DrawActivity(int w,int h){
     int waiting=0; float pct=0; std::wstring title;
     if(!LayoutActivity(w,h,waiting,pct,title)) return;
-    RectF b=RF(R_activity); Color bg=Argb(235,12,15,30), pn=ToGdi(g_theme.accent);
+    RectF b=RF(R_activity); Color bg=Cs(Argb(235,12,15,30),UI().surface), pn=ToGdi(g_theme.accent);
     DrawRoundRect(b,S(10),&bg,&pn,1.2f);
     RectF bar(b.X+S(10),b.Y+b.Height-S(8),b.Width-S(20),S(3));
-    gfx::FillRect(bar,Argb(255,40,44,65)); gfx::FillRect(RectF(bar.X,bar.Y,bar.Width*std::max(0.f,std::min(1.f,pct/100.f)),bar.Height),ToGdi(g_theme.accent));
+    gfx::FillRect(bar,Cs(Argb(255,40,44,65),UI().border)); gfx::FillRect(RectF(bar.X,bar.Y,bar.Width*std::max(0.f,std::min(1.f,pct/100.f)),bar.Height),ToGdi(g_theme.accent));
     wchar_t pc[16]; swprintf(pc,16,L"%.0f%%",pct);
     std::wstring t=L"↓ "+(title.empty()?std::wstring(L"na fila"):std::wstring(pc)+L"  "+title)+(waiting>0?L"   (+"+std::to_wstring(waiting)+L" na fila)":L"");
     gfx::TextRect(t,RectF(b.X+S(12),b.Y,b.Width-S(24),b.Height-S(4)),S(11),C_WHITE,false,gfx::Near,true,gfx::EllipsisChar);
@@ -340,15 +352,15 @@ static void DrawOnlineLoading(bool link,int source,ULONGLONG since){
     for(int k=0;k<rows;k++){
         RectF row(L.X+S(8),L.Y+k*rowH,L.Width-S(16),rowH-S(6));
         int a=(int)(10+18*(0.5f+0.5f*sinf(NowMs()/260.f-k*0.7f)));
-        Color rb=Argb(255,16,19,34), rp=Argb(255,40,44,64); DrawRoundRect(row,S(9),&rb,&rp,1.f);
-        Color bar=Argb(255,30+a,33+a,52+a);
+        Color rb=Cs(Argb(255,16,19,34),UI().surfaceHi), rp=Cs(Argb(255,40,44,64),UI().border); DrawRoundRect(row,S(9),&rb,&rp,1.f);
+        Color bar=UiClassic()?Argb(255,30+a,33+a,52+a):Argb(255,44+a,44+a,44+a);
         float th=row.Height-S(12), tx=row.X+S(12)+th;
         DrawRoundRect(RectF(row.X+S(6),row.Y+S(6),th,th),S(6),&bar,nullptr);
         DrawRoundRect(RectF(tx,row.Y+S(10),row.Width*(0.30f+0.05f*(k%3)),S(12)),S(5),&bar,nullptr);
         DrawRoundRect(RectF(tx,row.Y+S(30),row.Width*0.18f,S(9)),S(4),&bar,nullptr);
     }
     float cx=L.X+L.Width/2, cy=L.Y+L.Height*0.42f;
-    Color panel=Argb(235,10,13,26), pn=ToGdi(g_theme.accent,120);
+    Color panel=Cs(Argb(235,10,13,26),UI().surfaceHi), pn=Cs(ToGdi(g_theme.accent,120),UI().borderHi);
     DrawRoundRect(RectF(cx-S(200),cy-S(60),S(400),S(120)),S(14),&panel,&pn,1.2f);
     DrawSpinner(cx,cy-S(18),S(18),ToGdi(g_theme.accent),S(3.5f));
     static const wchar_t* srcN[3]={L"YouTube Music",L"YouTube",L"SoundCloud"};
@@ -360,15 +372,15 @@ static void DrawOnlineLoading(bool link,int source,ULONGLONG since){
 static void DrawOnline(int w,int h){
     OnlineUI& u=OU();
     LayoutOnline(w,h);
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(200,2,4,10));
-    RectF box=RF(u.box); Color pb=Argb(255,10,13,26), apn=ToGdi(g_theme.accent);
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(200,2,4,10),UI().bg));
+    RectF box=RF(u.box); Color pb=Cs(Argb(255,10,13,26),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
     DrawRoundRect(box,S(14),&pb,&apn,1.8f);
     Color white=C_WHITE, gray=C_GRAY2, ab=ToGdi(g_theme.accent);
     int tpl=OnlineTargetPl();
     gfx::TextRect(tpl>=0?L"BUSCAR ONLINE   →   "+g_playlists[(size_t)tpl].name:std::wstring(L"BUSCAR ONLINE  /  COLAR LINK"),RectF(box.X+S(18),box.Y+S(12),box.Width-S(80),S(34)),S(14),ab,true,gfx::Near,true,gfx::EllipsisChar);
     gfx::TextRect(L"✕",RF(u.btnClose),S(14),white,false,gfx::Center,true);
     {
-        RectF q=RF(u.qbox); Color qb=Argb(255,18,21,36), qp=u.editing?ab:Argb(255,58,62,88);
+        RectF q=RF(u.qbox); Color qb=Cs(Argb(255,18,21,36),UI().surfaceHi), qp=u.editing?ab:Cs(Argb(255,58,62,88),UI().borderHi);
         DrawRoundRect(q,S(9),&qb,&qp,u.editing?1.8f:1.2f);
         gfx::PushClip(q);
         float tw=gfx::TextWidth(u.query,S(12)), maxw=q.Width-S(24), off=tw>maxw?tw-maxw:0.f;
@@ -377,7 +389,7 @@ static void DrawOnline(int w,int h){
         if(u.editing&&(NowMs()/500)%2==0){ float cx=q.X+S(12)+tw-off; gfx::Line(cx+S(2),q.Y+S(9),cx+S(2),q.Y+q.Height-S(9),2,white); }
         gfx::PopClip();
     }
-    { RectF sb=RF(u.btnSearch); Color f=ToGdi(g_theme.accent,55); DrawRoundRect(sb,S(9),&f,&apn,1.4f); if(u.busy.load()) DrawSpinner(sb.X+sb.Width/2,sb.Y+sb.Height/2,S(9),ab,S(2.5f)); else gfx::TextRect(L"BUSCAR",sb,S(12),ab,true,gfx::Center,true); }
+    { RectF sb=RF(u.btnSearch); Color f=Cs(ToGdi(g_theme.accent,55),g_theme.accent), fp=ToGdi(g_theme.accent); DrawRoundRect(sb,S(9),&f,&fp,1.4f); Color tc=UiClassic()?ab:ToGdi(UI().bg); if(u.busy.load()) DrawSpinner(sb.X+sb.Width/2,sb.Y+sb.Height/2,S(9),tc,S(2.5f)); else gfx::TextRect(L"BUSCAR",sb,S(12),tc,true,gfx::Center,true); }
     static const wchar_t* srcN[3]={L"YOUTUBE MUSIC",L"YOUTUBE",L"SOUNDCLOUD"};
     for(int i=0;i<3;i++) DrawPill(u.src[i],srcN[i],u.source==i,S(10));
     gfx::PushClip(RF(R_onList));
@@ -386,17 +398,17 @@ static void DrawOnline(int w,int h){
         for(size_t i=0;i<u.res.size()&&i<u.rows.size();++i){
             RECT rr=u.rows[i]; if(rr.right<=rr.left) continue;
             const OTrack& t=u.res[i];
-            RectF row=RF(rr); Color rb=Argb(255,16,19,34), rp=Argb(255,45,49,72); DrawRoundRect(row,S(9),&rb,&rp,1.f);
+            RectF row=RF(rr); Color rb=Cs(Argb(255,16,19,34),UI().surfaceHi), rp=Cs(Argb(255,45,49,72),UI().borderHi); DrawRoundRect(row,S(9),&rb,&rp,1.f);
             float th=row.Height-S(12); RectF art(row.X+S(6),row.Y+S(6),th,th);
-            Color plate=Argb(255,24,27,44); DrawRoundRect(art,S(6),&plate,nullptr);
+            Color plate=Cs(Argb(255,24,27,44),UI().surfaceHi); DrawRoundRect(art,S(6),&plate,nullptr);
             if(!t.thumb.empty()){ std::wstring tf=OnlineThumbFile(t.thumb); if(g_thumbReady.count(tf)){ Img* im=GetThumb(tf); if(im) gfx::DrawImg(im,art); } }
             float tx=art.X+art.Width+S(12), tw=(float)u.bPlay[i].left-tx-S(10);
             gfx::TextRect(t.title.empty()?t.url:t.title,RectF(tx,row.Y+S(5),tw,S(24)),S(13),white,true,gfx::Near,true,gfx::EllipsisWord);
             std::wstring sub=t.artist;
             if(t.dur>0){ wchar_t d[16]; swprintf(d,16,L"%d:%02d",t.dur/60,t.dur%60); sub+=(sub.empty()?L"":L"  ·  ")+std::wstring(d); }
             sub+=(sub.empty()?L"":L"  ·  ")+std::wstring(SourceName(t.src));
-            gfx::TextRect(sub,RectF(tx,row.Y+S(29),tw,S(18)),S(10),ab,false,gfx::Near,true,gfx::EllipsisChar);
-            auto ib=[&](const RECT& r,const wchar_t* s,bool primary){ RectF b=RF(r); Color f=primary?ToGdi(g_theme.accent,60):Argb(255,24,27,42), p=primary?ToGdi(g_theme.accent):Argb(255,70,74,95); DrawRoundRect(b,S(8),&f,&p,1.2f); gfx::TextRect(s,b,S(14),primary?ab:white,true,gfx::Center,true); };
+            gfx::TextRect(sub,RectF(tx,row.Y+S(29),tw,S(18)),S(10),UiClassic()?ab:gray,false,gfx::Near,true,gfx::EllipsisChar);
+            auto ib=[&](const RECT& r,const wchar_t* s,bool primary){ RectF b=RF(r); Color f=primary?Cs(ToGdi(g_theme.accent,60),g_theme.accent):Cs(Argb(255,24,27,42),UI().surfaceHi), p=primary?ToGdi(g_theme.accent):Cs(Argb(255,70,74,95),UI().borderHi); if(UiClassic()) DrawRoundRect(b,S(8),&f,&p,1.2f); else DrawRoundRect(b,S(UI_R_PILL),&f,nullptr); gfx::TextRect(s,b,S(14),primary?(UiClassic()?ab:ToGdi(UI().bg)):white,true,gfx::Center,true); };
             ib(u.bPlay[i],L"▶",true); ib(u.bDl[i],L"↓",false); ib(u.bAdd[i],L"+",false);
         }
         if(u.res.empty()&&u.busy.load()) DrawOnlineLoading(u.fromLink,u.source,u.busySince);
@@ -413,20 +425,20 @@ static void DrawOnline(int w,int h){
 }
 // ---- menus flutuantes / confirmacao (Linux) --------------------------------
 static void DrawMenuBox(const RectF& box){
-    Color pb=Argb(255,12,15,30), apn=ToGdi(g_theme.accent);
+    Color pb=Cs(Argb(255,12,15,30),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
     DrawRoundRect(box,S(10),&pb,&apn,1.4f);
 }
 static void DrawFolderMenu(int w,int h){
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(90,2,4,10));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(90,2,4,10),UI().bg,90));
     DrawMenuBox(RF(R_folderBox));
     for(size_t i=0;i<R_folderItems.size()&&i<g_folderItemPaths.size();++i){
         RectF r=RF(R_folderItems[i]);
         const std::wstring& p=g_folderItemPaths[i];
         bool cur=(!p.empty()&&p!=L"*"&&_wcsicmp(p.c_str(),g_cfg.musicFolder.c_str())==0)||(p==L"*"&&g_cfg.musicFolder.empty());
-        Color fb=cur?ToGdi(g_theme.accent,50):Argb(255,20,23,38), ln=cur?ToGdi(g_theme.accent):Argb(255,50,54,76);
+        Color fb=cur?Cs(ToGdi(g_theme.accent,50),UI().surfaceHi):Cs(Argb(255,20,23,38),UI().surface), ln=cur?ToGdi(g_theme.accent):Cs(Argb(255,50,54,76),UI().border);
         DrawRoundRect(r,S(7),&fb,&ln,1.f);
         std::wstring label=p.empty()?L"Escolher outra pasta...":(p==L"*"?L"Padrão: Músicas, Downloads, Documentos, Área de trabalho":std::filesystem::path(p).filename().wstring()+L"   ("+p+L")");
-        gfx::TextRect(label,RectF(r.X+S(10),r.Y,r.Width-S(16),r.Height),S(11),cur?ToGdi(g_theme.accent):C_WHITE,p.empty()||p==L"*",gfx::Near,true,gfx::EllipsisPath);
+        gfx::TextRect(label,RectF(r.X+S(10),r.Y,r.Width-S(16),r.Height),S(11),cur?(UiClassic()?ToGdi(g_theme.accent):C_WHITE):C_WHITE,p.empty()||p==L"*",gfx::Near,true,gfx::EllipsisPath);
     }
 }
 static void DrawCtxMenu(int w,int h){
@@ -435,23 +447,23 @@ static void DrawCtxMenu(int w,int h){
     for(size_t i=0;i<R_ctxItems.size()&&i<g_ctxLabels.size();++i){
         RectF r=RF(R_ctxItems[i]);
         bool danger=i<g_ctxDanger.size()&&g_ctxDanger[i];
-        Color fb=Argb(255,20,23,38), ln=danger?Argb(255,120,50,64):Argb(255,50,54,76);
+        Color fb=Cs(Argb(255,20,23,38),UI().surfaceHi), ln=danger?Argb(255,120,50,64):Cs(Argb(255,50,54,76),UI().borderHi);
         DrawRoundRect(r,S(6),&fb,&ln,1.f);
         gfx::TextRect(g_ctxLabels[i],RectF(r.X+S(10),r.Y,r.Width-S(12),r.Height),S(11),danger?Argb(255,255,120,130):C_WHITE,false,gfx::Near,true);
     }
 }
 static void DrawConfirm(int w,int h){
-    gfx::FillRect(0,0,(float)w,(float)h,Argb(170,2,4,10));
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(170,2,4,10),UI().bg,170));
     OpenConfirm();
     RectF box=RF(R_confirmBox);
-    Color pb=Argb(255,12,15,30), apn=Argb(255,190,70,90);
+    Color pb=Cs(Argb(255,12,15,30),UI().surface), apn=Argb(255,190,70,90);
     DrawRoundRect(box,14,&pb,&apn,2);
     gfx::Text(g_confirmKind==1?L"EXCLUIR PLAYLIST":L"EXCLUIR MÚSICA",box.X+22,box.Y+18,S(13),Argb(255,255,120,130),true);
     gfx::TextRect(g_confirmText,RectF(box.X+22,box.Y+52,box.Width-44,60),S(11),C_WHITE,false,gfx::Near,false,gfx::EllipsisChar);
     gfx::Text(L"O arquivo vai para a lixeira do sistema (da para recuperar).",box.X+22,box.Y+82,S(10),C_GRAY2);
     auto cbtn=[&](RECT r,const wchar_t* t,bool primary){
         RectF b=RF(r);
-        Color fb=primary?Argb(255,90,30,40):Argb(255,24,27,42), p=primary?Argb(255,220,80,100):Argb(255,70,74,95);
+        Color fb=primary?Argb(255,90,30,40):Cs(Argb(255,24,27,42),UI().surfaceHi), p=primary?Argb(255,220,80,100):Cs(Argb(255,70,74,95),UI().borderHi);
         DrawRoundRect(b,8,&fb,&p,1.5f);
         gfx::TextRect(t,b,S(10),primary?C_WHITE:C_GRAY2,false,gfx::Center,true);
     };
