@@ -8,6 +8,9 @@
 // A paleta abaixo e a unica fonte de cor "de fundo" das duas cascas.
 #include "platform.h"
 
+// Versao mostrada nas configuracoes (mude junto com app.rc, win_diag.h e os build*.sh).
+static const wchar_t* const REMIX_VERSAO = L"1.3.1";
+
 enum : int { UI_CLASSICO = 0, UI_LIMPO = 1, UI_SPOTIFY = 2, UI_STYLE_COUNT = 3 };
 
 struct UiPal {

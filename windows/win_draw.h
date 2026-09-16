@@ -769,6 +769,7 @@ static void DrawSettings(Graphics& g,int w,int h){
     const Font *h1=UiFont(22,true),*lab=UiFont(13,true),*sm=UiFont(11,false),*st=UiFont(14,true),*fBtn=UiFont(12,true);
     StringFormat sfCC; sfCC.SetAlignment(StringAlignmentCenter); sfCC.SetLineAlignment(StringAlignmentCenter);
     g.DrawString(L"CONFIGURAÇÕES",-1,h1,PointF((REAL)(px+28),(REAL)(py+20)),UiClassic()?(Brush*)&ab:(Brush*)&white);
+    { StringFormat vf; vf.SetAlignment(StringAlignmentFar); vf.SetLineAlignment(StringAlignmentCenter); g.DrawString((std::wstring(L"Remix Player ")+REMIX_VERSAO).c_str(),-1,sm,RectF((REAL)R_settingsClose.left-300,(REAL)(py+24),280,20),&vf,&gray); }
     g.DrawString(L"×",-1,SymFont(S(20)),PointF((REAL)(R_settingsClose.left+8),(REAL)(py+14)),&white);
     Region oldClip; g.GetClip(&oldClip);
     g.SetClip(Rect(px+6,py+56,pw-12,ph-64));
@@ -792,6 +793,17 @@ static void DrawSettings(Graphics& g,int w,int h){
         StringFormat cfB; cfB.SetAlignment(StringAlignmentCenter); cfB.SetLineAlignment(StringAlignmentCenter); cfB.SetFormatFlags(StringFormatFlagsNoWrap); cfB.SetTrimming(StringTrimmingEllipsisCharacter);
         g.DrawString(t.c_str(),-1,fBtn,RectF(b.X,b.Y,(REAL)b.Width,(REAL)b.Height),&cfB,on?(Brush*)&white:(Brush*)&gray);
     };
+    // Chave liga/desliga (estilos novos): rotulo a esquerda, chave a direita. No classico e o botao de sempre.
+    auto tgl=[&](RECT rr,const std::wstring& classicText,const std::wstring& label,bool on){
+        if(UiClassic()){ btn(rr,classicText,on); return; }
+        Rect b(rr.left,rr.top,rr.right-rr.left,rr.bottom-rr.top); if(b.Width<10||b.Height<10) return;
+        SolidBrush fb(ToGdi(UI().surface)); DrawRoundRect(g,b,(int)S(UI_R_PILL),&fb,nullptr);
+        REAL sw=34.f,sh=18.f; RectF sr((REAL)(b.X+b.Width)-sw-10.f,(REAL)b.Y+((REAL)b.Height-sh)/2.f,sw,sh);
+        SolidBrush tr(on?ToGdi(g_theme.accent):ToGdi(UI().borderHi)); DrawRoundRect(g,sr,(int)(sh/2.f),&tr,nullptr);
+        SolidBrush kb(on?ToGdi(UI().bg):ToGdi(UI().text)); g.FillEllipse(&kb,on?sr.X+sw-sh+2.f:sr.X+2.f,sr.Y+2.f,sh-4.f,sh-4.f);
+        SolidBrush tb(on?ToGdi(UI().text):ToGdi(UI().textDim)); TextTrim(g,label,RectF((REAL)b.X+12.f,(REAL)b.Y,(REAL)b.Width-sw-30.f,(REAL)b.Height),11,&tb,true,StringTrimmingEllipsisCharacter,true);
+    };
+    const wchar_t* seta=UiClassic()?L"":L" ▼";   // botoes que alternam entre opcoes
     {
         SolidBrush sfb(Cs(Color(255,12,15,29),UI().bar)); Pen sbp(Cs(Color(255,38,42,64),UI().border),1.f); Pen dv(Cs(Color(255,32,36,56),UI().border),1.f);
         for(auto&s:g_setSections){ RectF sr=RF(s.first); if(UiClassic()) DrawRoundRect(g,sr,12,&sfb,&sbp); else DrawRoundRect(g,sr,(int)S(UI_R_CARD),&sfb,nullptr); g.DrawString(s.second.c_str(),-1,st,PointF(sr.X+16,sr.Y+12),UiClassic()?(Brush*)&ab:(Brush*)&white); g.DrawLine(&dv,sr.X+14,sr.Y+40,sr.X+sr.Width-14.f,sr.Y+40); }
@@ -804,7 +816,7 @@ static void DrawSettings(Graphics& g,int w,int h){
     g.DrawString(mode.c_str(),-1,sm,PointF((REAL)R_settingsDefault.left,(REAL)(R_settingsDefault.top-18)),&white);
     btn(R_settingsDefault,L"PADRÃO (PASTAS DO USUÁRIO)",g_cfg.musicFolder.empty());
     btn(R_settingsCustom,L"ESCOLHER PASTA",!g_cfg.musicFolder.empty());
-    if(!g_cfg.musicFolder.empty()){ StringFormat tw; tw.SetFormatFlags(StringFormatFlagsNoWrap); tw.SetTrimming(StringTrimmingEllipsisPath); g.DrawString(g_cfg.musicFolder.c_str(),-1,sm,RectF((REAL)R_settingsDefault.left,(REAL)(R_settingsDefault.bottom+6),(REAL)(pw-120),(REAL)16),&tw,&gray); }
+    if(!g_cfg.musicFolder.empty()){ StringFormat tw; tw.SetFormatFlags(StringFormatFlagsNoWrap); tw.SetTrimming(StringTrimmingEllipsisPath); g.DrawString(g_cfg.musicFolder.c_str(),-1,sm,RectF((REAL)R_settingsDefault.left,(REAL)(R_settingsDefault.bottom+6),(REAL)(R_settingsCustom.right-R_settingsDefault.left),(REAL)16),&tw,&gray); }
     btn(R_settingsModeSquare,L"QUADRADO",g_cfg.displayMode==L"normal"&&g_cfg.artShape==L"square");
     btn(R_settingsModeCd,L"CD",g_cfg.displayMode==L"normal"&&g_cfg.artShape==L"cd");
     btn(R_settingsModeVertical,L"VERTICAL",g_cfg.displayMode==L"vertical");
@@ -818,9 +830,9 @@ static void DrawSettings(Graphics& g,int w,int h){
             if(sel){ Pen p(ToGdi(UI().text),2.f); g.DrawEllipse(&p,(REAL)r.left-3,(REAL)r.top-3,(REAL)(r.right-r.left)+6,(REAL)(r.bottom-r.top)+6); }
         }
     }
-    btn(R_setParticles,L"PARTÍCULAS: "+std::wstring(g_cfg.particlesOn?L"LIGADO":L"DESLIGADO"),g_cfg.particlesOn);
-    btn(R_setGlitch,L"GLITCH",g_cfg.glitchOn);
-    btn(R_setPerf,g_cfg.perfMode?L"MODO LEVE: LIGADO (PC fraco)":L"MODO LEVE: DESLIGADO",g_cfg.perfMode);
+    tgl(R_setParticles,L"PARTÍCULAS: "+std::wstring(g_cfg.particlesOn?L"LIGADO":L"DESLIGADO"),L"PARTÍCULAS",g_cfg.particlesOn);
+    tgl(R_setGlitch,L"GLITCH",L"GLITCH",g_cfg.glitchOn);
+    tgl(R_setPerf,g_cfg.perfMode?L"MODO LEVE: LIGADO (PC fraco)":L"MODO LEVE: DESLIGADO",L"MODO LEVE",g_cfg.perfMode);
     if(R_shortcutsBox.right>R_shortcutsBox.left){
         for(int a=0;a<HK_COUNT;a++){
             RECT kr=R_hkKey[a]; if(kr.right<=kr.left) continue;
@@ -830,17 +842,18 @@ static void DrawSettings(Graphics& g,int w,int h){
             btn(R_hkScope[a],g_cfg.hk[a].global?L"GLOBAL":L"FOCO",g_cfg.hk[a].global);
         }
         btn(R_hkReset,L"RESTAURAR PADRÕES",false);
-        g.DrawString(L"Clique na tecla para trocar (Backspace limpa). FOCO = só com a janela do Remix ativa (não atrapalha jogos).",-1,sm,PointF((REAL)R_hkReset.right+16,(REAL)R_hkReset.top+2),&gray);
-        g.DrawString(L"GLOBAL = funciona em 2º plano ou com outro programa na frente (registrado no Windows).",-1,sm,PointF((REAL)R_hkReset.right+16,(REAL)R_hkReset.top+20),&gray);
+        REAL hw=(REAL)(R_shortcutsBox.right-20-(R_hkReset.right+16));
+        TextTrim(g,L"Clique na tecla para trocar (Backspace limpa). FOCO = só com a janela do Remix ativa (não atrapalha jogos).",RectF((REAL)R_hkReset.right+16,(REAL)R_hkReset.top+2,hw,16),11,&gray,false,StringTrimmingEllipsisCharacter);
+        TextTrim(g,L"GLOBAL = funciona em 2º plano ou com outro programa na frente (registrado no Windows).",RectF((REAL)R_hkReset.right+16,(REAL)R_hkReset.top+20,hw,16),11,&gray,false,StringTrimmingEllipsisCharacter);
     }
     btn(R_setWallChoose,L"WALLPAPER: ESCOLHER IMAGEM...",false);
     btn(R_setWallClear,L"REMOVER WALLPAPER",!g_cfg.bgWallpaper.empty());
-    btn(R_setCoverBlur,L"FUNDO EMBAÇADO (USA A CAPA): "+std::wstring(g_cfg.coverBlurBg?L"LIGADO":L"DESLIGADO"),g_cfg.coverBlurBg);
-    btn(R_setAutoplay,g_cfg.autoplay?L"AUTOPLAY: LIGADO":L"AUTOPLAY: DESLIGADO",g_cfg.autoplay);
+    tgl(R_setCoverBlur,L"FUNDO EMBAÇADO (USA A CAPA): "+std::wstring(g_cfg.coverBlurBg?L"LIGADO":L"DESLIGADO"),L"FUNDO EMBAÇADO (capa)",g_cfg.coverBlurBg);
+    tgl(R_setAutoplay,g_cfg.autoplay?L"AUTOPLAY: LIGADO":L"AUTOPLAY: DESLIGADO",L"AUTOPLAY",g_cfg.autoplay);
     btn(R_setSort,L"ORDEM: "+SortModeName(g_cfg.sortMode)+L" ▼",g_cfg.sortMode==L"manual");
-    btn(R_setSortDir,g_cfg.sortDesc?L"DECRESCENTE":L"CRESCENTE",false);
-    btn(R_setBgClose,g_cfg.bgOnClose?L"FECHAR: CONTINUA TOCANDO":L"FECHAR: ENCERRA O APP",g_cfg.bgOnClose);
-    btn(R_setSysMedia,g_cfg.sysMedia?L"CONTROLES DO SISTEMA: SIM":L"CONTROLES DO SISTEMA: NÃO",g_cfg.sysMedia);
+    btn(R_setSortDir,std::wstring(g_cfg.sortDesc?L"DECRESCENTE":L"CRESCENTE")+seta,false);
+    tgl(R_setBgClose,g_cfg.bgOnClose?L"FECHAR: CONTINUA TOCANDO":L"FECHAR: ENCERRA O APP",L"TOCAR EM 2º PLANO",g_cfg.bgOnClose);
+    tgl(R_setSysMedia,g_cfg.sysMedia?L"CONTROLES DO SISTEMA: SIM":L"CONTROLES DO SISTEMA: NÃO",L"CONTROLES DO SISTEMA",g_cfg.sysMedia);
     btn(R_setQuit,L"SAIR DO REMIX (Ctrl+Q)",false);
     if(R_setOnMode.right>R_setOnMode.left){   // ONLINE
         bool probed=OT().probed.load(); bool okT=probed&&YtdlpOk()&&FfmpegOk(); std::wstring tools;
@@ -852,20 +865,23 @@ static void DrawSettings(Graphics& g,int w,int h){
             if(!OT().spotdl.empty()) tools+=L"   ·   spotdl "+OT().vSpot; }
         SolidBrush warn(Color(255,235,150,110));
         TextTrim(g,tools,RectF((REAL)R_setOnMode.left,(REAL)R_setOnMode.top-24,(REAL)(R_setOnFmt.right-R_setOnMode.left),18),11,okT||!probed?&white:&warn,false,StringTrimmingEllipsisCharacter);
-        btn(R_setOnMode,g_cfg.onlineMode==L"download"?L"AO TOCAR: BAIXAR":L"AO TOCAR: STREAMING",g_cfg.onlineMode==L"download");
-        btn(R_setOnFmt,L"FORMATO: "+std::wstring(g_cfg.onlineFormat==L"original"?L"ORIGINAL":(g_cfg.onlineFormat==L"m4a"?L"M4A":L"MP3")),false);
+        btn(R_setOnMode,std::wstring(g_cfg.onlineMode==L"download"?L"AO TOCAR: BAIXAR":L"AO TOCAR: STREAMING")+seta,g_cfg.onlineMode==L"download");
+        btn(R_setOnFmt,L"FORMATO: "+std::wstring(g_cfg.onlineFormat==L"original"?L"ORIGINAL":(g_cfg.onlineFormat==L"m4a"?L"M4A":L"MP3"))+seta,false);
         static const wchar_t* srcs[3]={L"BUSCA: YOUTUBE MUSIC",L"BUSCA: YOUTUBE",L"BUSCA: SOUNDCLOUD"};
-        btn(R_setOnSrc,srcs[std::max(0,std::min(2,g_cfg.onlineSource))],false);
+        btn(R_setOnSrc,std::wstring(srcs[std::max(0,std::min(2,g_cfg.onlineSource))])+seta,false);
         btn(R_setOnFolder,L"PASTA DOS DOWNLOADS...",!g_cfg.downloadFolder.empty());
         TextTrim(g,L"Downloads em "+OnlineDownloadBaseCached()+L"   ·   streaming fica só na memória (fechar o app não deixa arquivo pela metade)",RectF((REAL)R_setOnSrc.left,(REAL)R_setOnSrc.bottom+8,(REAL)(R_setOnFolder.right-R_setOnSrc.left),16),11,&gray,false,StringTrimmingEllipsisPath);
         btn(R_setOnRecheck,L"PROCURAR DE NOVO",false);
         TextTrim(g,okT?L"Spotify, Deezer e Apple Music: o Remix lê a lista e acha cada música no YouTube Music.":L"Rode o INSTALAR-DEPENDENCIAS.bat (na pasta do Remix.exe): instala yt-dlp, FFmpeg e Deno pelo winget.",
             RectF((REAL)R_setOnRecheck.right+14,(REAL)R_setOnRecheck.top,(REAL)(R_setOnFolder.right-R_setOnRecheck.right-14),(REAL)(R_setOnRecheck.bottom-R_setOnRecheck.top)),11,&gray,false,StringTrimmingEllipsisCharacter,true);
     }
-    g.DrawString(L"Controles do sistema: teclas de mídia e o ícone na bandeja (ao lado do relógio).",-1,sm,PointF((REAL)(R_setQuit.right+14),(REAL)(R_setQuit.top+10)),&gray);
-    g.DrawString(g_cfg.autoplay?L"Ao acabar uma musica, toca a proxima (ordem da lista ou aleatorio com ⇄).":L"Ao acabar uma musica, para. Toque a proxima manualmente.",-1,sm,PointF((REAL)R_setAutoplay.left,(REAL)(R_setAutoplay.bottom+8)),&gray);
-    g.DrawString(g_cfg.sortMode==L"manual"?L"Ordem manual: use as setas ▲▼ nas faixas (ou Ctrl+↑/↓ na faixa atual). Salva em order.ini.":L"A ordem escolhida fica salva e vale para o autoplay e para ◀ ▶.",-1,sm,PointF((REAL)R_setAutoplay.left,(REAL)(R_setAutoplay.bottom+26)),&gray);
-    btn(R_setEqOn,g_cfg.eqOn?L"EQUALIZADOR: LIGADO":L"EQUALIZADOR: DESLIGADO",g_cfg.eqOn);
+    {   // textos de ajuda presos a largura da secao (nada vaza da caixa)
+        REAL pw2=(REAL)(R_setSortDir.right-R_setAutoplay.left);
+        TextTrim(g,L"Controles do sistema: teclas de mídia e o ícone na bandeja (ao lado do relógio).",RectF((REAL)(R_setQuit.right+14),(REAL)R_setQuit.top,(REAL)(R_setSysMedia.right-R_setQuit.right-14),(REAL)(R_setQuit.bottom-R_setQuit.top)),11,&gray,false,StringTrimmingEllipsisCharacter,true);
+        TextTrim(g,g_cfg.autoplay?L"Ao acabar uma musica, toca a proxima (ordem da lista ou aleatorio com ⇄).":L"Ao acabar uma musica, para. Toque a proxima manualmente.",RectF((REAL)R_setAutoplay.left,(REAL)(R_setAutoplay.bottom+8),pw2,16),11,&gray,false,StringTrimmingEllipsisCharacter);
+        TextTrim(g,g_cfg.sortMode==L"manual"?L"Ordem manual: use as setas ▲▼ nas faixas (ou Ctrl+↑/↓ na faixa atual). Salva em order.ini.":L"A ordem escolhida fica salva e vale para o autoplay e para ◀ ▶.",RectF((REAL)R_setAutoplay.left,(REAL)(R_setAutoplay.bottom+26),pw2,16),11,&gray,false,StringTrimmingEllipsisCharacter);
+    }
+    tgl(R_setEqOn,g_cfg.eqOn?L"EQUALIZADOR: LIGADO":L"EQUALIZADOR: DESLIGADO",L"EQUALIZADOR",g_cfg.eqOn);
     btn(R_setEqReset,L"ZERAR",false);
     auto isEq=[&](int id){return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8;};
     auto sval=[&](int id)->int{if(isEq(id))return g_cfg.eq[id-Z_EQ_BASE];switch(id){case Z_UI_SCALE:return g_cfg.uiScale;case Z_TITLE_SCALE:return g_cfg.titleScale;case Z_ARTIST_SCALE:return g_cfg.artistScale;case Z_VERTICAL_SCALE:return g_cfg.verticalScale;case Z_PLAYER_SIZE_SLIDER:return g_cfg.playerScale;case Z_LED_BRIGHT:return g_cfg.ledBrightness;case Z_RUNNER_SPEED:return g_cfg.runnerSpeed;case Z_PART_SPEED:return g_cfg.particlesSpeed;case Z_CD_SPEED:return g_cfg.cdSpeed;default:return g_cfg.ledSpeed;}};
@@ -888,7 +904,10 @@ static void DrawSettings(Graphics& g,int w,int h){
         g.DrawString(bv,-1,sm,PointF((REAL)(s.r.right+10),(REAL)(s.r.top-5)),&white);
     }
     btn(R_setEffect,L"Efeito: "+g_cfg.ledEffect+L" ▼",false);
-    if(!UiGlow()) g.DrawString(L"No estilo Limpo o LED e o corredor ficam desligados (escolha Clássico ou Spotify + LED).",-1,sm,PointF((REAL)R_setEffect.right+14,(REAL)R_setEffect.top+8),&gray);
+    if(!UiGlow()){   // nota presa a largura da secao do LED
+        REAL sr=(REAL)(px+pw); for(auto&sc:g_setSections) if(sc.first.left<=R_setEffect.left&&sc.first.right>=R_setEffect.right&&sc.first.top<=R_setEffect.top&&sc.first.bottom>=R_setEffect.bottom) sr=(REAL)sc.first.right-20;
+        TextTrim(g,L"Neste estilo o LED e o corredor ficam desligados (Clássico ou Spotify + LED ligam).",RectF((REAL)R_setEffect.right+14,(REAL)R_setEffect.top,sr-(REAL)R_setEffect.right-14,(REAL)(R_setEffect.bottom-R_setEffect.top)),11,&gray,false,StringTrimmingEllipsisCharacter,true);
+    }
     auto rowIdAt=[&](size_t i)->std::wstring{ if(i==0) return L""; size_t nt=g_themes.size(); if(i<=nt) return g_themes[i-1].id; size_t bi=i-nt-1; return bi<15?std::wstring(g_brightIds[bi]):std::wstring(); };
     auto colorRowDraw=[&](std::vector<RECT>&v,const std::wstring& cur){
         bool dimmed=g_cfg.autoColor;
@@ -897,14 +916,14 @@ static void DrawSettings(Graphics& g,int w,int h){
             COLORREF c=(i==0||id.empty())?g_theme.accent:(id[0]==L'#'?ParseHexColor(id):FindTheme(g_themes,id).accent);
             RectF rr=RF(v[i]);
             if(i==0){ SolidBrush b(Color(dimmed?60:80,GetRValue(c),GetGValue(c),GetBValue(c))); g.FillEllipse(&b,rr.X,rr.Y,rr.Width,rr.Height); g.DrawString(L"T",-1,sm,rr,&sfCC,&white); }
-            else { SolidBrush b(Color((BYTE)(dimmed?55:150),GetRValue(c),GetGValue(c),GetBValue(c))); g.FillEllipse(&b,rr.X,rr.Y,rr.Width,rr.Height); }
+            else { SolidBrush b(Color((BYTE)(UiClassic()?(dimmed?55:150):(dimmed?70:255)),GetRValue(c),GetGValue(c),GetBValue(c))); g.FillEllipse(&b,rr.X,rr.Y,rr.Width,rr.Height); }   // novos: cor cheia quando ativa
             bool sel=((i==0&&cur.empty())||(i>0&&!cur.empty()&&cur==id));
             Pen p(sel?Cs(Color(255,240,242,250),UI().text):Cs(Color((BYTE)(dimmed?60:255),90,94,115),UI().textFaint,(BYTE)(dimmed?60:255)),sel?2.2f:1.1f); g.DrawEllipse(&p,rr.X,rr.Y,rr.Width,rr.Height);
         }
     };
-    btn(R_setAutoColor,g_cfg.autoColor?L"CORES: AUTOMÁTICO (segue o tema)":L"CORES: MANUAIS",g_cfg.autoColor);
+    tgl(R_setAutoColor,g_cfg.autoColor?L"CORES: AUTOMÁTICO (segue o tema)":L"CORES: MANUAIS",L"CORES AUTOMÁTICAS",g_cfg.autoColor);
     colorRowDraw(R_playColors,g_cfg.btnPlayColor); colorRowDraw(R_navColors,g_cfg.btnNavColor);
-    btn(R_setRunnerToggle,g_cfg.runnerOn?L"LIGADO":L"DESLIGADO",g_cfg.runnerOn);
+    tgl(R_setRunnerToggle,g_cfg.runnerOn?L"LIGADO":L"DESLIGADO",L"LIGAR",g_cfg.runnerOn);
     colorRowDraw(R_runColors,g_cfg.runnerColor); colorRowDraw(R_partColors,g_cfg.particlesColor); colorRowDraw(R_ledColors,g_cfg.ledColor);
     g.ResetTransform(); g.SetClip(&oldClip);
 }

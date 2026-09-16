@@ -510,6 +510,7 @@ static void RunAction(const std::string& a){
     else if(a=="minimize")PlatformMinimize();
     else if(a.rfind("size:",0)==0){ int w=0,h=0; if(sscanf(a.c_str()+5,"%dx%d",&w,&h)==2&&w>0&&h>0) PlatformSetWindowSize(w,h); }
     else if(a=="scrollend"){g_setScroll=100000;g_listScroll=100000;BuildLayout();LayoutSettings(g_winW,g_winH);}
+    else if(a.rfind("scroll:",0)==0){g_setScroll=atoi(a.c_str()+7);g_listScroll=g_setScroll;BuildLayout();LayoutSettings(g_winW,g_winH);}   // testes: rola para uma posicao
     else if(a.rfind("shot:",0)==0){PlatformScreenshot(Utf8ToWide(a.substr(5)));}
     else if(a.rfind("track:",0)==0){int i=atoi(a.c_str()+6);PlayIndex(i,true);}
     else if(a.rfind("key:",0)==0){ Hotkey h; ParseHotkey(Utf8ToWide(a.substr(4)),h); if(h.key) OnKeyEvent(h.key,h.mods); }

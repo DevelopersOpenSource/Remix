@@ -68,7 +68,7 @@ real e espectro por frequência, monitor da pasta em tempo real, instância
   teclas de mídia, `playerctl`; Windows: ícone na bandeja + teclas de mídia).
   Os dois recursos vêm **ligados** e podem ser desligados em Configurações >
   REPRODUÇÃO ("FECHAR: CONTINUA TOCANDO" e "CONTROLES DO SISTEMA").
-- **AppImage**: `dist/Remix-1.3.0-x86_64.AppImage`, um arquivo só que roda em
+- **AppImage**: `dist/Remix-1.3.1-x86_64.AppImage`, um arquivo só que roda em
   qualquer distro (veja a tabela abaixo).
 - `./RODAR.sh` num terminal abre o player em segundo plano e devolve o prompt
   (`./RODAR.sh --fg` mantém preso ao terminal para ver as mensagens).
@@ -123,10 +123,10 @@ real e espectro por frequência, monitor da pasta em tempo real, instância
 
 | Forma | Arquivo | Como |
 |---|---|---|
-| Portátil (sem instalar) | `dist/remix-1.3.0-linux-x86_64-portable.zip` | extrair e rodar `./remix` (ou `./RODAR.sh`). Config, capas e a pasta `Musica/` ficam ali dentro, igual ao Windows |
-| Fedora / Nobara / RHEL 8+ | `dist/remix-1.3.0-1.x86_64.rpm` | `sudo dnf install ./dist/remix-1.3.0-1.x86_64.rpm` |
-| Qualquer distro (AppImage) | `dist/Remix-1.3.0-x86_64.AppImage` | `chmod +x Remix-1.3.0-x86_64.AppImage` e abrir (duplo clique ou `./Remix-1.3.0-x86_64.AppImage`). Config e capas em `~/.config/remix`. Precisa de FUSE (`libfuse2` ou `libfuse3`, já vem na maioria das distros); sem FUSE: `./Remix-...AppImage --appimage-extract-and-run` |
-| Debian 10+ / Ubuntu 18.04+ / Mint 19+ / Pop!_OS | `dist/remix_1.3.0-1_amd64.deb` | `sudo apt install ./dist/remix_1.3.0-1_amd64.deb` |
+| Portátil (sem instalar) | `dist/remix-1.3.1-linux-x86_64-portable.zip` | extrair e rodar `./remix` (ou `./RODAR.sh`). Config, capas e a pasta `Musica/` ficam ali dentro, igual ao Windows |
+| Fedora / Nobara / RHEL 8+ | `dist/remix-1.3.1-1.x86_64.rpm` | `sudo dnf install ./dist/remix-1.3.1-1.x86_64.rpm` |
+| Qualquer distro (AppImage) | `dist/Remix-1.3.1-x86_64.AppImage` | `chmod +x Remix-1.3.1-x86_64.AppImage` e abrir (duplo clique ou `./Remix-1.3.1-x86_64.AppImage`). Config e capas em `~/.config/remix`. Precisa de FUSE (`libfuse2` ou `libfuse3`, já vem na maioria das distros); sem FUSE: `./Remix-...AppImage --appimage-extract-and-run` |
+| Debian 10+ / Ubuntu 18.04+ / Mint 19+ / Pop!_OS | `dist/remix_1.3.1-1_amd64.deb` | `sudo apt install ./dist/remix_1.3.1-1_amd64.deb` |
 
 A própria pasta do projeto também é portátil: tem `remix` (binário pronto),
 `RODAR.sh`, `config.ini` e `assets/` na raiz. Baixou o zip do repositório,
@@ -243,7 +243,7 @@ Opções de `linux/build.sh`: `--debug`, `--no-wayland`, `--rebuild-raylib`.
 
 ```bash
 linux/packaging/build-packages.sh    # -> dist/*.deb, *.rpm, zip portatil e AppImage (sem root)
-REMIX_VERSION=1.3.0 REMIX_RELEASE=1 linux/packaging/build-packages.sh
+REMIX_VERSION=1.3.1 REMIX_RELEASE=1 linux/packaging/build-packages.sh
 ```
 
 O `Depends` do `.deb` é calculado do próprio binário (`libc6 (>= 2.27)` no

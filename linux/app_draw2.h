@@ -12,6 +12,7 @@ static void DrawSettings(int w,int h){
     // Escala FIXA nas configuracoes.
     const float h1=22, lab=13, sm=11, st=14, fBtn=12;
     gfx::Text(L"CONFIGURAÇÕES",(float)(px+28),(float)(py+20),h1,UiClassic()?ab:white,true);
+    gfx::TextRect(std::wstring(L"Remix Player ")+REMIX_VERSAO,RectF((float)R_settingsClose.left-300,(float)(py+24),280,20),sm,gray,false,gfx::Far,true);
     gfx::Text(L"×",(float)(R_settingsClose.left+8),(float)(py+14),S(20),white);
     // conteudo com clip e scroll
     gfx::PushClip(RectF((float)(px+6),(float)(py+56),(float)(pw-12),(float)(ph-64)));
@@ -41,6 +42,17 @@ static void DrawSettings(int w,int h){
         DrawRoundRect(hl,7,&hb,nullptr);
         gfx::TextRect(t,b,fBtn,on?white:gray,true,gfx::Center,true);
     };
+    // Chave liga/desliga (estilos novos): rotulo a esquerda, chave a direita. No classico e o botao de sempre.
+    auto tgl=[&](RECT rr,const std::wstring& classicText,const std::wstring& label,bool on){
+        if(UiClassic()){ btn(rr,classicText,on); return; }
+        RectF b=RF(rr); if(b.Width<10||b.Height<10) return;
+        Color fb=ToGdi(UI().surface); DrawRoundRect(b,S(UI_R_PILL),&fb,nullptr);
+        float sw=34.f,sh=18.f; RectF sr(b.X+b.Width-sw-10.f,b.Y+(b.Height-sh)/2.f,sw,sh);
+        Color tr=on?ToGdi(g_theme.accent):ToGdi(UI().borderHi); DrawRoundRect(sr,sh/2.f,&tr,nullptr);
+        gfx::FillEllipse(on?sr.X+sw-sh+2.f:sr.X+2.f,sr.Y+2.f,sh-4.f,sh-4.f,on?ToGdi(UI().bg):ToGdi(UI().text));
+        gfx::TextRect(label,RectF(b.X+12.f,b.Y,b.Width-sw-30.f,b.Height),fBtn,on?white:ToGdi(UI().textDim),true,gfx::Near,true,gfx::EllipsisChar);
+    };
+    const wchar_t* seta=UiClassic()?L"":L" ▾";   // botoes que alternam entre opcoes
     // caixas de secao com titulo
     {
         Color sfb=Cs(Argb(255,12,15,29),UI().bar), sbp=Cs(Argb(255,38,42,64),UI().border), dv=Cs(Argb(255,32,36,56),UI().border);
@@ -61,7 +73,7 @@ static void DrawSettings(int w,int h){
     btn(R_settingsDefault,L"PADRÃO (PASTAS DO USUÁRIO)",g_cfg.musicFolder.empty());
     btn(R_settingsCustom,L"ESCOLHER PASTA",!g_cfg.musicFolder.empty());
     if(!g_cfg.musicFolder.empty()){
-        gfx::TextRect(g_cfg.musicFolder,RectF((float)R_settingsDefault.left,(float)(R_settingsDefault.bottom+6),(float)(pw-120),16),sm,gray,false,gfx::Near,false,gfx::EllipsisPath);
+        gfx::TextRect(g_cfg.musicFolder,RectF((float)R_settingsDefault.left,(float)(R_settingsDefault.bottom+6),(float)(R_settingsCustom.right-R_settingsDefault.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisPath);
     }
     btn(R_settingsModeSquare,L"QUADRADO",g_cfg.displayMode==L"normal"&&g_cfg.artShape==L"square");
     btn(R_settingsModeCd,L"CD",g_cfg.displayMode==L"normal"&&g_cfg.artShape==L"cd");
@@ -72,9 +84,9 @@ static void DrawSettings(int w,int h){
         if(UiClassic()){ gfx::FillEllipse(rr,ToGdi(g_themes[i].accent,90)); gfx::StrokeEllipse(rr,sel?2.4f:1.3f,sel?C_WHITE:ToGdi(g_themes[i].accent)); }
         else { gfx::FillEllipse(rr,ToGdi(g_themes[i].accent)); if(sel) gfx::StrokeEllipse(RectF(rr.X-3,rr.Y-3,rr.Width+6,rr.Height+6),2.f,C_WHITE); }
     }
-    btn(R_setParticles,L"PARTÍCULAS: "+std::wstring(g_cfg.particlesOn?L"LIGADO":L"DESLIGADO"),g_cfg.particlesOn);
-    btn(R_setGlitch,L"GLITCH",g_cfg.glitchOn);
-    btn(R_setPerf,g_cfg.perfMode?L"MODO LEVE: LIGADO (PC fraco)":L"MODO LEVE: DESLIGADO",g_cfg.perfMode);
+    tgl(R_setParticles,L"PARTÍCULAS: "+std::wstring(g_cfg.particlesOn?L"LIGADO":L"DESLIGADO"),L"PARTÍCULAS",g_cfg.particlesOn);
+    tgl(R_setGlitch,L"GLITCH",L"GLITCH",g_cfg.glitchOn);
+    tgl(R_setPerf,g_cfg.perfMode?L"MODO LEVE: LIGADO (PC fraco)":L"MODO LEVE: DESLIGADO",L"MODO LEVE",g_cfg.perfMode);
     if(R_shortcutsBox.right>R_shortcutsBox.left){
         for(int a=0;a<HK_COUNT;a++){
             RECT kr=R_hkKey[a]; if(kr.right<=kr.left) continue;
@@ -84,19 +96,20 @@ static void DrawSettings(int w,int h){
             btn(R_hkScope[a],g_cfg.hk[a].global?L"GLOBAL":L"FOCO",g_cfg.hk[a].global);
         }
         btn(R_hkReset,L"RESTAURAR PADRÕES",false);
-        gfx::Text(L"Clique na tecla para trocar (Backspace limpa). FOCO = só com a janela do Remix ativa (não atrapalha jogos).",(float)R_hkReset.right+16,(float)R_hkReset.top+2,sm,gray);
-        gfx::Text(L"GLOBAL = funciona em 2º plano/com outro programa na frente (sessão X11; no Wayland use o atalho do sistema: remix --cmd next).",(float)R_hkReset.right+16,(float)R_hkReset.top+20,sm,gray);
+        float hw=(float)(R_shortcutsBox.right-20-(R_hkReset.right+16));
+        gfx::TextRect(L"Clique na tecla para trocar (Backspace limpa). FOCO = só com a janela do Remix ativa (não atrapalha jogos).",RectF((float)R_hkReset.right+16,(float)R_hkReset.top+2,hw,16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(L"GLOBAL = funciona em 2º plano/com outro programa na frente (sessão X11; no Wayland use o atalho do sistema: remix --cmd next).",RectF((float)R_hkReset.right+16,(float)R_hkReset.top+20,hw,16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
     }
     // secao FUNDO: wallpaper e capa embaçada
     btn(R_setWallChoose,L"WALLPAPER: ESCOLHER IMAGEM...",false);
     btn(R_setWallClear,L"REMOVER WALLPAPER",!g_cfg.bgWallpaper.empty());
-    btn(R_setCoverBlur,L"FUNDO EMBAÇADO (USA A CAPA): "+std::wstring(g_cfg.coverBlurBg?L"LIGADO":L"DESLIGADO"),g_cfg.coverBlurBg);
+    tgl(R_setCoverBlur,L"FUNDO EMBAÇADO (USA A CAPA): "+std::wstring(g_cfg.coverBlurBg?L"LIGADO":L"DESLIGADO"),L"FUNDO EMBAÇADO (capa)",g_cfg.coverBlurBg);
     // reproducao
-    btn(R_setAutoplay,g_cfg.autoplay?L"AUTOPLAY: LIGADO":L"AUTOPLAY: DESLIGADO",g_cfg.autoplay);
+    tgl(R_setAutoplay,g_cfg.autoplay?L"AUTOPLAY: LIGADO":L"AUTOPLAY: DESLIGADO",L"AUTOPLAY",g_cfg.autoplay);
     btn(R_setSort,L"ORDEM: "+SortModeName(g_cfg.sortMode)+L" ▾",g_cfg.sortMode==L"manual");
-    btn(R_setSortDir,g_cfg.sortDesc?L"DECRESCENTE":L"CRESCENTE",false);
-    btn(R_setBgClose,g_cfg.bgOnClose?L"FECHAR: CONTINUA TOCANDO":L"FECHAR: ENCERRA O APP",g_cfg.bgOnClose);
-    btn(R_setSysMedia,g_cfg.sysMedia?L"CONTROLES DO SISTEMA: SIM":L"CONTROLES DO SISTEMA: NÃO",g_cfg.sysMedia);
+    btn(R_setSortDir,std::wstring(g_cfg.sortDesc?L"DECRESCENTE":L"CRESCENTE")+seta,false);
+    tgl(R_setBgClose,g_cfg.bgOnClose?L"FECHAR: CONTINUA TOCANDO":L"FECHAR: ENCERRA O APP",L"TOCAR EM 2º PLANO",g_cfg.bgOnClose);
+    tgl(R_setSysMedia,g_cfg.sysMedia?L"CONTROLES DO SISTEMA: SIM":L"CONTROLES DO SISTEMA: NÃO",L"CONTROLES DO SISTEMA",g_cfg.sysMedia);
     btn(R_setQuit,L"SAIR DO REMIX (Ctrl+Q)",false);
     if(R_setOnMode.right>R_setOnMode.left){   // ONLINE
         bool probed=OT().probed.load(); bool okT=probed&&YtdlpOk()&&FfmpegOk(); std::wstring tools;
@@ -107,21 +120,24 @@ static void DrawSettings(int w,int h){
             tools+=OT().jsName.empty()?(OT().jsOld.empty()?std::wstring(L"   ·   Deno/Node.js: não (o YouTube pode falhar)"):L"   ·   "+OT().jsOld+L" é antigo (precisa Deno 2.3+ ou Node 22+)"):L"   ·   "+OT().jsName+L" "+OT().vJs;
             if(!OT().spotdl.empty()) tools+=L"   ·   spotdl "+OT().vSpot; }
         gfx::TextRect(tools,RectF((float)R_setOnMode.left,(float)R_setOnMode.top-24,(float)(R_setOnFmt.right-R_setOnMode.left),18),sm,okT||!probed?white:Argb(255,235,150,110),false,gfx::Near,false,gfx::EllipsisChar);
-        btn(R_setOnMode,g_cfg.onlineMode==L"download"?L"AO TOCAR: BAIXAR":L"AO TOCAR: STREAMING",g_cfg.onlineMode==L"download");
-        btn(R_setOnFmt,L"FORMATO: "+std::wstring(g_cfg.onlineFormat==L"original"?L"ORIGINAL":(g_cfg.onlineFormat==L"m4a"?L"M4A":L"MP3")),false);
+        btn(R_setOnMode,std::wstring(g_cfg.onlineMode==L"download"?L"AO TOCAR: BAIXAR":L"AO TOCAR: STREAMING")+seta,g_cfg.onlineMode==L"download");
+        btn(R_setOnFmt,L"FORMATO: "+std::wstring(g_cfg.onlineFormat==L"original"?L"ORIGINAL":(g_cfg.onlineFormat==L"m4a"?L"M4A":L"MP3"))+seta,false);
         static const wchar_t* srcs[3]={L"BUSCA: YOUTUBE MUSIC",L"BUSCA: YOUTUBE",L"BUSCA: SOUNDCLOUD"};
-        btn(R_setOnSrc,srcs[std::max(0,std::min(2,g_cfg.onlineSource))],false);
+        btn(R_setOnSrc,std::wstring(srcs[std::max(0,std::min(2,g_cfg.onlineSource))])+seta,false);
         btn(R_setOnFolder,L"PASTA DOS DOWNLOADS...",!g_cfg.downloadFolder.empty());
         gfx::TextRect(L"Downloads em "+OnlineDownloadBaseCached()+L"   ·   streaming fica só na memória (fechar o app não deixa arquivo pela metade)",RectF((float)R_setOnSrc.left,(float)R_setOnSrc.bottom+8,(float)(R_setOnFolder.right-R_setOnSrc.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisPath);
         btn(R_setOnRecheck,L"PROCURAR DE NOVO",false);
         gfx::TextRect(okT?L"Spotify, Deezer e Apple Music: o Remix lê a lista e acha cada música no YouTube Music.":L"Rode: bash instalar-dependencias.sh (zip portátil) - instala yt-dlp, ffmpeg, Deno e zenity pela sua distro",
             RectF((float)R_setOnRecheck.right+14,(float)R_setOnRecheck.top,(float)(R_setOnFolder.right-R_setOnRecheck.right-14),(float)(R_setOnRecheck.bottom-R_setOnRecheck.top)),sm,gray,false,gfx::Near,true,gfx::EllipsisChar);
     }
-    gfx::Text(L"Controles do sistema: teclas de mídia e o applet de mídia do desktop (MPRIS).",(float)(R_setQuit.right+14),(float)(R_setQuit.top+10),sm,gray);
-    gfx::Text(g_cfg.autoplay?L"Ao acabar uma musica, toca a proxima (ordem da lista ou aleatorio com ⇄).":L"Ao acabar uma musica, para. Toque a proxima manualmente.",(float)R_setAutoplay.left,(float)(R_setAutoplay.bottom+8),sm,gray);
-    gfx::Text(g_cfg.sortMode==L"manual"?L"Ordem manual: use as setas ▲▼ nas faixas (ou Ctrl+↑/↓ na faixa atual). Salva em order.ini.":L"A ordem escolhida fica salva e vale para o autoplay e para ◀ ▶.",(float)R_setAutoplay.left,(float)(R_setAutoplay.bottom+26),sm,gray);
+    {   // textos de ajuda presos a largura da secao (nada vaza da caixa)
+        float pw2=(float)(R_setSortDir.right-R_setAutoplay.left);
+        gfx::TextRect(L"Controles do sistema: teclas de mídia e o applet de mídia do desktop (MPRIS).",RectF((float)(R_setQuit.right+14),(float)R_setQuit.top,(float)(R_setSysMedia.right-R_setQuit.right-14),(float)(R_setQuit.bottom-R_setQuit.top)),sm,gray,false,gfx::Near,true,gfx::EllipsisChar);
+        gfx::TextRect(g_cfg.autoplay?L"Ao acabar uma musica, toca a proxima (ordem da lista ou aleatorio com ⇄).":L"Ao acabar uma musica, para. Toque a proxima manualmente.",RectF((float)R_setAutoplay.left,(float)(R_setAutoplay.bottom+8),pw2,16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(g_cfg.sortMode==L"manual"?L"Ordem manual: use as setas ▲▼ nas faixas (ou Ctrl+↑/↓ na faixa atual). Salva em order.ini.":L"A ordem escolhida fica salva e vale para o autoplay e para ◀ ▶.",RectF((float)R_setAutoplay.left,(float)(R_setAutoplay.bottom+26),pw2,16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+    }
     // equalizador
-    btn(R_setEqOn,g_cfg.eqOn?L"EQUALIZADOR: LIGADO":L"EQUALIZADOR: DESLIGADO",g_cfg.eqOn);
+    tgl(R_setEqOn,g_cfg.eqOn?L"EQUALIZADOR: LIGADO":L"EQUALIZADOR: DESLIGADO",L"EQUALIZADOR",g_cfg.eqOn);
     btn(R_setEqReset,L"ZERAR",false);
     // sliders
     auto isEq=[&](int id){return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8;};
@@ -147,7 +163,10 @@ static void DrawSettings(int w,int h){
         gfx::Text(bv,(float)(s.r.right+10),(float)(s.r.top-5),sm,white);
     }
     btn(R_setEffect,L"Efeito: "+g_cfg.ledEffect+L" ▾",false);
-    if(!UiGlow()) gfx::Text(L"No estilo Limpo o LED e o corredor ficam desligados (escolha Clássico ou Spotify + LED).",(float)R_setEffect.right+14,(float)R_setEffect.top+8,sm,gray);
+    if(!UiGlow()){   // nota presa a largura da secao do LED
+        float sr=(float)(px+pw); for(auto&sc:g_setSections) if(sc.first.left<=R_setEffect.left&&sc.first.right>=R_setEffect.right&&sc.first.top<=R_setEffect.top&&sc.first.bottom>=R_setEffect.bottom) sr=(float)sc.first.right-20;
+        gfx::TextRect(L"Neste estilo o LED e o corredor ficam desligados (Clássico ou Spotify + LED ligam).",RectF((float)R_setEffect.right+14,(float)R_setEffect.top,sr-(float)R_setEffect.right-14,(float)(R_setEffect.bottom-R_setEffect.top)),sm,gray,false,gfx::Near,true,gfx::EllipsisChar);
+    }
     // linhas de cor (indice 0 = segue tema)
     auto rowIdAt=[&](size_t i)->std::wstring{
         if(i==0) return L"";
@@ -166,17 +185,17 @@ static void DrawSettings(int w,int h){
                 gfx::FillEllipse(rr,ToGdi(c,dimmed?60:80));
                 gfx::TextRect(L"T",rr,sm,white,false,gfx::Center,true);
             } else {
-                gfx::FillEllipse(rr,ToGdi(c,dimmed?55:150));
+                gfx::FillEllipse(rr,ToGdi(c,UiClassic()?(dimmed?55:150):(dimmed?70:255)));   // novos: cor cheia quando ativa
             }
             bool sel=((i==0&&cur.empty())||(i>0&&!cur.empty()&&cur==id));
             BYTE ringA=dimmed?(BYTE)60:(BYTE)255;
             gfx::StrokeEllipse(rr,sel?2.2f:1.1f,sel?Cs(Argb(255,240,242,250),UI().text):Cs(Argb(ringA,90,94,115),UI().textFaint,ringA));
         }
     };
-    btn(R_setAutoColor,g_cfg.autoColor?L"CORES: AUTOMÁTICO (segue o tema)":L"CORES: MANUAIS",g_cfg.autoColor);
+    tgl(R_setAutoColor,g_cfg.autoColor?L"CORES: AUTOMÁTICO (segue o tema)":L"CORES: MANUAIS",L"CORES AUTOMÁTICAS",g_cfg.autoColor);
     colorRowDraw(R_playColors,g_cfg.btnPlayColor);
     colorRowDraw(R_navColors,g_cfg.btnNavColor);
-    btn(R_setRunnerToggle,g_cfg.runnerOn?L"LIGADO":L"DESLIGADO",g_cfg.runnerOn);
+    tgl(R_setRunnerToggle,g_cfg.runnerOn?L"LIGADO":L"DESLIGADO",L"LIGAR",g_cfg.runnerOn);
     colorRowDraw(R_runColors,g_cfg.runnerColor);
     colorRowDraw(R_partColors,g_cfg.particlesColor);
     colorRowDraw(R_ledColors,g_cfg.ledColor);

@@ -42,19 +42,19 @@ static void LayoutSettings(int w,int h){
     };
     // secoes comuns as duas larguras
     auto sectLibrary=[&](int x,int& y,int cw){
-        sect(x,y,cw,132,L"BIBLIOTECA");
+        sect(x,y,cw,140,L"BIBLIOTECA");   // rotulo (y+50), botoes, caminho da pasta (y+110)
         int bw=(cw-60)/2;
-        R_settingsDefault={x+20,y+60,x+20+bw,y+96}; R_settingsCustom={x+30+bw,y+60,x+cw-20,y+96};
-        y+=152;
+        R_settingsDefault={x+20,y+68,x+20+bw,y+104}; R_settingsCustom={x+30+bw,y+68,x+cw-20,y+104};
+        y+=160;
     };
     auto sectMode=[&](int x,int& y,int cw){
-        sect(x,y,cw,186,L"MODO DE EXIBIÇÃO");
+        sect(x,y,cw,160,L"MODO DE EXIBIÇÃO");   // botoes + velocidade do CD
         int mw3=(cw-60)/3;
         R_settingsModeSquare={x+20,y+58,x+20+mw3,y+94};
         R_settingsModeCd={x+30+mw3,y+58,x+30+mw3*2,y+94};
         R_settingsModeVertical={x+40+mw3*2,y+58,x+cw-20,y+94};
         slider(Z_CD_SPEED,x+20,y+122,cw-110,0,200);
-        y+=208;
+        y+=180;
     };
     auto sectThemes=[&](int x,int& y,int cw){
         sect(x,y,cw,120,L"TEMAS");
@@ -64,8 +64,9 @@ static void LayoutSettings(int w,int h){
     };
     auto sectEffects=[&](int x,int& y,int cw){
         sect(x,y,cw,96,L"EFEITOS");
-        R_setParticles={x+20,y+52,x+185,y+86}; R_setGlitch={x+195,y+52,x+320,y+86};
-        R_setPerf={x+330,y+52,x+cw-20,y+86};
+        int ew=(cw-60)/3;   // tres chaves iguais
+        R_setParticles={x+20,y+52,x+20+ew,y+86}; R_setGlitch={x+30+ew,y+52,x+30+ew*2,y+86};
+        R_setPerf={x+40+ew*2,y+52,x+cw-20,y+86};
         y+=116;
     };
     auto sectColors=[&](int x,int& y,int cw){
