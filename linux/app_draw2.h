@@ -67,6 +67,18 @@ static void DrawSettings(int w,int h){
     // estilo da interface
     for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
     gfx::Text(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",(float)R_settingsStyle[0].left,(float)R_settingsStyle[0].bottom+10,sm,gray);
+    {   // HOST (acesso pelo celular)
+        bool on=host::Running(); host::View hv=host::GetView();
+        tgl(R_setHostOn,on?L"HOST: LIGADO":L"HOST: DESLIGADO",L"LIGAR O HOST",on);
+        btn(R_setHostPanel,L"ABRIR PAINEL DO HOST",false);
+        btn(R_setHostPort,L"PORTA: "+std::to_wstring(g_cfg.hostPort),false);
+        btn(R_setHostPin,g_cfg.hostPin.empty()?L"PIN: DEFINIR...":L"PIN: "+std::wstring(g_cfg.hostPin.size(),L'•'),!g_cfg.hostPin.empty());
+        btn(R_setHostName,L"NOME: "+(g_cfg.hostName.empty()?Utf8ToWide(hostnet::HostName()):g_cfg.hostName),false);
+        tgl(R_setHostTunnel,g_cfg.hostTunnel?L"TÚNEL: LIGADO":L"TÚNEL: DESLIGADO",L"TÚNEL CLOUDFLARE (internet)",g_cfg.hostTunnel);
+        tgl(R_setHostLan,g_cfg.hostLan?L"REDE LOCAL: SIM":L"REDE LOCAL: NÃO",L"REDE LOCAL (mesmo roteador)",g_cfg.hostLan);
+        std::wstring st=on?L"Ligado na porta "+std::to_wstring(hv.port)+(hv.lanUrls.empty()?L"":L"   ·   "+Utf8ToWide(hv.lanUrls[0]))+L"   ·   túnel: "+Utf8ToWide(hv.tunUrl.empty()?hv.tunStatus:hv.tunUrl):L"Desligado. O celular abre um site (túnel ou rede local), digita o PIN e você aceita aqui.";
+        gfx::TextRect(st,RectF((float)R_setHostTunnel.left,(float)R_setHostTunnel.bottom+10,(float)(R_setHostLan.right-R_setHostTunnel.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+    }
     // biblioteca
     std::wstring mode=g_cfg.musicFolder.empty()?L"PADRÃO — detectar músicas do PC":L"PASTA PERSONALIZADA";
     gfx::Text(mode,(float)R_settingsDefault.left,(float)(R_settingsDefault.top-18),sm,white);
@@ -224,10 +236,13 @@ static void DrawArtistEditor(int w,int h){
     DrawRoundRect(box,14,&pb,&apn,2);
     const float lab=S(13), sm=S(10), txt=S(14);
     Color abr=ToGdi(g_theme.accent), white=C_WHITE, gray=C_GRAY2;
-    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":L"EDITAR NOME DO ARTISTA";
+    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":L"EDITAR NOME DO ARTISTA";
     gfx::Text(etitle,(float)(bx+22),(float)(by+18),lab,abr,true);
     std::wstring t;
-    if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
+    if(g_editMode==6) t=L"Porta TCP de 1024 a 65535 (padrão 49875). Só números.";
+    else if(g_editMode==7) t=L"De 4 a 12 números. O celular digita este PIN na primeira vez; depois você aceita o aparelho aqui.";
+    else if(g_editMode==8) t=L"Como o seu PC aparece no celular.";
+    else if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
     else if(g_editMode==4||g_editMode==5) t=L"Música, álbum ou playlist do Spotify, YouTube / YouTube Music, Deezer, Apple Music ou SoundCloud  (Ctrl+V cola)";
     else if(g_editMode==3) t=L"Playlist: "+(g_editTrack>=0&&g_editTrack<(int)g_playlists.size()?g_playlists[(size_t)g_editTrack].name:L"");
     else t=(g_editMode==1?L"Arquivo: ":L"Faixa: ")+(g_editTrack>=0&&g_editTrack<(int)g_tracks.size()?(g_editMode==1?std::filesystem::path(g_tracks[g_editTrack].path).filename().wstring():g_tracks[g_editTrack].title):L"");
@@ -442,6 +457,68 @@ static void DrawOnline(int w,int h){
     gfx::TextRect(st+(n&&!busy?L"   ·   ▶ toca  ↓ baixa  + playlist":L""),RectF(fx,box.Y+box.Height-S(52),footW-(fx-box.X-S(16)),S(40)),S(11),gray,false,gfx::Near,true,gfx::EllipsisChar);
     if(hasAll) DrawPill(u.btnAddAll,tpl>=0?L"ADICIONAR TODAS NA PLAYLIST":(fromLink?L"SALVAR COMO PLAYLIST":L"ADICIONAR TODAS..."),true,S(11));
 }
+// ---- painel HOST (acesso pelo celular) --------------------------------------
+static void DrawHostPanel(int w,int h){
+    host::PanelUI& p=host::PU(); LayoutHostPanel(w,h); const host::View& v=p.v;
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(200,2,4,10),UI().bg,200));
+    RectF box=RF(p.box); Color pb=Cs(Argb(255,10,13,26),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
+    DrawRoundRect(box,S(14),&pb,&apn,1.8f);
+    Color white=C_WHITE, gray=C_GRAY2, ab=ToGdi(g_theme.accent);
+    gfx::Text(L"HOST  ·  ACESSO PELO CELULAR",box.X+S(18),box.Y+S(14),S(14),UiClassic()?ab:white,true);
+    gfx::TextRect(L"✕",RF(p.btnClose),S(14),white,false,gfx::Center,true);
+    bool on=v.running;
+    DrawPill(p.btnToggle,on?L"DESLIGAR":L"LIGAR",on,S(11));
+    DrawPill(p.btnTunnel,v.tunRunning?L"TÚNEL: LIGADO":L"TÚNEL: DESLIGADO",v.tunRunning,S(10));
+    DrawPill(p.btnHtml,L"HTML P/ WHATSAPP",false,S(10));
+    DrawPill(p.btnPasta,L"ABRIR PASTA",false,S(10));
+    DrawPill(p.btnPort,L"PORTA: "+std::to_wstring(g_cfg.hostPort),false,S(10));
+    DrawPill(p.btnPin,g_cfg.hostPin.empty()?L"PIN: DEFINIR...":L"PIN: "+std::wstring(g_cfg.hostPin.size(),L'•'),!g_cfg.hostPin.empty(),S(10));
+    DrawPill(p.btnName,L"NOME: "+(g_cfg.hostName.empty()?Utf8ToWide(hostnet::HostName()):g_cfg.hostName),false,S(10));
+    DrawPill(p.btnLan,g_cfg.hostLan?L"REDE LOCAL: SIM":L"REDE LOCAL: NÃO",g_cfg.hostLan,S(10));
+    // linhas de estado
+    float ix=box.X+S(18), iy=(float)p.btnLan.bottom+S(8), iw=box.Width-S(36);
+    std::wstring l1=on?L"Ligado na porta "+std::to_wstring(v.port)+(g_cfg.hostLan?L"  ·  rede local: "+(v.lanUrls.empty()?L"nenhum IP encontrado":Utf8ToWide(v.lanUrls[0]))+(v.lanUrls.size()>1?L" (+"+std::to_wstring(v.lanUrls.size()-1)+L")":L""):L"  ·  só pelo túnel"):L"Desligado"+std::wstring(v.lastError.empty()?L"":L"  ·  "+Utf8ToWide(v.lastError));
+    std::wstring l2=L"Túnel: "+Utf8ToWide(v.tunUrl.empty()?v.tunStatus:v.tunUrl)+(v.tunUrl.empty()?L"":L"   (HTTPS, atravessa CGNAT, não mostra seu IP)");
+    std::wstring l3=g_cfg.hostPin.empty()?L"Defina um PIN para ligar. O celular digita o PIN uma vez e você aceita o aparelho aqui.":L"Celular: abra o link, digite o PIN, e aceite o pedido que aparece aqui. Mande o HTML pelo WhatsApp para não digitar o link.";
+    gfx::TextRect(l1,RectF(ix,iy,iw,16),S(11),on?white:gray,false,gfx::Near,false,gfx::EllipsisChar);
+    gfx::TextRect(l2,RectF(ix,iy+S(17),iw,16),S(11),v.tunUrl.empty()?gray:ab,false,gfx::Near,false,gfx::EllipsisChar);
+    gfx::TextRect(l3,RectF(ix,iy+S(34),iw,16),S(10),gray,false,gfx::Near,false,gfx::EllipsisChar);
+    // lista com rolagem
+    gfx::PushClip(RF(p.list));
+    float y=(float)p.list.top-p.scroll, rowH=S(34); float x=ix;
+    auto title=[&](const std::wstring& t){ gfx::Text(t,x,y+S(4),S(11),UiClassic()?ab:white,true); y+=S(26); };
+    auto rowBg=[&](float yy){ RectF r(x,yy,iw,rowH-S(6)); Color rb=Cs(Argb(255,16,19,34),UI().surfaceHi); DrawRoundRect(r,S(UI_R_PILL),&rb,nullptr); };
+    title(L"PEDIDOS PARA CONECTAR ("+std::to_wstring(v.pending.size())+L")");
+    for(size_t i=0;i<v.pending.size()&&i<p.accept.size();i++){
+        rowBg(y); const host::PairReq& q=v.pending[i];
+        gfx::TextRect(Utf8ToWide(q.name)+L"   ·   "+Utf8ToWide(q.ip)+(q.viaTunnel?L" (internet)":L" (rede local)"),RectF(x+S(10),y,iw-S(210),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        DrawPill(p.accept[i],L"ACEITAR",true,S(10)); DrawPill(p.deny[i],L"RECUSAR",false,S(10)); y+=rowH;
+    }
+    title(L"DISPOSITIVOS PAREADOS ("+std::to_wstring(v.devs.size())+L")");
+    if(v.devs.empty()){ gfx::Text(L"Nenhum ainda.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
+    for(size_t i=0;i<v.devs.size()&&i<p.revoke.size();i++){
+        rowBg(y); const host::Device& d=v.devs[i]; long long ago=host::NowSec()-d.lastSeen; std::wstring seen=ago<120?L"agora":ago<3600?std::to_wstring(ago/60)+L" min atrás":ago<86400?std::to_wstring(ago/3600)+L" h atrás":std::to_wstring(ago/86400)+L" d atrás";
+        gfx::TextRect(Utf8ToWide(d.name)+L"   ·   "+Utf8ToWide(d.ip)+L"   ·   visto "+seen,RectF(x+S(10),y,iw-S(120),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        DrawPill(p.revoke[i],L"REMOVER",false,S(10)); y+=rowH;
+    }
+    title(L"PLAYLISTS DO PC NO CELULAR");
+    if(g_playlists.empty()){ gfx::Text(L"Você não tem playlists. Crie uma na aba PLAYLISTS e hosteie aqui.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
+    for(size_t i=0;i<g_playlists.size()&&i<p.plHost.size();i++){
+        rowBg(y); std::string t=host::Targets(g_playlists[i].slug);
+        gfx::TextRect(g_playlists[i].name,RectF(x+S(10),y,iw-S(140),rowH-S(6)),S(11),white,true,gfx::Near,true,gfx::EllipsisChar);
+        std::wstring lab=t.empty()?L"HOST: NÃO":t=="ALL"?L"HOST: TODOS":L"HOST: ALGUNS";
+        DrawPill(p.plHost[i],lab,!t.empty(),S(10)); y+=rowH;
+        for(size_t j=0;j<p.plDev[i].size()&&j<v.devs.size();j++){
+            bool sel=t=="ALL"||(","+t+",").find(","+v.devs[j].id+",")!=std::string::npos;
+            DrawPill(p.plDev[i][j],Utf8ToWide(v.devs[j].name),sel,S(9));
+        }
+        if(!p.plDev[i].empty()) y=(float)p.plDev[i].back().bottom+S(8);
+    }
+    title(L"PLAYLISTS DOS CELULARES (só leitura)");
+    if(v.dpls.empty()){ gfx::Text(L"Nenhuma. O celular cria as dele na aba MINHAS; elas ficam guardadas aqui, mas não entram nas suas.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
+    for(auto& dp:v.dpls){ std::wstring dn=L"?"; for(auto& d:v.devs) if(d.id==dp.dev) dn=Utf8ToWide(d.name); gfx::TextRect(Utf8ToWide(dp.name)+L"   ·   "+dn+L"   ·   "+std::to_wstring(dp.ids.size())+L" faixas",RectF(x+S(10),y,iw-S(20),rowH-S(6)),S(11),gray,false,gfx::Near,true,gfx::EllipsisChar); y+=rowH; }
+    gfx::PopClip();
+}
 // ---- menus flutuantes / confirmacao (Linux) --------------------------------
 static void DrawMenuBox(const RectF& box){
     Color pb=Cs(Argb(255,12,15,30),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
@@ -477,14 +554,15 @@ static void DrawConfirm(int w,int h){
     RectF box=RF(R_confirmBox);
     Color pb=Cs(Argb(255,12,15,30),UI().surface), apn=Argb(255,190,70,90);
     DrawRoundRect(box,14,&pb,&apn,2);
-    gfx::Text(g_confirmKind==1?L"EXCLUIR PLAYLIST":L"EXCLUIR MÚSICA",box.X+22,box.Y+18,S(13),Argb(255,255,120,130),true);
+    gfx::Text(g_confirmKind==2?L"NOVO DISPOSITIVO QUER SE CONECTAR":g_confirmKind==1?L"EXCLUIR PLAYLIST":L"EXCLUIR MÚSICA",box.X+22,box.Y+18,S(13),g_confirmKind==2?ToGdi(g_theme.accent):Argb(255,255,120,130),true);
     gfx::TextRect(g_confirmText,RectF(box.X+22,box.Y+52,box.Width-44,60),S(11),C_WHITE,false,gfx::Near,false,gfx::EllipsisChar);
-    gfx::Text(L"O arquivo vai para a lixeira do sistema (da para recuperar).",box.X+22,box.Y+82,S(10),C_GRAY2);
+    gfx::Text(g_confirmKind==2?L"Aceite só se for você. Dá para remover o aparelho depois, no painel HOST.":L"O arquivo vai para a lixeira do sistema (da para recuperar).",box.X+22,box.Y+82,S(10),C_GRAY2);
     auto cbtn=[&](RECT r,const wchar_t* t,bool primary){
         RectF b=RF(r);
         Color fb=primary?Argb(255,90,30,40):Cs(Argb(255,24,27,42),UI().surfaceHi), p=primary?Argb(255,220,80,100):Cs(Argb(255,70,74,95),UI().borderHi);
         DrawRoundRect(b,8,&fb,&p,1.5f);
         gfx::TextRect(t,b,S(10),primary?C_WHITE:C_GRAY2,false,gfx::Center,true);
     };
-    cbtn(R_confirmYes,L"EXCLUIR",true); cbtn(R_confirmNo,L"CANCELAR",false);
+    if(g_confirmKind==2){ DrawPill(R_confirmYes,L"ACEITAR",true,S(10)); DrawPill(R_confirmNo,L"RECUSAR",false,S(10)); }
+    else { cbtn(R_confirmYes,L"EXCLUIR",true); cbtn(R_confirmNo,L"CANCELAR",false); }
 }

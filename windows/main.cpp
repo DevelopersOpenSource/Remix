@@ -6,6 +6,8 @@
 #define UNICODE
 #define _UNICODE
 #define NOMINMAX
+#include <winsock2.h>   // antes de windows.h (Host: Winsock2)
+#include <ws2tcpip.h>
 #include <windows.h>
 #include <shellapi.h>
 #include <shlobj.h>
@@ -139,6 +141,7 @@ static void OnPaint(HDC hdc){
         if(g_cfg.displayMode==L"vertical")DrawVertical(g,w,h);else DrawNormal(g,w,h);
         if(g_imgMenuOpen)DrawImgMenu(g,w,h);
         if(OU().open)DrawOnline(g,w,h);   // os menus (ex.: escolher playlist) ficam por cima
+        if(host::PU().open)DrawHostPanel(g,w,h);
         if(g_folderMenuOpen)DrawFolderMenu(g,w,h);
         if(g_ctxOpen)DrawCtxMenu(g);
         if(g_editArtist)DrawArtistEditor(g,w,h);

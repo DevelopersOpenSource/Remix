@@ -92,7 +92,7 @@ static std::vector<Track> g_libTracks; static bool g_libCached=false;   // bibli
 static Track g_nowPlaying; static bool g_nowPlayingValid=false;        // faixa tocando (pode nao estar na lista visivel)
 static int g_hkCapture=-1;                 // acao cujo atalho esta sendo capturado (configuracoes)
 static std::wstring g_pendingAddPath;      // faixa a adicionar na playlist recem-criada
-static int g_confirmKind=0;                // 0 = excluir faixa, 1 = excluir playlist
+static int g_confirmKind=0;                // 0 = excluir faixa, 1 = excluir playlist, 2 = aceitar dispositivo (host)
 // ---- marcar musicas da biblioteca para uma playlist / musicas online ----
 static bool g_pickMode=false; static int g_pickPl=-1; static std::set<std::wstring> g_pickSel;
 static std::wstring g_lastOnlineUrl, g_lastOnlineTitle;         // ultima musica em streaming (diario)
@@ -121,7 +121,9 @@ enum : int {
     EV_PICK_FOLDER, EV_PICK_IMAGE, EV_PICK_WALL, EV_TRANSCODED,
     EV_ART_READY, EV_ONLINE_META, EV_ONLINE_READY, EV_ONLINE_FAIL, EV_ONLINE_THUMB, EV_ONLINE_SEARCH, EV_ONLINE_RESOLVED, EV_ONLINE_JOB,
     EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY,
-    EV_PICK_DLONCE   // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
+    EV_PICK_DLONCE,  // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
+    EV_HOST_PEDIDO,  // host: celular pediu para parear (s = id do pedido)
+    EV_HOST_STATUS   // host: aviso do servidor/tunel (s = texto, n = 1 quando e a URL do tunel)
 };
 // Analise incremental do streaming (online_play.h entrega o PCM; esta converte em
 // onda/espectro e a UI publica em WS() para a musica online mostrar como a local).
@@ -180,6 +182,9 @@ enum : int {
     Z_TAB_ONLINE=787, Z_PL_ADD=788, Z_PICK_DONE=789, Z_PICK_CANCEL=790, Z_ACTIVITY=791, Z_SET_ON_MODE=792, Z_SET_ON_FMT=793, Z_SET_ON_SRC=794,
     Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810,
     Z_SETTINGS_STYLE_BASE=820,   // +0 classico, +1 limpo, +2 spotify
+    Z_HOST_BTN=821, Z_SET_HOST_ON=822, Z_SET_HOST_PORT=823, Z_SET_HOST_PIN=824, Z_SET_HOST_NAME=825, Z_SET_HOST_TUNNEL=826, Z_SET_HOST_LAN=827, Z_SET_HOST_PANEL=828,
+    Z_HOST_CLOSE=830, Z_HOST_TOGGLE=831, Z_HOST_TUNNEL=832, Z_HOST_HTML=833, Z_HOST_PASTA=834, Z_HOST_PORT=835, Z_HOST_PIN=836, Z_HOST_NAME=837, Z_HOST_LAN=838,
+    Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
     Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
@@ -196,6 +201,7 @@ static std::vector<RECT> R_cardSeekRects;
 static RECT R_settingsPanel, R_settingsDefault, R_settingsCustom, R_settingsClose;
 static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
 static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spotify
+static RECT R_setHostOn, R_setHostPort, R_setHostPin, R_setHostName, R_setHostTunnel, R_setHostLan, R_setHostPanel, R_hostBtn;   // HOST (docs/HOST.md)
 static RECT R_verticalCoverButton;
 static RECT R_playerPanel;
 static int g_panelArt = 300;
@@ -246,7 +252,7 @@ static RECT R_ctxBox;
 static std::vector<RECT> R_ctxItems;
 // menu de contexto generico: rotulos + acao de cada item (faixa, card de playlist, escolher playlist)
 enum { CTX_TRACK=0, CTX_PLAYLIST=1, CTX_PICKPL=2, CTX_MENU=3, CTX_PICKON=4 };
-enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PICK_NEW,
+enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PL_HOST, CA_PICK_NEW,
        CA_ADD_LIB, CA_ADD_FILES, CA_ADD_FOLDERCOPY, CA_ADD_FOLDERLINK, CA_ADD_LINK, CA_ADD_SEARCH, CA_NEW_EMPTY, CA_NEW_FOLDER, CA_NEW_LINK, CA_NEW_SEARCH,
        CA_PLF_PICK, CA_PLF_UNLINK, CA_PLF_LIBRARY, CA_PL_FOLDER, CA_PL_SYNC, CA_PL_DLALL, CA_PL_MODE, CA_DOWNLOAD, CA_OPEN_URL, CA_ACT_CANCEL, CA_ACT_OPENDIR, CA_PICKON_NEW,
        CA_PICK_BASE=100, CA_PLF_RECENT_BASE=200, CA_PICKON_BASE=300 };
@@ -886,6 +892,11 @@ static void DeleteTrack(int i){
     SetStatus(L"Movido para a lixeira.",2500);
 }
 
+// ---- Host (host_server.h): cola definida mais abaixo; aqui so as assinaturas ----
+static bool HostRunningNow();
+static void HostStopNow();
+static bool HostStartFromCfg();
+static std::wstring HostPlLabel(const std::wstring& slug);
 // ---- editor de texto (artista / nome do arquivo) --------------------------
 static void StartArtistEdit(int idx){
     if(idx<0||idx>=(int)g_tracks.size()) return;
@@ -898,10 +909,20 @@ static void StartFileRename(int idx){
 static void StartPlaylistNameEdit(int mode,int pl){ g_editArtist=true; g_editMode=mode; g_editTrack=pl; g_editBuf=(mode==3&&pl>=0&&pl<(int)g_playlists.size())?g_playlists[(size_t)pl].name:L"";
     if(mode==4||mode==5){ std::wstring c=Config::Trim(PlatformClipboardText()); if(IsUrlText(c)&&c.size()<600) g_editBuf=c; } }   // link na area de transferencia ja vem colado
 static void CancelArtistEdit(){ g_editArtist=false; g_editTrack=-1; g_editBuf.clear(); g_editMode=0; }
+// host: 6 = porta, 7 = PIN, 8 = nome do PC
+static void StartHostEdit(int mode){ g_editArtist=true; g_editMode=mode; g_editTrack=-1; g_editBuf=mode==6?std::to_wstring(g_cfg.hostPort):(mode==7?g_cfg.hostPin:g_cfg.hostName); }
 static void CommitArtistEdit(){
     std::wstring s=g_editBuf;
     while(!s.empty()&&(s.back()==L' '||s.back()==L'\r'||s.back()==L'\n')) s.pop_back();
     if(g_editMode==1){ RenameTrackFile(g_editTrack,s); CancelArtistEdit(); return; }
+    if(g_editMode>=6&&g_editMode<=8){   // host: porta / PIN / nome
+        int mode=g_editMode; CancelArtistEdit(); std::wstring v=Config::Trim(s);
+        if(mode==6){ int p=_wtoi(v.c_str()); if(p<1024||p>65535){ SetStatus(L"Porta: use um número de 1024 a 65535.",3200); return; } g_cfg.hostPort=p; }
+        else if(mode==7){ bool ok=v.size()>=4&&v.size()<=12; for(wchar_t c:v) if(c<L'0'||c>L'9') ok=false; if(!ok){ SetStatus(L"PIN: só números, de 4 a 12 dígitos.",3200); return; } g_cfg.hostPin=v; }
+        else g_cfg.hostName=v.size()>40?v.substr(0,40):v;
+        g_cfg.Save(); if(HostRunningNow()){ HostStopNow(); HostStartFromCfg(); }
+        SetStatus(mode==6?L"Porta salva.":mode==7?L"PIN salvo.":L"Nome salvo.",2200); BuildLayout(); return;
+    }
     if(g_editMode==2){
         int pi=CreatePlaylistSafe(s.empty()?L"Playlist":s); CancelArtistEdit();
         if(pi>=0){
@@ -987,6 +1008,7 @@ static void OpenPlaylistCtxMenu(int pl,int x,int y){   // menu de um card de pla
     int on=0; for(auto& e:p.entries) if(!e.url.empty()&&e.path.empty()) ++on;
     if(on>0){ l.push_back(L"Baixar as "+std::to_wstring(on)+L" músicas online"); a.push_back(CA_PL_DLALL); d.push_back(false); }
     l.push_back(p.mode.empty()?L"Modo online: padrão das configurações":(p.mode==L"download"?L"Modo online: baixar":L"Modo online: streaming")); a.push_back(CA_PL_MODE); d.push_back(false);
+    l.push_back(HostPlLabel(p.slug)); a.push_back(CA_PL_HOST); d.push_back(false);
     l.push_back(L"Renomear..."); a.push_back(CA_PL_RENAME); d.push_back(false);
     l.push_back(L"Excluir playlist"); a.push_back(CA_PL_DELETE); d.push_back(true);
     OpenCtxMenuGeneric(x,y,CTX_PLAYLIST,pl,l,a,d,(int)S(280));
@@ -1097,8 +1119,39 @@ static void RemoveTrackFromOpenPlaylist(int track){
 }
 #include "app_online_b.h"
 #include "app_online_c.h"
+#include "host_server.h"
+// ---- Host: cola entre a UI e o servidor -----------------------------------------
+static std::wstring g_hostReq;   // pedido de pareamento em confirmacao na tela
+static std::string AccentHex(){ char b[16]; snprintf(b,sizeof b,"#%02x%02x%02x",GetRValue(g_theme.accent),GetGValue(g_theme.accent),GetBValue(g_theme.accent)); return b; }
+static bool HostRunningNow(){ return host::Running(); }
+static void HostPublishNow(){ if(g_view!=0&&!g_libCached) return; host::Publish((g_view!=0&&g_libCached)?g_libTracks:g_tracks,g_playlists); }
+static unsigned long long HostFingerprint(){ unsigned long long f=g_tracks.size()*1315423911ULL+g_libTracks.size()*2654435761ULL+g_playlists.size()*97ULL; for(auto& p:g_playlists) f=f*31+p.entries.size(); return f; }
+static bool HostStartFromCfg(){
+    std::string err=host::Start(g_cfg.hostPort,g_cfg.hostLan,WideToUtf8(g_cfg.hostPin),g_cfg.hostName,AccentHex());
+    if(!err.empty()){ SetStatus(L"Host: "+Utf8ToWide(err),4500); return false; }
+    HostPublishNow(); if(g_cfg.hostTunnel) host::TunnelStart(g_cfg.hostPort);
+    SetStatus(L"Host ligado na porta "+std::to_wstring(g_cfg.hostPort)+L".",3000); return true;
+}
+static void HostStopNow(){ host::Stop(); SetStatus(L"Host desligado.",2500); }
+static void HostToggle(){
+    if(host::Running()){ HostStopNow(); g_cfg.hostOn=false; g_cfg.Save(); return; }
+    if(g_cfg.hostPin.empty()){ SetStatus(L"Defina um PIN (4 a 12 números) antes de ligar o Host.",3500); return; }
+    g_cfg.hostOn=HostStartFromCfg(); g_cfg.Save();
+}
+static void HostTick(){ static unsigned long long last=0; static ULONGLONG lastMs=0; if(!host::Running()) return; ULONGLONG now=GetTickCount64(); if(now-lastMs<2000) return; lastMs=now; unsigned long long f=HostFingerprint(); if(f!=last){ last=f; HostPublishNow(); } }
+static void HostAskPair(const std::wstring& reqId){
+    host::PairReq q=host::FindReq(WideToUtf8(reqId)); if(q.id.empty()||q.estado!=0) return;
+    if(g_confirmOpen&&g_confirmKind==2) return;   // ja tem um pedido na tela; o outro espera (o celular fica sondando)
+    g_hostReq=reqId; g_confirmOpen=true; g_confirmKind=2; g_confirmTrack=-1;
+    g_confirmText=L"\""+Utf8ToWide(q.name)+L"\" ("+Utf8ToWide(q.ip)+(q.viaTunnel?L", pela internet":L", rede local")+L") quer se conectar ao seu Remix.";
+}
+static void HostConfirm(bool ok){ if(!g_hostReq.empty()) host::Approve(WideToUtf8(g_hostReq),ok); g_hostReq.clear(); SetStatus(ok?L"Dispositivo aceito: ele já pode ouvir as músicas.":L"Pedido recusado.",3000); }
+static void HostMakeHtml(){ std::wstring p=host::WriteConnectHtml(); if(p.empty()){ SetStatus(L"Não consegui gravar o arquivo.",3000); return; } SetStatus(L"Remix-conectar.html gravado na pasta do Remix: mande pelo WhatsApp.",4500); PlatformOpenFolder(Config::BaseDir()); }
+static std::wstring HostPlLabel(const std::wstring& slug){ return host::Targets(slug).empty()?L"Hostear no celular":L"Parar de hostear no celular"; }
+static void HostTogglePlaylist(int pl){ if(pl<0||pl>=(int)g_playlists.size()) return; const std::wstring& slug=g_playlists[(size_t)pl].slug; bool on=host::Targets(slug).empty(); host::SetTargets(slug,on?"ALL":""); HostPublishNow(); SetStatus(on?L"Playlist hosteada para todos os dispositivos (ajuste no painel HOST).":L"Playlist não aparece mais nos celulares.",3200); }
 static void ConfirmYes(){
     int t=g_confirmTrack; int kind=g_confirmKind; g_confirmOpen=false; g_confirmKind=0;
+    if(kind==2){ HostConfirm(true); return; }
     if(kind==1){
         bool wasOpen=(g_openPl==t); DeletePlaylistDir(t);
         if(wasOpen){ g_openPl=-1; EnterLibraryView(); } else if(g_openPl>t) g_openPl--;
@@ -1180,6 +1233,8 @@ static void HandleEvent(int type,const std::wstring& s,int n){
     case EV_WEB_DOWNLOAD_DONE: ConsumeWebDownload(); break;
     case EV_THUMBS_INVALIDATE: PlatformClearThumbs(); break;
     case EV_COMMAND: HandleCommand(s); break;
+    case EV_HOST_PEDIDO: HostAskPair(s); break;
+    case EV_HOST_STATUS: SetStatus(s,n?6000:4000); break;
     case EV_TRANSCODED: OnTranscoded(s,(unsigned)n); break;
     case EV_PICK_FOLDER: if(!s.empty()) SwitchFolder(s); break;
     case EV_PICK_IMAGE: ApplyCoverPick(n,s); break;
@@ -1231,6 +1286,7 @@ static void Tick(float dt){
     if(g_hiddenToBg&&g_bgAutoQuit&&!g_player.playing&&!g_converting&&!g_userPaused){ g_bgIdleSec+=dt; if(g_bgIdleSec>3.f){ g_bgIdleSec=0; PlatformClose(); return; } }
     else g_bgIdleSec=0;
     if(g_player.playing) g_userPaused=false;
+    HostTick();
     if(g_showSplash){ if(GetTickCount64()-g_splashStart>=SPLASH_MS) g_showSplash=false; }
     else {
         ConsumeAutoScan(); PollFolderWatch(); UpdateStreamQueue(); TickJournal();
@@ -1264,9 +1320,11 @@ static void CoreInit(){
                       L"Del: excluir (lixeira)   F2: renomear arquivo", L"Ctrl+↑ / Ctrl+↓: mover na ordem manual", L"Botão direito numa faixa: menu", L"Esc: fecha painéis",
                       L"Fechar a janela tocando: continua em 2º plano (abra o app de novo para voltar)", L"Ctrl+Q: sair de vez" };
     { std::wstring msg=OnlineStartupCleanup(g_lastOnlineUrl,g_lastOnlineTitle); if(!msg.empty()) SetStatus(msg,5000); }   // restos de download interrompido
+    if(g_cfg.hostOn&&!g_cfg.hostPin.empty()) HostStartFromCfg();   // host ligado na ultima vez: volta sozinho
 }
 static void CoreShutdown(){
     g_cfg.Save();
+    host::Stop();
     PlatformWatchStop();
     if(g_waveThread.joinable())g_waveThread.detach();
     if(g_scanThread.joinable())g_scanThread.detach();

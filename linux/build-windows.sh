@@ -14,10 +14,10 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-VER="${REMIX_VERSION:-1.3.1}"
+VER="${REMIX_VERSION:-1.4.0}"
 TC="${REMIX_WIN_TOOLCHAIN:-mingw}"
 mkdir -p build/win dist/windows
-LIBS=(-lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi)
+LIBS=(-lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi -lws2_32 -liphlpapi)   # ws2_32/iphlpapi: Host
 
 find_mingw() {
   for p in x86_64-w64-mingw32ucrt x86_64-w64-mingw32; do
@@ -82,7 +82,7 @@ cp README.md "$PW/" 2>/dev/null || true
 cp README.pt-BR.md "$PW/" 2>/dev/null || true
 cp windows/INSTALAR-DEPENDENCIAS.bat "$PW/INSTALAR-DEPENDENCIAS.bat"
 cp windows/LEIA-ME-PORTATIL.txt "$PW/LEIA-ME.txt"
-mkdir -p "$PW/assets/tools" && printf 'Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe e deno.exe se preferir instalar a mao.\r\nO Remix procura nesta pasta.\r\n' > "$PW/assets/tools/LEIA-ME.txt"
+mkdir -p "$PW/assets/tools" && printf 'Opcional: coloque aqui yt-dlp.exe, ffmpeg.exe, deno.exe e cloudflared.exe (tunel do Host) se preferir instalar a mao.\r\nO Remix procura nesta pasta.\r\n' > "$PW/assets/tools/LEIA-ME.txt"
 printf '[General]\r\nMusicFolder=Musica\r\n' > "$PW/config.ini"
 OUT="dist/remix-$VER-windows-x64-portable.zip"; rm -f "$OUT"
 (cd "$ROOT/build/portable-win" && zip -qr "$ROOT/$OUT" "remix-$VER-windows-x64")

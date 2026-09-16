@@ -7,13 +7,25 @@
 
 static bool IsEqId(int id){ return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8; }
 static const int Z_TRACK_RANGE=1000000, Z_EMPTY_ACTION=802;
-static bool AnyOverlay(){ return g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
+static bool AnyOverlay(){ return host::PU().open||g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
 
 static int HitTest(int x,int y){
     if(g_confirmOpen){ if(PtIn(R_confirmYes,x,y)) return Z_CONFIRM_YES; if(PtIn(R_confirmNo,x,y)) return Z_CONFIRM_NO; return -1; }
     if(g_ctxOpen){ for(size_t i=0;i<R_ctxItems.size();++i) if(PtIn(R_ctxItems[i],x,y)) return Z_CTX_ITEM_BASE+(int)i; return -1; }
     if(g_folderMenuOpen){ for(size_t i=0;i<R_folderItems.size();++i) if(PtIn(R_folderItems[i],x,y)) return Z_FOLDER_ITEM_BASE+(int)i; return -1; }
     if(g_editArtist) return -1;
+    if(host::PU().open){   // painel HOST
+        host::PanelUI& p=host::PU(); LayoutHostPanel(g_winW,g_winH);
+        if(PtIn(p.btnClose,x,y)) return Z_HOST_CLOSE;
+        if(PtIn(p.btnToggle,x,y)) return Z_HOST_TOGGLE; if(PtIn(p.btnTunnel,x,y)) return Z_HOST_TUNNEL; if(PtIn(p.btnHtml,x,y)) return Z_HOST_HTML; if(PtIn(p.btnPasta,x,y)) return Z_HOST_PASTA;
+        if(PtIn(p.btnPort,x,y)) return Z_HOST_PORT; if(PtIn(p.btnPin,x,y)) return Z_HOST_PIN; if(PtIn(p.btnName,x,y)) return Z_HOST_NAME; if(PtIn(p.btnLan,x,y)) return Z_HOST_LAN;
+        if(PtIn(p.list,x,y)){
+            for(size_t i=0;i<p.accept.size();i++){ if(PtIn(p.accept[i],x,y)) return Z_HOST_ACCEPT_BASE+(int)i; if(PtIn(p.deny[i],x,y)) return Z_HOST_DENY_BASE+(int)i; }
+            for(size_t i=0;i<p.revoke.size();i++) if(PtIn(p.revoke[i],x,y)) return Z_HOST_REVOKE_BASE+(int)i;
+            for(size_t i=0;i<p.plHost.size();i++){ if(PtIn(p.plHost[i],x,y)) return Z_HOST_PL_BASE+(int)i; for(size_t j=0;j<p.plDev[i].size();j++) if(PtIn(p.plDev[i][j],x,y)) return Z_HOST_PLDEV_BASE+(int)i*20+(int)j; }
+        }
+        return -1;
+    }
     if(OU().open){   // tela de busca online
         OnlineUI& u=OU();
         if(PtIn(u.btnClose,x,y)) return Z_ON_CLOSE;
@@ -56,6 +68,8 @@ static int HitTest(int x,int y){
         if(PtIn(R_settingsModeCd,x,y)) return Z_SETTINGS_MODE_CD;
         if(PtIn(R_settingsModeVertical,x,y)) return Z_SETTINGS_MODE_VERTICAL;
         for(int k=0;k<UI_STYLE_COUNT;k++) if(PtIn(R_settingsStyle[k],x,y)) return Z_SETTINGS_STYLE_BASE+k;
+        if(PtIn(R_setHostOn,x,y)) return Z_SET_HOST_ON; if(PtIn(R_setHostPanel,x,y)) return Z_SET_HOST_PANEL; if(PtIn(R_setHostPort,x,y)) return Z_SET_HOST_PORT; if(PtIn(R_setHostPin,x,y)) return Z_SET_HOST_PIN;
+        if(PtIn(R_setHostName,x,y)) return Z_SET_HOST_NAME; if(PtIn(R_setHostTunnel,x,y)) return Z_SET_HOST_TUNNEL; if(PtIn(R_setHostLan,x,y)) return Z_SET_HOST_LAN;
         for(auto&s:g_setSliders) if(PtIn(s.hit,x,y)) return s.id;
         if(PtIn(R_setEffect,x,y)) return Z_LED_EFFECT;
         if(PtIn(R_setParticles,x,y)) return Z_PARTICLES_TOGGLE;
@@ -115,6 +129,7 @@ static int HitTest(int x,int y){
     if(PtIn(R_shapeTgl,x,y))return Z_SHAPE_TOGGLE;
     if(R_sortBtn.right>R_sortBtn.left&&PtIn(R_sortBtn,x,y))return Z_SORT;
     if(R_folderBtn.right>R_folderBtn.left&&PtIn(R_folderBtn,x,y))return Z_FOLDER_BTN;
+    if(R_hostBtn.right>R_hostBtn.left&&PtIn(R_hostBtn,x,y))return Z_HOST_BTN;
     if(PtIn(R_listBtn,x,y))return Z_LISTMODE;
     if(PtIn(R_play,x,y))return Z_PLAYPAUSE;
     if(PtIn(R_prev,x,y))return Z_PREV;
@@ -188,7 +203,7 @@ static void OnLButtonDown(int x,int y){
     if(g_hkCapture>=0&&!(g_showSettings&&PtIn(R_hkKey[g_hkCapture],x,y))) g_hkCapture=-1;
     if(g_confirmOpen){
         if(PtIn(R_confirmYes,x,y)){ ConfirmYes(); }
-        else if(PtIn(R_confirmNo,x,y)||!PtIn(R_confirmBox,x,y)) g_confirmOpen=false;
+        else if(PtIn(R_confirmNo,x,y)||!PtIn(R_confirmBox,x,y)){ if(g_confirmKind==2) HostConfirm(false); g_confirmOpen=false; g_confirmKind=0; }
         return;
     }
     if(g_ctxOpen){
@@ -217,6 +232,7 @@ static void OnLButtonDown(int x,int y){
             case CA_PL_SHUF: PlayPlaylist(arg,true); break;
             case CA_PL_RENAME: StartPlaylistNameEdit(3,arg); break;
             case CA_PL_DELETE: AskDeletePlaylist(arg); OpenConfirm(); break;
+            case CA_PL_HOST: HostTogglePlaylist(arg); break;
             default: break;
             }
         } else if(g_ctxKind==CTX_PICKPL){
@@ -273,6 +289,22 @@ static void OnLButtonDown(int x,int y){
             return;
         }
     }
+    if(host::PU().open){   // painel HOST
+        host::PanelUI& p=host::PU(); int hid=HitTest(x,y);
+        if(hid==Z_HOST_CLOSE||!PtIn(p.box,x,y)){ p.open=false; return; }
+        if(hid==Z_HOST_TOGGLE){ HostToggle(); return; }
+        if(hid==Z_HOST_TUNNEL){ if(host::St().tunRunning.load()){ host::TunnelStop(); g_cfg.hostTunnel=false; SetStatus(L"Túnel desligado.",2500); } else { g_cfg.hostTunnel=true; if(host::Running()) host::TunnelStart(g_cfg.hostPort); else SetStatus(L"Ligue o Host primeiro.",2500); } g_cfg.Save(); return; }
+        if(hid==Z_HOST_HTML){ HostMakeHtml(); return; }
+        if(hid==Z_HOST_PASTA){ PlatformOpenFolder(Config::BaseDir()); return; }
+        if(hid==Z_HOST_PORT){ StartHostEdit(6); return; } if(hid==Z_HOST_PIN){ StartHostEdit(7); return; } if(hid==Z_HOST_NAME){ StartHostEdit(8); return; }
+        if(hid==Z_HOST_LAN){ g_cfg.hostLan=!g_cfg.hostLan; g_cfg.Save(); if(host::Running()){ HostStopNow(); HostStartFromCfg(); } SetStatus(g_cfg.hostLan?L"Rede local liberada (mesmo roteador).":L"Só pelo túnel (127.0.0.1).",2600); return; }
+        if(hid>=Z_HOST_ACCEPT_BASE&&hid<Z_HOST_ACCEPT_BASE+100){ size_t i=(size_t)(hid-Z_HOST_ACCEPT_BASE); if(i<p.v.pending.size()){ host::Approve(p.v.pending[i].id,true); if(g_hostReq==Utf8ToWide(p.v.pending[i].id)){ g_hostReq.clear(); g_confirmOpen=false; g_confirmKind=0; } SetStatus(L"Dispositivo aceito.",2500); } return; }
+        if(hid>=Z_HOST_DENY_BASE&&hid<Z_HOST_DENY_BASE+100){ size_t i=(size_t)(hid-Z_HOST_DENY_BASE); if(i<p.v.pending.size()){ host::Approve(p.v.pending[i].id,false); if(g_hostReq==Utf8ToWide(p.v.pending[i].id)){ g_hostReq.clear(); g_confirmOpen=false; g_confirmKind=0; } SetStatus(L"Pedido recusado.",2500); } return; }
+        if(hid>=Z_HOST_REVOKE_BASE&&hid<Z_HOST_REVOKE_BASE+100){ size_t i=(size_t)(hid-Z_HOST_REVOKE_BASE); if(i<p.v.devs.size()){ host::Revoke(p.v.devs[i].id); SetStatus(L"Dispositivo removido: ele precisa parear de novo.",3000); } return; }
+        if(hid>=Z_HOST_PL_BASE&&hid<Z_HOST_PL_BASE+200){ HostTogglePlaylist(hid-Z_HOST_PL_BASE); return; }
+        if(hid>=Z_HOST_PLDEV_BASE&&hid<Z_HOST_PLDEV_BASE+4000){ int k=hid-Z_HOST_PLDEV_BASE; int pl=k/20, dv=k%20; if(pl<(int)g_playlists.size()&&dv<(int)p.v.devs.size()) host::ToggleTargetDevice(g_playlists[(size_t)pl].slug,p.v.devs[(size_t)dv].id); return; }
+        return;
+    }
     if(OU().open){
         OnlineUI& u=OU();
         int oid=HitTest(x,y);
@@ -325,6 +357,11 @@ static void OnLButtonDown(int x,int y){
     if(id>=Z_SETTINGS_STYLE_BASE&&id<Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT){
         g_cfg.uiStyle=id-Z_SETTINGS_STYLE_BASE; g_cfg.Save(); g_listScroll=0; BuildLayout();
         SetStatus(std::wstring(L"Estilo: ")+UiStyleName(g_cfg.uiStyle),2200); return; }
+    if(id==Z_HOST_BTN||id==Z_SET_HOST_PANEL){ host::PU().open=true; host::PU().scroll=0; host::PU().v=host::GetView(); return; }
+    if(id==Z_SET_HOST_ON){ HostToggle(); return; }
+    if(id==Z_SET_HOST_PORT){ StartHostEdit(6); return; } if(id==Z_SET_HOST_PIN){ StartHostEdit(7); return; } if(id==Z_SET_HOST_NAME){ StartHostEdit(8); return; }
+    if(id==Z_SET_HOST_TUNNEL){ g_cfg.hostTunnel=!g_cfg.hostTunnel; g_cfg.Save(); if(host::Running()){ if(g_cfg.hostTunnel) host::TunnelStart(g_cfg.hostPort); else host::TunnelStop(); } return; }
+    if(id==Z_SET_HOST_LAN){ g_cfg.hostLan=!g_cfg.hostLan; g_cfg.Save(); if(host::Running()){ HostStopNow(); HostStartFromCfg(); } return; }
     if(id==Z_LED_EFFECT){g_cfg.ledEffect=g_cfg.ledEffect==L"respiracao"?L"pulso":g_cfg.ledEffect==L"pulso"?L"estatico":L"respiracao";g_cfg.Save();return;}
     if(id==Z_PARTICLES_TOGGLE){g_cfg.particlesOn=!g_cfg.particlesOn;g_cfg.Save();return;}
     if(id==Z_GLITCH_TOGGLE){g_cfg.glitchOn=!g_cfg.glitchOn;g_cfg.Save();return;}
@@ -411,6 +448,7 @@ static void OnMouseDrag(int x){
 static void OnLButtonUp(){ if(g_dragSeek!=-1){g_dragSeek=-1;g_cfg.Save();} }
 static void OnWheel(int d){ // d = notches (>0 = pra cima)
     if(WP().open){WebPick& wb=WP();int rows=(int)((wb.cells.size()+3)/4);int content=rows*(int)S(150)+(int)S(40);wb.scroll-=d*SI(120);wb.scroll=std::max(0,std::min(wb.scroll,std::max(0,content-(int)(S(360)))));return;}
+    if(host::PU().open){ host::PU().scroll-=d*SI(60); if(host::PU().scroll<0) host::PU().scroll=0; return; }
     if(OU().open){ OU().scroll-=d*SI(116); if(OU().scroll<0) OU().scroll=0; return; }   // LayoutOnline limita o maximo
     if(g_showSettings){g_setScroll-=d*(int)S(56);int maxSc=std::max(0,(int)(g_setContentH-(R_settingsPanel.bottom-R_settingsPanel.top-76)));g_setScroll=std::max(0,std::min(g_setScroll,maxSc));return;}
     if(g_showSplash||g_cfg.displayMode==L"vertical")return;
@@ -422,12 +460,13 @@ static void OnChar(int c){ // so caracteres imprimiveis
     WebPick& wb=WP();
     if(wb.open&&wb.editing){ if(c>=32&&c!=127&&(int)wb.query.size()<120)wb.query.push_back((wchar_t)c); return; }
     if(OU().open){ if(OU().editing&&c>=32&&c!=127&&(int)OU().query.size()<300) OU().query.push_back((wchar_t)c); return; }
-    if(g_editArtist){ if(c>=32&&c!=127&&(int)g_editBuf.size()<(g_editMode==1?120:(g_editMode>=4?800:64))) g_editBuf.push_back((wchar_t)c); return; }
+    if(g_editArtist){ if(g_editMode==7&&(c<'0'||c>'9')) return; if(g_editMode==6&&(c<'0'||c>'9')) return; if(c>=32&&c!=127&&(int)g_editBuf.size()<(g_editMode==1?120:(g_editMode>=4?800:64))) g_editBuf.push_back((wchar_t)c); return; }
     if(g_searchFocus){ if(c>=32&&c!=127&&(int)g_searchBuf.size()<60){ g_searchBuf.push_back((wchar_t)c); BuildLayout(); } return; }
 }
 // Tecla pressionada com a janela em foco. kc = KeyCode (app_keys.h), mods = KM_*.
 // Enter/Esc/Backspace dos editores e da busca sao fixos; o resto passa pelos atalhos configuraveis.
 static void OnKeyEvent(int kc,int mods){
+    if(host::PU().open&&kc==KC_ESC&&!g_editArtist&&!g_confirmOpen){ host::PU().open=false; return; }
     WebPick& wb=WP();
     if(g_hkCapture>=0){   // capturando um atalho nas configuracoes
         int a=g_hkCapture;
@@ -439,7 +478,7 @@ static void OnKeyEvent(int kc,int mods){
         }
         g_hkCapture=-1; g_cfg.Save(); PlatformUpdateGlobalHotkeys(); return;
     }
-    if(g_confirmOpen){ if(kc==KC_ENTER) ConfirmYes(); else if(kc==KC_ESC){ g_confirmOpen=false; g_confirmKind=0; } return; }
+    if(g_confirmOpen){ if(kc==KC_ENTER) ConfirmYes(); else if(kc==KC_ESC){ if(g_confirmKind==2) HostConfirm(false); g_confirmOpen=false; g_confirmKind=0; } return; }
     if(g_ctxOpen||g_folderMenuOpen){ if(kc==KC_ESC){g_ctxOpen=false;g_folderMenuOpen=false;} return; }
     if(wb.open){
         if(kc==KC_ESC){wb.open=false;wb.editing=false;}
@@ -491,6 +530,16 @@ static void RunAction(const std::string& a){
     else if(a=="grid"){g_cfg.listMode=0;BuildLayout();}
     else if(a=="settings"){g_showSettings=!g_showSettings;}
     else if(a.rfind("style:",0)==0){g_cfg.uiStyle=std::max(0,std::min(2,atoi(a.c_str()+6)));BuildLayout();}
+    else if(a.rfind("hostpin:",0)==0){g_cfg.hostPin=Utf8ToWide(a.substr(8));}
+    else if(a.rfind("hostport:",0)==0){g_cfg.hostPort=atoi(a.c_str()+9);}
+    else if(a=="host:on"){g_cfg.hostTunnel=false;HostStartFromCfg();}
+    else if(a=="host:off"){HostStopNow();}
+    else if(a=="hostok"){if(g_confirmOpen&&g_confirmKind==2)ConfirmYes();}
+    else if(a=="hostno"){if(g_confirmOpen&&g_confirmKind==2){HostConfirm(false);g_confirmOpen=false;g_confirmKind=0;}}
+    else if(a=="hostpanel"){host::PU().open=true;host::PU().v=host::GetView();}
+    else if(a=="hosthtml"){host::WriteConnectHtml();}
+    else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
+    else if(a=="tunnel:off"){host::TunnelStop();}
     else if(a=="next")NextTrack();
     else if(a=="play")TogglePlayPause();
     else if(a=="autoplay"){g_cfg.autoplay=!g_cfg.autoplay;}

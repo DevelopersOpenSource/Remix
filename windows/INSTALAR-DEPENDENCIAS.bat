@@ -84,6 +84,7 @@ call :conferir_tudo quieto
 if defined FALTA_yt-dlp call :baixar_ytdlp
 if defined FALTA_deno call :baixar_deno
 if defined FALTA_ffmpeg call :baixar_ffmpeg
+if defined FALTA_cloudflared call :baixar_cloudflared
 rmdir /s /q "%TMPD%" >nul 2>nul
 echo.
 call :conferir_tudo
@@ -218,6 +219,14 @@ if not defined FFX goto baixar_erro
 copy /y "!FFX!" "%TOOLS%\ffmpeg.exe" >nul
 exit /b 0
 
+:baixar_cloudflared
+echo.
+echo  cloudflared (tunel do Host: ouvir as musicas no celular pela internet)
+"%CURL%" -fL --retry 3 -o "%TOOLS%\cloudflared.exe.part" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
+if errorlevel 1 goto baixar_erro
+move /y "%TOOLS%\cloudflared.exe.part" "%TOOLS%\cloudflared.exe" >nul
+exit /b 0
+
 :baixar_erro
 echo    [erro] nao consegui baixar ou extrair. Confira a internet e rode de novo.
 exit /b 1
@@ -231,6 +240,7 @@ set "FALTA="
 call :conferir yt-dlp
 call :conferir ffmpeg
 call :conferir deno
+call :conferir cloudflared
 if not defined QUIETO echo.
 exit /b 0
 

@@ -428,6 +428,7 @@ static void DrawNormal(Graphics& g,int w,int h){
     DrawPill(g,R_autoTgl,L"AUTO",g_cfg.autoplay,S(12));
     DrawPill(g,R_sortBtn,SortLabel(),g_cfg.sortMode==L"manual",S(11));
     DrawPill(g,R_folderBtn,g_view==2?L"PASTA DA PLAYLIST ▼":L"PASTA ▼",g_folderMenuOpen,S(10));
+    if(R_hostBtn.right>R_hostBtn.left) DrawPill(g,R_hostBtn,host::Running()?L"HOST ●":L"HOST",host::Running(),S(10));
     DrawChromeButtons(g);
     if(R_listBtn.right>R_listBtn.left){
         bool lm=g_cfg.listMode!=0;
@@ -812,6 +813,18 @@ static void DrawSettings(Graphics& g,int w,int h){
     // estilo da interface
     for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
     g.DrawString(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",-1,sm,PointF((REAL)R_settingsStyle[0].left,(REAL)(R_settingsStyle[0].bottom+10)),&gray);
+    {   // HOST (acesso pelo celular)
+        bool on=host::Running(); host::View hv=host::GetView();
+        tgl(R_setHostOn,on?L"HOST: LIGADO":L"HOST: DESLIGADO",L"LIGAR O HOST",on);
+        btn(R_setHostPanel,L"ABRIR PAINEL DO HOST",false);
+        btn(R_setHostPort,L"PORTA: "+std::to_wstring(g_cfg.hostPort),false);
+        btn(R_setHostPin,g_cfg.hostPin.empty()?L"PIN: DEFINIR...":L"PIN: "+std::wstring(g_cfg.hostPin.size(),L'•'),!g_cfg.hostPin.empty());
+        btn(R_setHostName,L"NOME: "+(g_cfg.hostName.empty()?Utf8ToWide(hostnet::HostName()):g_cfg.hostName),false);
+        tgl(R_setHostTunnel,g_cfg.hostTunnel?L"TÚNEL: LIGADO":L"TÚNEL: DESLIGADO",L"TÚNEL CLOUDFLARE (internet)",g_cfg.hostTunnel);
+        tgl(R_setHostLan,g_cfg.hostLan?L"REDE LOCAL: SIM":L"REDE LOCAL: NÃO",L"REDE LOCAL (mesmo roteador)",g_cfg.hostLan);
+        std::wstring st=on?L"Ligado na porta "+std::to_wstring(hv.port)+(hv.lanUrls.empty()?L"":L"   ·   "+Utf8ToWide(hv.lanUrls[0]))+L"   ·   túnel: "+Utf8ToWide(hv.tunUrl.empty()?hv.tunStatus:hv.tunUrl):L"Desligado. O celular abre um site (túnel ou rede local), digita o PIN e você aceita aqui.";
+        TextTrim(g,st,RectF((REAL)R_setHostTunnel.left,(REAL)(R_setHostTunnel.bottom+10),(REAL)(R_setHostLan.right-R_setHostTunnel.left),16),11,&gray,false,StringTrimmingEllipsisCharacter);
+    }
     std::wstring mode=g_cfg.musicFolder.empty()?L"PADRÃO — Músicas, Downloads, Documentos, Área de trabalho":L"PASTA PERSONALIZADA";
     g.DrawString(mode.c_str(),-1,sm,PointF((REAL)R_settingsDefault.left,(REAL)(R_settingsDefault.top-18)),&white);
     btn(R_settingsDefault,L"PADRÃO (PASTAS DO USUÁRIO)",g_cfg.musicFolder.empty());
@@ -938,10 +951,13 @@ static void DrawArtistEditor(Graphics& g,int w,int h){
     SolidBrush pb(Cs(Color(255,12,15,30),UI().surface)); Pen apn(Cs(ToGdi(g_theme.accent),UI().borderHi),2); DrawRoundRect(g,box,14,&pb,&apn);
     const Font *lab=UiFont(S(13),true),*sm=UiFont(S(10),false),*txt=UiFont(S(14),false);
     SolidBrush abr(ToGdi(g_theme.accent)), white(ToGdi(UI().text)), gray(ToGdi(UI().textFaint));
-    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":L"EDITAR NOME DO ARTISTA";
+    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":L"EDITAR NOME DO ARTISTA";
     g.DrawString(etitle,-1,lab,PointF((REAL)(bx+22),(REAL)(by+18)),&abr);
     std::wstring t;
-    if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
+    if(g_editMode==6) t=L"Porta TCP de 1024 a 65535 (padrão 49875). Só números.";
+    else if(g_editMode==7) t=L"De 4 a 12 números. O celular digita este PIN na primeira vez; depois você aceita o aparelho aqui.";
+    else if(g_editMode==8) t=L"Como o seu PC aparece no celular.";
+    else if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
     else if(g_editMode==4||g_editMode==5) t=L"Música, álbum ou playlist do Spotify, YouTube / YouTube Music, Deezer, Apple Music ou SoundCloud  (Ctrl+V cola)";
     else if(g_editMode==3) t=L"Playlist: "+(g_editTrack>=0&&g_editTrack<(int)g_playlists.size()?g_playlists[(size_t)g_editTrack].name:L"");
     else t=(g_editMode==1?L"Arquivo: ":L"Faixa: ")+(g_editTrack>=0&&g_editTrack<(int)g_tracks.size()?(g_editMode==1?std::filesystem::path(g_tracks[g_editTrack].path).filename().wstring():g_tracks[g_editTrack].title):L"");
@@ -1105,6 +1121,66 @@ static void DrawOnline(Graphics& g,int w,int h){
     if(hasAll) DrawPill(g,u.btnAddAll,tpl>=0?L"ADICIONAR TODAS NA PLAYLIST":(fromLink?L"SALVAR COMO PLAYLIST":L"ADICIONAR TODAS..."),true,S(11));
 }
 // ---- menus flutuantes / confirmacao ----
+// ---- painel HOST (acesso pelo celular) --------------------------------------
+static void DrawHostPanel(Graphics& g,int w,int h){
+    host::PanelUI& p=host::PU(); LayoutHostPanel(w,h); const host::View& v=p.v;
+    { SolidBrush ov(Cs(Color(200,2,4,10),UI().bg,200)); g.FillRectangle(&ov,0,0,w,h); }
+    RectF box=RF(p.box); SolidBrush pb(Cs(Color(255,10,13,26),UI().surface)); Pen apn(Cs(ToGdi(g_theme.accent),UI().borderHi),1.8f);
+    DrawRoundRect(g,box,(int)S(14),&pb,&apn);
+    SolidBrush white(ToGdi(UI().text)), gray(ToGdi(UI().textFaint)), ab(ToGdi(g_theme.accent));
+    TextAt(g,L"HOST  ·  ACESSO PELO CELULAR",box.X+S(18),box.Y+S(14),S(14),UiClassic()?(Brush*)&ab:(Brush*)&white,true);
+    TextCenter(g,L"✕",RF(p.btnClose),S(14),&white);
+    bool on=v.running;
+    DrawPill(g,p.btnToggle,on?L"DESLIGAR":L"LIGAR",on,S(11));
+    DrawPill(g,p.btnTunnel,v.tunRunning?L"TÚNEL: LIGADO":L"TÚNEL: DESLIGADO",v.tunRunning,S(10));
+    DrawPill(g,p.btnHtml,L"HTML P/ WHATSAPP",false,S(10));
+    DrawPill(g,p.btnPasta,L"ABRIR PASTA",false,S(10));
+    DrawPill(g,p.btnPort,L"PORTA: "+std::to_wstring(g_cfg.hostPort),false,S(10));
+    DrawPill(g,p.btnPin,g_cfg.hostPin.empty()?L"PIN: DEFINIR...":L"PIN: "+std::wstring(g_cfg.hostPin.size(),L'•'),!g_cfg.hostPin.empty(),S(10));
+    DrawPill(g,p.btnName,L"NOME: "+(g_cfg.hostName.empty()?Utf8ToWide(hostnet::HostName()):g_cfg.hostName),false,S(10));
+    DrawPill(g,p.btnLan,g_cfg.hostLan?L"REDE LOCAL: SIM":L"REDE LOCAL: NÃO",g_cfg.hostLan,S(10));
+    REAL ix=box.X+S(18), iy=(REAL)p.btnLan.bottom+S(8), iw=box.Width-S(36);
+    std::wstring l1=on?L"Ligado na porta "+std::to_wstring(v.port)+(g_cfg.hostLan?L"  ·  rede local: "+(v.lanUrls.empty()?L"nenhum IP encontrado":Utf8ToWide(v.lanUrls[0]))+(v.lanUrls.size()>1?L" (+"+std::to_wstring(v.lanUrls.size()-1)+L")":L""):L"  ·  só pelo túnel"):L"Desligado"+std::wstring(v.lastError.empty()?L"":L"  ·  "+Utf8ToWide(v.lastError));
+    std::wstring l2=L"Túnel: "+Utf8ToWide(v.tunUrl.empty()?v.tunStatus:v.tunUrl)+(v.tunUrl.empty()?L"":L"   (HTTPS, atravessa CGNAT, não mostra seu IP)");
+    std::wstring l3=g_cfg.hostPin.empty()?L"Defina um PIN para ligar. O celular digita o PIN uma vez e você aceita o aparelho aqui.":L"Celular: abra o link, digite o PIN, e aceite o pedido que aparece aqui. Mande o HTML pelo WhatsApp para não digitar o link.";
+    TextTrim(g,l1,RectF(ix,iy,iw,16),11,on?&white:&gray,false,StringTrimmingEllipsisCharacter);
+    TextTrim(g,l2,RectF(ix,iy+S(17),iw,16),11,v.tunUrl.empty()?&gray:&ab,false,StringTrimmingEllipsisCharacter);
+    TextTrim(g,l3,RectF(ix,iy+S(34),iw,16),10,&gray,false,StringTrimmingEllipsisCharacter);
+    Region old; g.GetClip(&old); g.SetClip(Rect(p.list.left,p.list.top,p.list.right-p.list.left,p.list.bottom-p.list.top));
+    REAL y=(REAL)p.list.top-p.scroll, rowH=S(34), x=ix;
+    auto title=[&](const std::wstring& t){ TextAt(g,t,x,y+S(4),S(11),UiClassic()?(Brush*)&ab:(Brush*)&white,true); y+=S(26); };
+    auto rowBg=[&](REAL yy){ RectF r(x,yy,iw,rowH-S(6)); SolidBrush rb(Cs(Color(255,16,19,34),UI().surfaceHi)); DrawRoundRect(g,r,(int)S(UI_R_PILL),&rb,nullptr); };
+    title(L"PEDIDOS PARA CONECTAR ("+std::to_wstring(v.pending.size())+L")");
+    for(size_t i=0;i<v.pending.size()&&i<p.accept.size();i++){
+        rowBg(y); const host::PairReq& q=v.pending[i];
+        TextTrim(g,Utf8ToWide(q.name)+L"   ·   "+Utf8ToWide(q.ip)+(q.viaTunnel?L" (internet)":L" (rede local)"),RectF(x+S(10),y,iw-S(210),rowH-S(6)),11,&white,false,StringTrimmingEllipsisCharacter,true);
+        DrawPill(g,p.accept[i],L"ACEITAR",true,S(10)); DrawPill(g,p.deny[i],L"RECUSAR",false,S(10)); y+=rowH;
+    }
+    title(L"DISPOSITIVOS PAREADOS ("+std::to_wstring(v.devs.size())+L")");
+    if(v.devs.empty()){ TextAt(g,L"Nenhum ainda.",x+S(10),y+S(6),S(11),&gray); y+=rowH; }
+    for(size_t i=0;i<v.devs.size()&&i<p.revoke.size();i++){
+        rowBg(y); const host::Device& d=v.devs[i]; long long ago=host::NowSec()-d.lastSeen; std::wstring seen=ago<120?L"agora":ago<3600?std::to_wstring(ago/60)+L" min atrás":ago<86400?std::to_wstring(ago/3600)+L" h atrás":std::to_wstring(ago/86400)+L" d atrás";
+        TextTrim(g,Utf8ToWide(d.name)+L"   ·   "+Utf8ToWide(d.ip)+L"   ·   visto "+seen,RectF(x+S(10),y,iw-S(120),rowH-S(6)),11,&white,false,StringTrimmingEllipsisCharacter,true);
+        DrawPill(g,p.revoke[i],L"REMOVER",false,S(10)); y+=rowH;
+    }
+    title(L"PLAYLISTS DO PC NO CELULAR");
+    if(g_playlists.empty()){ TextAt(g,L"Você não tem playlists. Crie uma na aba PLAYLISTS e hosteie aqui.",x+S(10),y+S(6),S(11),&gray); y+=rowH; }
+    for(size_t i=0;i<g_playlists.size()&&i<p.plHost.size();i++){
+        rowBg(y); std::string t=host::Targets(g_playlists[i].slug);
+        TextTrim(g,g_playlists[i].name,RectF(x+S(10),y,iw-S(140),rowH-S(6)),11,&white,true,StringTrimmingEllipsisCharacter,true);
+        std::wstring lab=t.empty()?L"HOST: NÃO":t=="ALL"?L"HOST: TODOS":L"HOST: ALGUNS";
+        DrawPill(g,p.plHost[i],lab,!t.empty(),S(10)); y+=rowH;
+        for(size_t j=0;j<p.plDev[i].size()&&j<v.devs.size();j++){
+            bool sel=t=="ALL"||(","+t+",").find(","+v.devs[j].id+",")!=std::string::npos;
+            DrawPill(g,p.plDev[i][j],Utf8ToWide(v.devs[j].name),sel,S(9));
+        }
+        if(!p.plDev[i].empty()) y=(REAL)p.plDev[i].back().bottom+S(8);
+    }
+    title(L"PLAYLISTS DOS CELULARES (só leitura)");
+    if(v.dpls.empty()){ TextAt(g,L"Nenhuma. O celular cria as dele na aba MINHAS; elas ficam guardadas aqui, mas não entram nas suas.",x+S(10),y+S(6),S(11),&gray); y+=rowH; }
+    for(auto& dp:v.dpls){ std::wstring dn=L"?"; for(auto& d:v.devs) if(d.id==dp.dev) dn=Utf8ToWide(d.name); TextTrim(g,Utf8ToWide(dp.name)+L"   ·   "+dn+L"   ·   "+std::to_wstring(dp.ids.size())+L" faixas",RectF(x+S(10),y,iw-S(20),rowH-S(6)),11,&gray,false,StringTrimmingEllipsisCharacter,true); y+=rowH; }
+    g.SetClip(&old);
+}
 static void DrawMenuBox(Graphics& g,const RECT& box){ SolidBrush pb(Cs(Color(255,12,15,30),UI().surface)); Pen apn(Cs(ToGdi(g_theme.accent),UI().borderHi),1.4f); DrawRoundRect(g,RF(box),(int)S(10),&pb,&apn); }
 static void DrawFolderMenu(Graphics& g,int w,int h){
     SolidBrush ov(Cs(Color(90,2,4,10),UI().bg,90)); g.FillRectangle(&ov,0,0,w,h);
@@ -1131,11 +1207,12 @@ static void DrawConfirm(Graphics& g,int w,int h){
     SolidBrush ov(Cs(Color(170,2,4,10),UI().bg,170)); g.FillRectangle(&ov,0,0,w,h);
     OpenConfirm();
     RectF box=RF(R_confirmBox);
-    SolidBrush pb(Cs(Color(255,12,15,30),UI().surface)); Pen apn(Color(255,190,70,90),2); DrawRoundRect(g,box,14,&pb,&apn);
+    SolidBrush pb(Cs(Color(255,12,15,30),UI().surface)); Pen apn(g_confirmKind==2?Cs(ToGdi(g_theme.accent),UI().borderHi):Color(255,190,70,90),2); DrawRoundRect(g,box,14,&pb,&apn);
     SolidBrush red(Color(255,255,120,130)), white(ToGdi(UI().text)), gray(ToGdi(UI().textFaint));
-    TextAt(g,g_confirmKind==1?L"EXCLUIR PLAYLIST":L"EXCLUIR MÚSICA",box.X+22,box.Y+18,S(13),&red,true);
+    { SolidBrush accB(ToGdi(g_theme.accent)); TextAt(g,g_confirmKind==2?L"NOVO DISPOSITIVO QUER SE CONECTAR":g_confirmKind==1?L"EXCLUIR PLAYLIST":L"EXCLUIR MÚSICA",box.X+22,box.Y+18,S(13),g_confirmKind==2?(Brush*)&accB:(Brush*)&red,true); }
     TextTrim(g,g_confirmText,RectF(box.X+22,box.Y+52,box.Width-44,40),S(11),&white,false,StringTrimmingEllipsisCharacter);
-    TextAt(g,L"O arquivo vai para a Lixeira (da para recuperar).",box.X+22,box.Y+82,S(10),&gray);
+    TextAt(g,(g_confirmKind==2?L"Aceite só se for você. Dá para remover o aparelho depois, no painel HOST.":L"O arquivo vai para a Lixeira (da para recuperar)."),box.X+22,box.Y+82,S(10),&gray);
     auto cbtn=[&](RECT r,const wchar_t* t,bool primary){ RectF b=RF(r); SolidBrush fb(primary?Color(255,90,30,40):Cs(Color(255,24,27,42),UI().surfaceHi)); Pen p(primary?Color(255,220,80,100):Cs(Color(255,70,74,95),UI().borderHi),1.5f); DrawRoundRect(g,b,8,&fb,&p); TextCenter(g,t,b,S(10),primary?(Brush*)&white:(Brush*)&gray); };
-    cbtn(R_confirmYes,L"EXCLUIR",true); cbtn(R_confirmNo,L"CANCELAR",false);
+    if(g_confirmKind==2){ DrawPill(g,R_confirmYes,L"ACEITAR",true,S(10)); DrawPill(g,R_confirmNo,L"RECUSAR",false,S(10)); }
+    else { cbtn(R_confirmYes,L"EXCLUIR",true); cbtn(R_confirmNo,L"CANCELAR",false); }
 }

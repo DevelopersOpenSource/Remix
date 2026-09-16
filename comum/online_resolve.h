@@ -199,6 +199,25 @@ inline void InfoToTrack(const JVal& e, OTrack& t, OSrc def) {
     t.src = DetectSource(t.url); if (t.src == OS_UNKNOWN || t.src == OS_OTHER) t.src = def;
 }
 
+// ---- yt-dlp se atualiza sozinho ------------------------------------------------------
+// O YouTube muda e o yt-dlp de ontem para de funcionar sem culpa do app. Quando uma busca
+// falha com ERROR, roda "yt-dlp -U" uma vez (no maximo 1x por dia; so o binario, que sabe
+// se substituir) e tenta de novo. Nunca trava a UI: isto roda na thread da busca.
+inline bool YtdlpSelfUpdateOnce() {
+    static std::atomic<bool> tried{ false };
+    if (tried.exchange(true)) return false;
+    std::wstring exe; { std::lock_guard<std::mutex> lk(OT().m); exe = OT().ytdlp; }
+    if (exe.empty()) return false;                       // "python -m yt_dlp": quem atualiza e o pip
+    namespace fs = std::filesystem; std::error_code ec;
+    fs::path stamp = fs::path(WideToUtf8(Config::CacheDir())) / "ytdlp-atualizado.txt";
+    if (fs::exists(stamp, ec)) { auto age = std::chrono::duration_cast<std::chrono::hours>(fs::file_time_type::clock::now() - fs::last_write_time(stamp, ec)).count(); if (!ec && age < 24) return false; }
+    fs::create_directories(stamp.parent_path(), ec);
+    CapResult r = RunCapture({ exe, L"-U" }, 120000, nullptr);
+    if (FILE* f = fopen(stamp.string().c_str(), "wb")) { fputs("ok\n", f); fclose(f); }
+    { std::lock_guard<std::mutex> lk(OT().m); OT().probed = false; }   // reler a versao na proxima vez
+    return r.started && r.code == 0 && r.out.find("Updated") != std::string::npos;
+}
+
 // ---- busca: 0 = YouTube Music, 1 = YouTube, 2 = SoundCloud ----------------------------
 inline bool OnlineSearch(const std::wstring& q, int where, std::vector<OTrack>& out, std::wstring& err, const std::atomic<bool>* cancel, int limit = 20,
                          std::function<void(const OTrack&)> onItem = nullptr) {
@@ -216,6 +235,15 @@ inline bool OnlineSearch(const std::wstring& q, int where, std::vector<OTrack>& 
         out.push_back(t); if (onItem) onItem(t);
     });
     if (r.canceled) return false;
+    if (out.empty() && r.code != 0 && r.err.find("ERROR") != std::string::npos && YtdlpSelfUpdateOnce()) {   // yt-dlp velho? atualiza e tenta de novo uma vez
+        r = RunCapture(a, 90000, cancel, [&](const std::string& ln) {
+            if (ln.empty() || ln[0] != '{') return;
+            JVal e; if (!OParse(ln, e) || e.t != JVal::OBJ) return;
+            OTrack t; InfoToTrack(e, t, def); if (t.url.empty()) return;
+            out.push_back(t); if (onItem) onItem(t);
+        });
+        if (r.canceled) return false;
+    }
     if (out.empty()) err = r.code == 0 ? std::wstring(L"Nada encontrado.") : OErr(r, L"A busca falhou.");
     return !out.empty();
 }

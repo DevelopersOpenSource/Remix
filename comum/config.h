@@ -99,6 +99,13 @@ struct Config {
     std::wstring musicFolder;
     std::wstring theme = L"azul";
     int uiStyle = 1;                      // estilo da interface: 0 classico, 1 limpo, 2 spotify+LED (app_ui.h)
+    // Host (docs/HOST.md): o Remix vira um servidor para o celular.
+    bool hostOn = false;                  // liga o servidor ao abrir
+    int hostPort = 49875;                 // porta TCP (1024..65535); 49875 = fora do que os servicos comuns usam
+    std::wstring hostPin;                 // 4 a 12 digitos, obrigatorio para ligar
+    bool hostTunnel = true;               // sobe o tunel Cloudflare (cloudflared) junto
+    bool hostLan = true;                  // aceita a rede local (false = so 127.0.0.1, so pelo tunel)
+    std::wstring hostName;                // nome mostrado no celular (vazio = nome do PC)
     std::wstring displayMode = L"normal"; // normal | vertical  (layout)
     std::wstring artShape = L"square";    // square | cd       (aparencia da capa)
     int cdSpeed = 33;                     // velocidade de giro do CD, % da antiga (100 = original; padrao ~3x mais lento)
@@ -400,6 +407,12 @@ struct Config {
             else if (k == L"Theme") theme = v;
             else if (k == L"DisplayMode") displayMode = v;
             else if (k == L"Style") uiStyle = _wtoi(v.c_str());
+            else if (k == L"HostOn") hostOn = (v == L"1");
+            else if (k == L"HostPort") hostPort = _wtoi(v.c_str());
+            else if (k == L"HostPin") hostPin = v;
+            else if (k == L"HostTunnel") hostTunnel = (v != L"0");
+            else if (k == L"HostLan") hostLan = (v != L"0");
+            else if (k == L"HostName") hostName = v;
             else if (k == L"ArtShape") artShape = v;
             else if (k == L"CdSpeed") cdSpeed = _wtoi(v.c_str());
             else if (k == L"ListMode") listMode = _wtoi(v.c_str());
@@ -468,6 +481,8 @@ struct Config {
         if (!hkNovo) MigrateHotkeys();
         // Migracao do formato antigo: "square"/"cd"/"vertical" viviam num campo so.
         uiStyle = std::max(0, std::min(2, uiStyle));
+        if (hostPort < 1024 || hostPort > 65535) hostPort = 49875;
+        { bool okPin = hostPin.size() >= 4 && hostPin.size() <= 12; for (wchar_t c : hostPin) if (c < L'0' || c > L'9') okPin = false; if (!okPin) hostPin.clear(); }
         if (displayMode == L"square") { displayMode = L"normal"; artShape = L"square"; }
         else if (displayMode == L"cd") { displayMode = L"normal"; artShape = L"cd"; }
         else if (displayMode == L"vertical") { if (artShape != L"square") artShape = L"cd"; }
@@ -502,6 +517,13 @@ struct Config {
         ls.push_back(L"Theme=" + theme);
         ls.push_back(L"DisplayMode=" + displayMode);
         swprintf(b, 64, L"Style=%d", uiStyle); ls.push_back(b);
+        ls.push_back(L"[Host]");
+        swprintf(b, 64, L"HostOn=%d", hostOn ? 1 : 0); ls.push_back(b);
+        swprintf(b, 64, L"HostPort=%d", hostPort); ls.push_back(b);
+        ls.push_back(L"HostPin=" + hostPin);
+        swprintf(b, 64, L"HostTunnel=%d", hostTunnel ? 1 : 0); ls.push_back(b);
+        swprintf(b, 64, L"HostLan=%d", hostLan ? 1 : 0); ls.push_back(b);
+        ls.push_back(L"HostName=" + hostName);
         ls.push_back(L"ArtShape=" + artShape);
         swprintf(b, 64, L"CdSpeed=%d", cdSpeed); ls.push_back(b);
         swprintf(b, 64, L"ListMode=%d", listMode ? 1 : 0); ls.push_back(b);

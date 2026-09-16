@@ -33,6 +33,15 @@ static void LayoutSettings(int w,int h){
         return rows;
     };
     auto sect=[&](int x,int y,int cw,int hh,const wchar_t*t){ g_setSections.push_back({{x,y,x+cw,y+hh},t}); };
+    // HOST (acesso pelo celular): ligar / painel, porta / PIN / nome, tunel / rede local, linha de estado
+    auto sectHost=[&](int x,int& y,int cw){
+        sect(x,y,cw,214,L"HOST (ACESSO PELO CELULAR)");
+        int hw=(cw-50)/2, tw=(cw-60)/3;
+        R_setHostOn={x+20,y+52,x+20+hw,y+86}; R_setHostPanel={x+30+hw,y+52,x+cw-20,y+86};
+        R_setHostPort={x+20,y+96,x+20+tw,y+130}; R_setHostPin={x+30+tw,y+96,x+30+tw*2,y+130}; R_setHostName={x+40+tw*2,y+96,x+cw-20,y+130};
+        R_setHostTunnel={x+20,y+140,x+20+hw,y+174}; R_setHostLan={x+30+hw,y+140,x+cw-20,y+174};
+        y+=234;
+    };
     // ESTILO: classico / limpo / spotify+LED (3 botoes iguais + uma linha de explicacao)
     auto sectStyle=[&](int x,int& y,int cw){
         sect(x,y,cw,124,L"ESTILO DA INTERFACE");
@@ -167,7 +176,7 @@ static void LayoutSettings(int w,int h){
     if(wide){
         int colW=(R-L-40)/2, xr=L+colW+40;
         int y=top;
-        sectStyle(L,y,colW); sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
+        sectStyle(L,y,colW); sectHost(L,y,colW); sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
         sectColors(L,y,colW); sectBackground(L,y,colW); sectPlayback(L,y,colW); sectShortcuts(L,y,colW);
         int ry=top;
         sectOnline(xr,ry,colW); sectScales(xr,ry,colW); sectLed(xr,ry,colW); sectButtons(xr,ry,colW); sectRunner(xr,ry,colW); sectEq(xr,ry,colW);
@@ -175,7 +184,7 @@ static void LayoutSettings(int w,int h){
     } else {
         int cw=R-L;
         int cy=top;
-        sectStyle(L,cy,cw); sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
+        sectStyle(L,cy,cw); sectHost(L,cy,cw); sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
         sectColors(L,cy,cw); sectScales(L,cy,cw); sectLed(L,cy,cw); sectButtons(L,cy,cw); sectRunner(L,cy,cw);
         sectBackground(L,cy,cw); sectPlayback(L,cy,cw); sectEq(L,cy,cw); sectShortcuts(L,cy,cw);
         g_setContentH=cy-py;
@@ -187,7 +196,7 @@ static void LayoutSettings(int w,int h){
 static void BuildLayout(){
     int w=g_winW,h=g_winH;
     R_titlebar={0,0,w,44}; R_close={0,0,0,0}; R_min={0,0,0,0};
-    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_volIcon={0,0,0,0};
+    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_hostBtn={0,0,0,0}; R_volIcon={0,0,0,0};
     R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_cardPlayBtns.clear(); R_themeCircles.clear();
     g_headerH=0; g_sideW=0;
     R_rowUp.clear(); R_rowDown.clear();
@@ -244,6 +253,10 @@ static void BuildLayout(){
         int limit=R_listBtn.left-SI(10);
         if(R_folderBtn.right>limit){ R_folderBtn.right=std::max((int)R_folderBtn.left,limit); }
         if(R_folderBtn.right-R_folderBtn.left<SI(40)){ R_folderBtn={0,0,0,0}; if(R_sortBtn.right>limit) R_sortBtn.right=std::max((int)R_sortBtn.left,limit); }
+        {   // HOST: pilula depois da PASTA (some se nao couber; fica nas configuracoes)
+            int hx=(R_folderBtn.right>R_folderBtn.left?R_folderBtn.right:(R_sortBtn.right>R_sortBtn.left?R_sortBtn.right:R_autoTgl.right))+SI(10);
+            R_hostBtn={hx,SI(8),hx+(int)S(78),SI(52)}; if(R_hostBtn.right>limit) R_hostBtn={0,0,0,0};
+        }
         R_modeSquare=R_modeCd=R_modeVertical={0,0,0,0}; R_themeCircles.clear();
         float ps=g_cfg.playerScale/100.0f;
         int availH=h-headerH-SI(28);
@@ -421,6 +434,42 @@ static bool LayoutActivity(int w,int h,int& waiting,float& pct,std::wstring& tit
 }
 // Geometria da tela de busca online: busca, fontes e resultados em linhas com ▶ ⬇ +.
 static RECT R_onList;
+// Painel HOST (sobreposto): estado, botoes, pedidos pendentes, dispositivos, playlists hosteadas.
+static void LayoutHostPanel(int w,int h){
+    host::PanelUI& p=host::PU();
+    if(p.v.version!=host::St().version.load()) p.v=host::GetView();
+    int bw=std::min((int)S(820),w-24), bh=std::min((int)S(640),h-24), bx=(w-bw)/2, by=(h-bh)/2;
+    p.box={bx,by,bx+bw,by+bh};
+    p.btnClose={bx+bw-SI(46),by+SI(12),bx+bw-SI(12),by+SI(46)};
+    int x=bx+SI(18), cw=bw-SI(36), y=by+SI(56);
+    int bwid=(cw-SI(24))/4, bhgt=SI(36);
+    p.btnToggle={x,y,x+bwid,y+bhgt}; p.btnTunnel={x+bwid+SI(8),y,x+bwid*2+SI(8),y+bhgt}; p.btnHtml={x+bwid*2+SI(16),y,x+bwid*3+SI(16),y+bhgt}; p.btnPasta={x+bwid*3+SI(24),y,x+cw,y+bhgt};
+    y+=bhgt+SI(8);
+    p.btnPort={x,y,x+bwid,y+bhgt}; p.btnPin={x+bwid+SI(8),y,x+bwid*2+SI(8),y+bhgt}; p.btnName={x+bwid*2+SI(16),y,x+bwid*3+SI(16),y+bhgt}; p.btnLan={x+bwid*3+SI(24),y,x+cw,y+bhgt};
+    y+=bhgt+SI(6);
+    int infoH=SI(54);   // linhas de estado (porta, LAN, tunel)
+    p.list={bx+SI(8),y+infoH,bx+bw-SI(8),by+bh-SI(12)};
+    int listTop=p.list.top, ly=listTop-p.scroll, rowH=SI(34);
+    auto row=[&](){ RECT r={x,ly,x+cw,ly+rowH-SI(6)}; ly+=rowH; return r; };
+    p.accept.clear(); p.deny.clear(); p.revoke.clear(); p.plHost.clear(); p.plDev.clear();
+    ly+=SI(26);                                                        // titulo "pedidos"
+    for(size_t i=0;i<p.v.pending.size();i++){ RECT r=row(); p.deny.push_back({r.right-SI(90),r.top,r.right,r.bottom}); p.accept.push_back({r.right-SI(190),r.top,r.right-SI(98),r.bottom}); }
+    ly+=SI(26);                                                        // titulo "dispositivos"
+    if(p.v.devs.empty()) ly+=rowH;
+    for(size_t i=0;i<p.v.devs.size();i++){ RECT r=row(); p.revoke.push_back({r.right-SI(100),r.top,r.right,r.bottom}); }
+    ly+=SI(26);                                                        // titulo "playlists"
+    if(g_playlists.empty()) ly+=rowH;
+    for(size_t i=0;i<g_playlists.size()&&i<200;i++){
+        RECT r=row(); p.plHost.push_back({r.right-SI(120),r.top,r.right,r.bottom});
+        std::vector<RECT> chips; std::string t=host::Targets(g_playlists[i].slug);
+        if(!t.empty()&&!p.v.devs.empty()){ int cx=x+SI(16); for(size_t j=0;j<p.v.devs.size()&&j<20;j++){ int cwid=SI(110); chips.push_back({cx,ly,cx+cwid,ly+rowH-SI(8)}); cx+=cwid+SI(6); if(cx+cwid>x+cw){ cx=x+SI(16); ly+=rowH; } } ly+=rowH; }
+        p.plDev.push_back(chips);
+    }
+    ly+=SI(26);                                                        // titulo "playlists dos celulares"
+    if(p.v.dpls.empty()) ly+=rowH; else ly+=rowH*(int)p.v.dpls.size();
+    p.contentH=ly+p.scroll-listTop;
+    int maxSc=std::max(0,p.contentH-(int)(p.list.bottom-p.list.top)); if(p.scroll>maxSc) p.scroll=maxSc; if(p.scroll<0) p.scroll=0;
+}
 static void LayoutOnline(int w,int h){
     OnlineUI& u=OU();
     int bw=std::min((int)S(860),w-24), bh=std::min((int)S(660),h-24), bx=(w-bw)/2, by=(h-bh)/2;

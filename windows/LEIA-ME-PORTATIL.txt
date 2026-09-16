@@ -6,7 +6,7 @@ REMIX PLAYER - VERSAO PORTATIL PARA WINDOWS 10 E 11
    assim o Windows tira so o .exe e o Remix fica sem as imagens, a config e as musicas.
 
 2. (OPCIONAL) MUSICA ONLINE
-   Clique 2x em INSTALAR-DEPENDENCIAS.bat. Ele baixa yt-dlp, FFmpeg e Deno dos sites oficiais
+   Clique 2x em INSTALAR-DEPENDENCIAS.bat. Ele baixa yt-dlp, FFmpeg, Deno e cloudflared dos sites oficiais
    direto para a pasta assets\tools do Remix, usando o curl e o tar do proprio Windows. Nada
    e instalado no sistema (nem pip, nem winget, nem PATH): o Remix so carrega dessa pasta.
    Precisa de internet. Rode de novo de vez em quando para atualizar o yt-dlp.
@@ -26,5 +26,5 @@ SE O REMIX FECHAR SOZINHO
 ONDE FICAM AS COISAS
    config.ini, covers.ini, playlists\   ao lado do Remix.exe (copie a pasta para levar a outro PC)
    Musica\                              coloque suas musicas aqui (ou escolha outra pasta no app)
-   assets\tools\                      yt-dlp.exe, ffmpeg.exe e deno.exe, dentro do Remix (so carrega daqui)
+   assets\tools\                      yt-dlp.exe, ffmpeg.exe, deno.exe e cloudflared.exe, dentro do Remix (so carrega daqui)
    Codigo, novidades e ajuda: https://github.com/EchoGroupStudio/Remix

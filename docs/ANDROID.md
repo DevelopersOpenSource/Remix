@@ -47,6 +47,7 @@ remix/
 │   ├── build-android.sh    compila raylib + Remix por ABI e monta o APK (aapt2/zipalign/apksigner)
 │   ├── sys_android.h       camada de sistema (eventos, assets, permissões, densidade)
 │   ├── main_android.cpp    laço principal: toque, densidade, pastas, Platform*
+│   ├── updater/            tools_update.h (C++) e AtualizadorRemix.java: auto-atualização (seção 8)
 │   └── res/values/strings.xml
 └── third_party/android/    sdk/ (cmdline-tools, platforms, build-tools, ndk), debug.keystore  [fora do git]
 ```
@@ -86,7 +87,7 @@ bash android/fetch-android.sh                 # uma vez (ou quando mudar uma ver
 bash android/build-android.sh                 # -> dist/Remix-<versao>-android.apk
 REMIX_ABIS="arm64-v8a" bash android/build-android.sh      # só 64 bits, mais rápido
 REMIX_ABIS="x86_64" bash android/build-android.sh         # para o emulador
-third_party/android/sdk/platform-tools/adb install -r dist/Remix-1.3.1-android.apk
+third_party/android/sdk/platform-tools/adb install -r dist/Remix-1.4.0-android.apk
 third_party/android/sdk/platform-tools/adb logcat -s remix raylib                 # log do app
 ```
 
@@ -100,7 +101,7 @@ O que o `build-android.sh` faz, na ordem:
    Android 15). Guarda uma cópia com símbolos em `build/android/` para ler crash.
 2. Copia `assets/branding`, `assets/fonts` e `assets/themes` para dentro do APK.
 3. Monta os `mipmap` do ícone a partir de `linux/icons/*.png` e troca a versão no
-   manifesto (`versionCode` = 1.3.1 → 10301).
+   manifesto (`versionCode` = 1.4.0 → 10400).
 4. `aapt2 compile/link` → `zip` das libs → `zipalign -p 4` → `apksigner`.
 
 Assinatura: o `fetch-android.sh` cria uma `debug.keystore` só para instalar no seu
@@ -120,7 +121,7 @@ comportamento da coluna "fase 1".
 | `PlatformPick*` (pasta/imagem/arquivos) | responde "cancelado" | SAF |
 | `PlatformHttpGet` / `sys::HttpGet` | desligado (sem busca online, sem capa da internet) | `HttpURLConnection` por JNI, ou libcurl estática pinada |
 | `PlatformHaveFfmpeg` / transcodificação | não (só mp3, ogg, wav, flac nativos) | ffmpeg estático no APK (`lib/<abi>/libffmpeg.so` executável) — pesado, avaliar |
-| Online (yt-dlp) | não existe no Android (Python) | NewPipeExtractor (Java) ou o **Host do PC** (ver `docs/HOST.md`): o celular acessa o PC |
+| Online (yt-dlp) | não existe no Android (Python) | **Host do PC** (`docs/HOST.md`) ou `youtubedl-android` com auto-atualização (seção 8) |
 | `PlatformTrash` | não (apagar de vez é perigoso; devolve falso) | MediaStore delete por JNI |
 | `PlatformOpenFolder`, clipboard, atalhos globais, minimizar/esconder, MPRIS | vazios | clipboard por JNI |
 | Instância única / IPC | sempre "sou a única" | — |
@@ -165,7 +166,94 @@ apontando para a página, ou a PWA "instalada" pelo Chrome) sai em um dia e não
 precisa de nada disto — pode ser a primeira versão na loja enquanto o porte
 nativo amadurece. Os dois caminhos não se excluem.
 
-## 8. Decisões em aberto
+## 8. Ferramentas que quebram sozinhas: atualização automática (obrigatória)
+
+Toolchain pinado (seção 3) é uma coisa; **ferramentas de runtime** são outra. yt-dlp
+quebra toda vez que o YouTube muda algo, e a versão de ontem para de funcionar sem o
+app ter culpa. Então a regra é:
+
+- **Build**: nada muda sozinho (NDK, raylib, miniaudio pinados).
+- **Runtime**: o que fala com serviços de fora **se atualiza sozinho**, sem esperar
+  uma versão nova do app.
+
+### 8.1 O que precisa se atualizar
+
+| Peça | Por que quebra | Como se atualiza sozinha |
+|---|---|---|
+| yt-dlp | YouTube/SoundCloud mudam a página e a assinatura | `yt-dlp -U` (ele se substitui) ou baixar o binário/`.zip` mais novo do GitHub Releases |
+| Deno / Node (runtime JS do yt-dlp) | o yt-dlp passa a exigir versão mínima nova | checar a versão mínima que o yt-dlp pede e baixar a release |
+| ffmpeg | raramente; só quando um formato novo aparece | baixar a build estática mais nova |
+| cloudflared (túnel do Host) | protocolo do túnel evolui | GitHub Releases da Cloudflare |
+| **o próprio app** | correções do Remix | checar `releases/latest` do repositório e avisar |
+
+### 8.2 Como fazer no Android sem Gradle e sem loja
+
+O Android não roda Python, então **não existe yt-dlp "de verdade" no celular**. As duas
+saídas, da mais simples para a mais completa:
+
+1. **Deixar o online com o PC (Host).** O celular usa o site do Host (`docs/HOST.md`):
+   quem roda yt-dlp é o PC, e o PC já atualiza o yt-dlp sozinho (o Remix tenta
+   `yt-dlp -U` quando uma busca falha por erro de extração, e o instalador baixa sempre
+   a última versão). O app Android v1 não precisa de nada disso — é o que recomendamos.
+2. **yt-dlp no aparelho com `youtubedl-android`** (yausername): empacota um Python
+   embutido e expõe `YoutubeDL.getInstance().updateYoutubeDL(context)` — o yt-dlp se
+   atualiza por dentro do app, sem versão nova na loja. Custo: é uma biblioteca Java/AAR
+   (o APK vira `hasCode="true"`, precisa de uma classe Java pequena e do `d8`, mas
+   continua sem Gradle: baixe o `.aar` pinado, extraia `classes.jar` + `jni/`, compile
+   com `javac` e junte com `d8`). O `build-android.sh` do zip já tem o lugar marcado
+   para esse passo.
+
+### 8.3 Estrutura do atualizador (vale para os dois caminhos)
+
+```
+android/updater/
+├── AtualizadorRemix.java   checa GitHub Releases, baixa para o cache e avisa
+└── tools_update.h          (C++) a mesma lógica pelo HTTP da casca, quando não houver Java
+```
+
+Regras do atualizador (estão no esqueleto do zip, em `tools_update.h`):
+
+- **Quando**: ao abrir (no máximo 1x por dia, `ultima_checagem` em `config.ini`) e
+  **na hora que uma ferramenta falha** (erro de extração do yt-dlp = "atualiza e tenta
+  de novo uma vez").
+- **De onde**: só de fontes fixas e HTTPS — `api.github.com/repos/<dono>/<repo>/releases/latest`
+  dos projetos oficiais (yt-dlp/yt-dlp, denoland/deno, cloudflare/cloudflared,
+  EchoGroupStudio/Remix). Nunca de um link vindo de fora.
+- **Como**: baixa em `<cache>/tools/<nome>.part`, confere o tamanho (e o SHA-256 quando
+  o release publica), troca por rename atômico, guarda a versão anterior em
+  `<nome>.antigo` para voltar se a nova não abrir.
+- **Silencioso para ferramentas, com aviso para o app**: ferramenta nova instala sem
+  perguntar; app novo mostra "Tem versão nova (1.x.y): abrir a página" — no Android sem
+  loja o app não se substitui sozinho (precisaria de `REQUEST_INSTALL_PACKAGES` e um
+  `FileProvider`, que é código Java); abrir a página de download é o caminho sem código.
+- **Falhou?** Continua com a versão que tem e tenta de novo no dia seguinte. Nunca
+  bloqueia o app por causa de atualização.
+
+O mesmo atualizador serve para o **Windows e o Linux**: o Remix do PC passa a rodar
+`yt-dlp -U` sozinho (a partir da 1.4.x, ao falhar uma busca) — a regra "runtime se
+atualiza sozinho" vale em todo lugar.
+
+## 9. Versões novas do Android (o que já está previsto)
+
+O manifesto e o build do zip já consideram o que o Android tem exigido a cada versão:
+
+| Android | Exigência | O que o exemplo faz |
+|---|---|---|
+| 15 (API 35) | `.so` alinhado em **16 KB** em aparelhos novos | `-Wl,-z,max-page-size=16384` no link (NDK r28+ já faz por padrão) |
+| 15 | **edge-to-edge** obrigatório para target 35 (conteúdo por baixo das barras) | tema `Theme.NoTitleBar.Fullscreen` + o layout usa `viewport-fit`/insets (`AConfiguration` + `ANativeWindow` dão a área segura; ajustar `g_headerH` pela barra de status) |
+| 14 (API 34) | serviço em 1º plano precisa declarar o **tipo** (`mediaPlayback`) | permissões já comentadas no manifesto (`FOREGROUND_SERVICE_MEDIA_PLAYBACK`) para a fase 2 |
+| 13 (API 33) | `READ_MEDIA_AUDIO` no lugar de `READ_EXTERNAL_STORAGE`; `POST_NOTIFICATIONS` | `sys::AudioPermissionName()` escolhe pela versão; notificação só na fase 2 |
+| 13+ | **botão Voltar preditivo** (`enableOnBackInvokedCallback`) | fica desligado no manifesto até a casca tratar o gesto; o `KEY_BACK` continua chegando |
+| 12 (API 31) | `android:exported` obrigatório na Activity | já está |
+| 11 (API 30) | scoped storage: sem acesso livre ao disco | biblioteca em `Music/` e `Download/` via `READ_MEDIA_AUDIO`; pasta livre só pelo SAF (fase 2) |
+| Play Store | target = API do ano anterior no mínimo; **AAB** e assinatura própria | `targetSdkVersion` num único lugar do manifesto; `bundletool` (jar pinado) gera o AAB |
+
+Regra para subir o `targetSdkVersion`: mude o número, rode no emulador da versão nova
+(`sdkmanager "system-images;android-<N>;google_apis;x86_64"`), confira permissões,
+áudio em segundo plano e o botão Voltar, e só então commite. O `minSdkVersion` 24
+cobre ~99% dos aparelhos ativos; não há motivo para subir.
+
+## 10. Decisões em aberto
 
 - Nome do pacote: `com.echogroupstudio.remix` (troque no manifesto se quiser outro).
 - Loja: o Play exige AAB (bundletool, também um .jar pinável) e assinatura própria.

@@ -277,6 +277,10 @@ da biblioteca ou mexia em escala/LED/modo (IDs de clique repetidos); PASTA com u
 aberta trocava a biblioteca inteira; aviso de lista vazia por cima da barra; trocar de pasta
 durante uma varredura podia deixar a lista vazia; `--home` abre instancia separada.
 
+## Host: ouvir as músicas do PC no celular
+
+Desde a 1.4.0 o Remix vira um servidor para o celular (Configurações > HOST ou o botão HOST no cabeçalho): defina um **PIN**, ligue, mande o link (ou o `Remix-conectar.html` pelo WhatsApp) e aceite o aparelho quando ele pedir. Funciona na **rede local** (mesmo roteador) e pela **internet** por um túnel Cloudflare (HTTPS, sem abrir porta, sem entregar IP; atravessa CGNAT). O celular ouve a biblioteca, as playlists que você hosteou e tem playlists próprias. Porta padrão **49875**. Detalhes, segurança e API em [docs/HOST.md](docs/HOST.md).
+
 ## Android (em andamento)
 
 A estrutura para o porte Android (casca raylib reaproveitada, toolchain pinado em `third_party/android`, APK sem Gradle) esta em [docs/ANDROID.md](docs/ANDROID.md); o zip `docs/android-exemplo.zip` traz a pasta `android/` de exemplo.

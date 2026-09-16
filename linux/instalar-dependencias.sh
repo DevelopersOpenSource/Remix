@@ -44,6 +44,7 @@ ok_js() {
   return 1
 }
 ok_ffmpeg() { have ffmpeg; }
+ok_cloudflared() { have cloudflared || [ -x "$HOME/.local/bin/cloudflared" ]; }
 ok_dialog() { have zenity || have kdialog; }
 ok_curl() {
   [ "$FAKE" = 1 ] && return 1
@@ -58,6 +59,7 @@ report() {
   have node && j="$j node $(vnum node --version)"
   line "yt-dlp 2025.11 ou mais novo${y:+ (tem $y)}" ok_ytdlp
   line "ffmpeg" ok_ffmpeg
+  line "cloudflared (tunel do Host: celular pela internet)" ok_cloudflared
   line "Deno 2.3+ ou Node.js 22+${j:+ (tem$j)}" ok_js
   line "zenity ou kdialog (janelas de escolher pasta)" ok_dialog
   line "libcurl (capas e links)" ok_curl
@@ -158,6 +160,13 @@ user_deno() {
   run chmod +x "$HOME/.deno/bin/deno"
   rm -rf "$tmp"
 }
+user_cloudflared() {
+  echo "cloudflared: binario oficial da Cloudflare em ~/.local/bin (tunel do Host)"
+  local a="amd64"; [ "$ARCH" = aarch64 ] && a="arm64"
+  run mkdir -p "$HOME/.local/bin"
+  fetch "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$a" "$HOME/.local/bin/cloudflared" || return 1
+  run chmod +x "$HOME/.local/bin/cloudflared"
+}
 user_ffmpeg() {
   arch_ok ffmpeg || return 1
   echo "ffmpeg: versao estatica oficial (BtbN, cerca de 100 MB) em ~/.local/bin"
@@ -224,6 +233,7 @@ fi
 ok_ytdlp || user_ytdlp
 ok_js || user_deno
 ok_ffmpeg || user_ffmpeg
+ok_cloudflared || user_cloudflared
 echo
 if [ "$SHOW" = 1 ]; then echo "(--mostrar: nada foi instalado)"; exit 0; fi
 echo "Conferindo:"

@@ -118,6 +118,10 @@ bash linux/build-windows.sh              # cross-compiles windows/Remix.exe with
 Double-click `windows\COMPILAR.bat`. It uses MinGW-w64 GCC (MSYS2 UCRT64, WinLibs, Scoop or Chocolatey)
 and explains how to install it when missing. Manual commands: [windows/LEIA-ME.txt](windows/LEIA-ME.txt).
 
+## Host: listen to the PC library on your phone
+
+Since 1.4.0 Remix can act as a server for your phone (Settings > HOST, or the HOST button in the header): set a **PIN**, turn it on, send the link (or the generated `Remix-conectar.html` over WhatsApp) and accept the device when it asks. Works on the **LAN** (same router) and over the **internet** through a Cloudflare tunnel (HTTPS, no port forwarding, no IP exposed, CGNAT-friendly). The phone plays the library, the playlists you host to it, and keeps its own playlists. Default port **49875**. Details, security model and API in [docs/HOST.md](docs/HOST.md) (Portuguese).
+
 ## Android (work in progress)
 
 The plan for the Android port (reusing the raylib shell, pinned toolchain under `third_party/android`, APK built without Gradle) is in [docs/ANDROID.md](docs/ANDROID.md) (Portuguese); `docs/android-exemplo.zip` holds the example `android/` folder.

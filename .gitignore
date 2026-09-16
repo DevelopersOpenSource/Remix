@@ -26,6 +26,7 @@
 /remix-log*.txt
 /remix-abrindo.tmp
 /tools/
+/assets/tools/
 
 # Biblioteca de teste local (musicas com direitos autorais)
 /test/
