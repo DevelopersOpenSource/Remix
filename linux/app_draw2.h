@@ -67,6 +67,12 @@ static void DrawSettings(int w,int h){
     // estilo da interface
     for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
     gfx::Text(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",(float)R_settingsStyle[0].left,(float)R_settingsStyle[0].bottom+10,sm,gray);
+    {   // SOUNDPAD e DISCORD
+        bool sp=spad::Running(), dr=dc::Ready();
+        btn(R_setSpad,sp?L"ABRIR SOUNDPAD (MICROFONE LIGADO)":L"ABRIR SOUNDPAD",sp);
+        btn(R_setDc,dr?L"ABRIR DISCORD (BOT CONECTADO)":L"ABRIR DISCORD",dr);
+        gfx::TextRect(L"Soundpad: sons no seu microfone (Discord, jogos). Discord: bot de música com fila, votação e as suas playlists.",RectF((float)R_setSpad.left,(float)R_setSpad.bottom+10,(float)(R_setDc.right-R_setSpad.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+    }
     {   // HOST (acesso pelo celular)
         bool on=host::Running(); host::View hv=host::GetView();
         tgl(R_setHostOn,on?L"HOST: LIGADO":L"HOST: DESLIGADO",L"LIGAR O HOST",on);
@@ -243,12 +249,14 @@ static void DrawArtistEditor(int w,int h){
     DrawRoundRect(box,14,&pb,&apn,2);
     const float lab=S(13), sm=S(10), txt=S(14);
     Color abr=ToGdi(g_theme.accent), white=C_WHITE, gray=C_GRAY2;
-    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":L"EDITAR NOME DO ARTISTA";
+    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":g_editMode==9?L"TOKEN DO BOT DO DISCORD":g_editMode==10?L"CARGO DJ DO DISCORD":L"EDITAR NOME DO ARTISTA";
     gfx::Text(etitle,(float)(bx+22),(float)(by+18),lab,abr,true);
     std::wstring t;
     if(g_editMode==6) t=L"Porta TCP de 1024 a 65535 (padrão 49875). Só números.";
     else if(g_editMode==7) t=L"De 4 a 12 números. O celular digita este PIN na primeira vez; depois você aceita o aparelho aqui.";
     else if(g_editMode==8) t=L"Como o seu PC aparece no celular.";
+    else if(g_editMode==9) t=L"Developer Portal > seu app > Bot > Reset Token > Copy. Cole com Ctrl+V (fica só neste PC, nunca aparece).";
+    else if(g_editMode==10) t=L"Nome do cargo (igual no servidor). Quem tem ele controla a música sem votação.";
     else if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
     else if(g_editMode==4||g_editMode==5) t=L"Música, álbum ou playlist do Spotify, YouTube / YouTube Music, Deezer, Apple Music ou SoundCloud  (Ctrl+V cola)";
     else if(g_editMode==3) t=L"Playlist: "+(g_editTrack>=0&&g_editTrack<(int)g_playlists.size()?g_playlists[(size_t)g_editTrack].name:L"");
@@ -258,8 +266,9 @@ static void DrawArtistEditor(int w,int h){
     Color lb=Cs(Argb(255,20,23,38),UI().surfaceHi); DrawRoundRect(line,8,&lb,nullptr);
     float tpx=(float)(bx+32), tpy=(float)(by+82);
     gfx::PushClip(line);
-    float emw=gfx::TextWidth(g_editBuf,txt), eoff=emw>(float)(bw-64)?emw-(float)(bw-64):0.f;   // texto longo (link): mostra o final
-    gfx::Text(g_editBuf,tpx-eoff,tpy,txt,white);
+    std::wstring shown=g_editMode==9?std::wstring(std::min<size_t>(g_editBuf.size(),60),L'•'):g_editBuf;   // token: so bolinhas
+    float emw=gfx::TextWidth(shown,txt), eoff=emw>(float)(bw-64)?emw-(float)(bw-64):0.f;   // texto longo (link): mostra o final
+    gfx::Text(shown,tpx-eoff,tpy,txt,white);
     if((NowMs()/500)%2==0){
         float mw=emw-eoff;
         float cx=tpx+(mw>1.f?mw:0.f);
@@ -488,6 +497,47 @@ static void DrawFxPanel(int w,int h){
     if(!l2.empty()) gfx::TextRect(l2,RectF(inf.X,inf.Y+S(22),inf.Width,S(20)),S(10.5f),gray,false,gfx::Near,true,gfx::EllipsisChar);
     if(StemJobActive()) DrawPill(p.btnCancel,L"CANCELAR",false,S(10));
 }
+// ---- paineis montados no codigo comum (SOUNDPAD, DISCORD: app_panels.h) ------
+static Color PanelColor(int c){
+    switch(c){ case PCL_GRAY: return C_GRAY2; case PCL_ACCENT: return ToGdi(g_theme.accent); case PCL_TITLE: return UiClassic()?ToGdi(g_theme.accent):C_WHITE;
+               case PCL_DANGER: return Argb(255,255,120,130); case PCL_OK: return Argb(255,110,220,150); default: return C_WHITE; }
+}
+static void TextTwoLines(const std::wstring& s,const RectF& rc,float px,Color c,bool bold){   // ate 2 linhas, quebra na palavra
+    float lh=gfx::LineHeight(px);
+    if(gfx::TextWidth(s,px,bold)<=rc.Width){ gfx::Text(s,rc.X,rc.Y,px,c,bold); return; }
+    size_t cut=0;
+    for(size_t i=1;i<=s.size();++i) if(i==s.size()||s[i]==L' '){ if(gfx::TextWidth(s.substr(0,i),px,bold)<=rc.Width) cut=i; else break; }
+    if(cut==0){ size_t n=1; while(n<s.size()&&gfx::TextWidth(s.substr(0,n+1),px,bold)<=rc.Width) n++; cut=n; }
+    std::wstring l2=s.substr(cut); while(!l2.empty()&&l2[0]==L' ') l2.erase(0,1);
+    gfx::Text(s.substr(0,cut),rc.X,rc.Y,px,c,bold);
+    gfx::TextRect(l2,RectF(rc.X,rc.Y+lh,rc.Width,lh),px,c,bold,gfx::Near,false,gfx::EllipsisChar);
+}
+static void DrawPanel(const Panel& p){
+    Color ab=ToGdi(g_theme.accent);
+    for(auto& it:p.items){
+        RectF r=RF(it.r);
+        switch(it.kind){
+        case PK_DIM: gfx::FillRect(r.X,r.Y,r.Width,r.Height,Cs(Argb(200,2,4,10),UI().bg,200)); break;
+        case PK_BOX: { Color pb=Cs(Argb(255,10,13,26),UI().surface), apn=Cs(ab,UI().borderHi); DrawRoundRect(r,S(14),&pb,&apn,1.8f); } break;
+        case PK_TEXT: gfx::TextRect(it.text,r,it.px,PanelColor(it.color),it.bold,it.center?gfx::Center:gfx::Near,true,gfx::EllipsisChar); break;
+        case PK_PILL: DrawPill(it.r,it.text,it.on,it.px); break;
+        case PK_ROW: { Color rb=it.on?Cs(ToGdi(g_theme.accent,38),UI().surfaceHi):Cs(Argb(255,16,19,34),UI().surfaceHi); DrawRoundRect(r,S(UI_R_PILL),&rb,nullptr); } break;
+        case PK_CLIP: gfx::PushClip(r); break;
+        case PK_UNCLIP: gfx::PopClip(); break;
+        case PK_BAR: { gfx::FillRect(r,Cs(Argb(255,40,44,65),UI().border)); if(it.v>0) gfx::FillRect(RectF(r.X,r.Y,r.Width*std::min(1.f,it.v),r.Height),ab); } break;
+        case PK_TILE: {
+            Color fb=it.on?Cs(ToGdi(g_theme.accent,70),UI().surfaceHi):Cs(Argb(255,16,19,34),UI().surfaceHi), ln=it.on?ab:Cs(Argb(255,50,54,76),UI().border);
+            if(UiClassic()) DrawRoundRect(r,S(10),&fb,&ln,1.4f); else DrawRoundRect(r,S(UI_R_CARD),&fb,it.on?&ln:nullptr,1.6f);
+            TextTwoLines(it.text,RectF(r.X+S(10),r.Y+S(8),r.Width-S(40),S(40)),S(12),C_WHITE,true);
+            if(!it.sub.empty()) gfx::TextRect(it.sub,RectF(r.X+S(72),r.Y+r.Height-S(28),r.Width-S(82),S(20)),S(9),C_GRAY2,false,gfx::Far,true,gfx::EllipsisChar);
+            if(it.v>=0){ RectF pb(r.X+S(8),r.Y+r.Height-S(5),r.Width-S(16),S(3)); gfx::FillRect(pb,Cs(Argb(255,40,44,65),UI().border)); gfx::FillRect(RectF(pb.X,pb.Y,pb.Width*std::min(1.f,it.v),pb.Height),ab); }
+        } break;
+        default: break;
+        }
+    }
+}
+static void DrawSpadPanel(int w,int h){ BuildSpadPanel(w,h); DrawPanel(g_spadP); }
+static void DrawDcPanel(int w,int h){ BuildDcPanel(w,h); DrawPanel(g_dcP); }
 static void DrawHostPanel(int w,int h){
     host::PanelUI& p=host::PU(); LayoutHostPanel(w,h); const host::View& v=p.v;
     gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(200,2,4,10),UI().bg,200));

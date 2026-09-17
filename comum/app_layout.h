@@ -45,6 +45,13 @@ static void LayoutSettings(int w,int h){
         R_setHostOnline={x+20,y+228,x+20+tw,y+262}; R_setHostQrConf={x+30+tw,y+228,x+30+tw*2,y+262}; R_setHostIpv6={x+40+tw*2,y+228,x+cw-20,y+262};
         y+=338;
     };
+    // SOUNDPAD e DISCORD: abrem os paineis (o cabecalho esconde as pilulas quando nao cabem)
+    auto sectExtras=[&](int x,int& y,int cw){
+        sect(x,y,cw,120,L"SOUNDPAD E DISCORD (SÓ NO PC)");
+        int hw=(cw-50)/2;
+        R_setSpad={x+20,y+52,x+20+hw,y+86}; R_setDc={x+30+hw,y+52,x+cw-20,y+86};
+        y+=140;
+    };
     // ESTILO: classico / limpo / spotify+LED (3 botoes iguais + uma linha de explicacao)
     auto sectStyle=[&](int x,int& y,int cw){
         sect(x,y,cw,124,L"ESTILO DA INTERFACE");
@@ -179,7 +186,7 @@ static void LayoutSettings(int w,int h){
     if(wide){
         int colW=(R-L-40)/2, xr=L+colW+40;
         int y=top;
-        sectStyle(L,y,colW); sectHost(L,y,colW); sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
+        sectStyle(L,y,colW); sectHost(L,y,colW); sectExtras(L,y,colW); sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
         sectColors(L,y,colW); sectBackground(L,y,colW); sectPlayback(L,y,colW); sectShortcuts(L,y,colW);
         int ry=top;
         sectOnline(xr,ry,colW); sectScales(xr,ry,colW); sectLed(xr,ry,colW); sectButtons(xr,ry,colW); sectRunner(xr,ry,colW); sectEq(xr,ry,colW);
@@ -187,7 +194,7 @@ static void LayoutSettings(int w,int h){
     } else {
         int cw=R-L;
         int cy=top;
-        sectStyle(L,cy,cw); sectHost(L,cy,cw); sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
+        sectStyle(L,cy,cw); sectHost(L,cy,cw); sectExtras(L,cy,cw); sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
         sectColors(L,cy,cw); sectScales(L,cy,cw); sectLed(L,cy,cw); sectButtons(L,cy,cw); sectRunner(L,cy,cw);
         sectBackground(L,cy,cw); sectPlayback(L,cy,cw); sectEq(L,cy,cw); sectShortcuts(L,cy,cw);
         g_setContentH=cy-py;
@@ -199,8 +206,8 @@ static void LayoutSettings(int w,int h){
 static void BuildLayout(){
     int w=g_winW,h=g_winH;
     R_titlebar={0,0,w,44}; R_close={0,0,0,0}; R_min={0,0,0,0};
-    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_hostBtn={0,0,0,0}; R_fxBtn={0,0,0,0}; R_volIcon={0,0,0,0};
-    R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_cardPlayBtns.clear(); R_themeCircles.clear();
+    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_hostBtn={0,0,0,0}; R_fxBtn={0,0,0,0}; R_spadBtn={0,0,0,0}; R_dcBtn={0,0,0,0}; R_volIcon={0,0,0,0};
+    R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_cardPlayBtns.clear(); R_cardDcBtns.clear(); R_plDcBtns.clear(); R_themeCircles.clear();
     g_headerH=0; g_sideW=0;
     R_rowUp.clear(); R_rowDown.clear();
     R_libBar=R_tabTracks=R_tabPlaylists=R_searchBox=R_searchClear=R_plBack=R_plNew={0,0,0,0};
@@ -263,6 +270,11 @@ static void BuildLayout(){
         {   // EFEITOS: pilula depois do HOST (some se nao couber)
             int fx=(R_hostBtn.right>R_hostBtn.left?R_hostBtn.right:(R_folderBtn.right>R_folderBtn.left?R_folderBtn.right:(R_sortBtn.right>R_sortBtn.left?R_sortBtn.right:R_autoTgl.right)))+SI(10);
             R_fxBtn={fx,SI(8),fx+(int)S(96),SI(52)}; if(R_fxBtn.right>limit) R_fxBtn={0,0,0,0};
+        }
+        if(R_fxBtn.right>R_fxBtn.left){   // SOUNDPAD e DISCORD depois dos EFEITOS (somem se nao couberem; ficam nas configuracoes)
+            int sx=R_fxBtn.right+SI(10);
+            R_spadBtn={sx,SI(8),sx+(int)S(110),SI(52)}; if(R_spadBtn.right>limit) R_spadBtn={0,0,0,0};
+            if(R_spadBtn.right>R_spadBtn.left){ int dx=R_spadBtn.right+SI(10); R_dcBtn={dx,SI(8),dx+(int)S(100),SI(52)}; if(R_dcBtn.right>limit) R_dcBtn={0,0,0,0}; }
         }
         R_modeSquare=R_modeCd=R_modeVertical={0,0,0,0}; R_themeCircles.clear();
         float ps=g_cfg.playerScale/100.0f;
@@ -333,13 +345,15 @@ static void BuildLayout(){
                 g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
                 for(int k=0;k<n;k++){
                     int row=k/cols,col=k%cols; int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
-                    if(y>h||y+cardH<gridTop-SI(40)){ R_plCards.push_back({0,0,0,0}); R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); continue; }
+                    if(y>h||y+cardH<gridTop-SI(40)){ R_plCards.push_back({0,0,0,0}); R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); R_plDcBtns.push_back({0,0,0,0}); continue; }
                     R_plCards.push_back({x,y,x+cardW,y+cardH});
+                    // ▶ DC em cima do quadrado da capa (so playlists de verdade; "Todas as musicas" e "nova" nao)
+                    if(k>0&&k<n-1){ int cv=SI(96), ax=x+SI(16), ay=y+SI(16); R_plDcBtns.push_back({ax+SI(6),ay+cv-SI(30),ax+cv-SI(6),ay+cv-SI(6)}); } else R_plDcBtns.push_back({0,0,0,0});
                     if(k==n-1){ R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); }
                     else { int bw2=(cardW-SI(40))/2; R_plPlay.push_back({x+SI(16),y+cardH-SI(50),x+SI(16)+bw2,y+cardH-SI(16)}); R_plShuf.push_back({x+SI(24)+bw2,y+cardH-SI(50),x+cardW-SI(16),y+cardH-SI(16)}); }
                 }
             } else {
-                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0});
+                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardDcBtns.assign(g_tracks.size(),RECT{0,0,0,0});
                 R_rowUp.assign(g_tracks.size(),RECT{0,0,0,0}); R_rowDown.assign(g_tracks.size(),RECT{0,0,0,0});
                 if(g_cfg.listMode!=0){
                     int rowH=SI(64);
@@ -391,6 +405,7 @@ static void BuildLayout(){
                         R_cardCoverButtons[i]={x+cardW-SI(44),y+SI(14),x+cardW-SI(18),y+SI(40)};
                         R_cardSeekRects[i]={0,0,0,0};   // sem seek no card: quem arrasta e a barra do player
                         R_cardPlayBtns[i]={x+SI(10)+cover-SI(52),y+SI(10)+cover-SI(52),x+SI(10)+cover-SI(8),y+SI(10)+cover-SI(8)};
+                        R_cardDcBtns[i]={x+SI(18),y+SI(18),x+SI(18)+std::min(SI(104),cover-SI(56)),y+SI(46)};   // ▶ DISCORD em cima do quadrado da capa
                         if(manual){ R_rowUp[i]={x+SI(10),y+cover-SI(40),x+SI(38),y+cover-SI(16)}; R_rowDown[i]={x+SI(42),y+cover-SI(40),x+SI(70),y+cover-SI(16)}; }
                     }
                 }
@@ -555,3 +570,4 @@ static void LayoutEditor(int w,int h){
     R_editSave={bx+bw-238,by+bh-56,bx+bw-128,by+bh-18};
     R_editCancel={bx+bw-118,by+bh-56,bx+bw-20,by+bh-18};
 }
+#include "app_panels.h"

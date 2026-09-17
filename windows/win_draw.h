@@ -387,6 +387,7 @@ static void DrawPlaylistCards(Graphics& g,const Brush* ab,const Brush* white,con
         TextTrim(g,isAll?L"clique: abrir a biblioteca":L"clique: abrir  ·  botão direito: opções",RectF(tx,card.Y+S(88),tw,S(16)),S(9),gray,false,StringTrimmingEllipsisCharacter);
         DrawPill(g,R_plPlay[(size_t)k],L"TOCAR",false,S(10));
         DrawPill(g,R_plShuf[(size_t)k],L"ALEATÓRIO",false,S(10));
+        if((size_t)k<R_plDcBtns.size()&&R_plDcBtns[(size_t)k].right>R_plDcBtns[(size_t)k].left&&UiHot(rr)&&DcCardsOn()) DrawPill(g,R_plDcBtns[(size_t)k],L"▶ DISCORD",true,S(9));
     }
 }
 // marcando musicas para uma playlist: circulo de selecao por card/linha
@@ -430,6 +431,8 @@ static void DrawNormal(Graphics& g,int w,int h){
     DrawPill(g,R_folderBtn,g_view==2?L"PASTA DA PLAYLIST ▼":L"PASTA ▼",g_folderMenuOpen,S(10));
     if(R_hostBtn.right>R_hostBtn.left) DrawPill(g,R_hostBtn,host::Running()?L"HOST ●":L"HOST",host::Running(),S(10));
     if(R_fxBtn.right>R_fxBtn.left) DrawPill(g,R_fxBtn,AnyFxOn()?L"EFEITOS ●":L"EFEITOS",AnyFxOn(),S(10));
+    if(R_spadBtn.right>R_spadBtn.left){ bool on=spad::Running(); DrawPill(g,R_spadBtn,on?L"SOUNDPAD ●":L"SOUNDPAD",on,S(10)); }
+    if(R_dcBtn.right>R_dcBtn.left){ bool on=dc::Ready(); DrawPill(g,R_dcBtn,on?L"DISCORD ●":L"DISCORD",on,S(10)); }
     DrawChromeButtons(g);
     if(R_listBtn.right>R_listBtn.left){
         bool lm=g_cfg.listMode!=0;
@@ -648,6 +651,7 @@ static void DrawNormal(Graphics& g,int w,int h){
             RectF gl(pb.X+pb.Width*.32f,pb.Y+pb.Height*.28f,pb.Width*.40f,pb.Height*.44f);
             if(cur&&g_player.playing) IconPause(g,gl,&playB); else IconPlay(g,gl,&playB);
         }
+        if(!g_pickMode&&hot&&i<R_cardDcBtns.size()&&R_cardDcBtns[i].right>R_cardDcBtns[i].left&&DcCardsOn()) DrawPill(g,R_cardDcBtns[i],L"▶ DISCORD",true,S(10));   // tocar no bot, em cima da capa
         DrawOrderArrows(g,i,&ab,&gray);
         StringFormat trimF; trimF.SetTrimming(StringTrimmingEllipsisWord); trimF.SetFormatFlags(StringFormatFlagsNoWrap);
         StringFormat trimC; trimC.SetTrimming(StringTrimmingEllipsisCharacter); trimC.SetFormatFlags(StringFormatFlagsNoWrap);
@@ -814,6 +818,12 @@ static void DrawSettings(Graphics& g,int w,int h){
     // estilo da interface
     for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
     g.DrawString(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",-1,sm,PointF((REAL)R_settingsStyle[0].left,(REAL)(R_settingsStyle[0].bottom+10)),&gray);
+    {   // SOUNDPAD e DISCORD
+        bool sp=spad::Running(), dr=dc::Ready();
+        btn(R_setSpad,sp?L"ABRIR SOUNDPAD (MICROFONE LIGADO)":L"ABRIR SOUNDPAD",sp);
+        btn(R_setDc,dr?L"ABRIR DISCORD (BOT CONECTADO)":L"ABRIR DISCORD",dr);
+        TextTrim(g,L"Soundpad: sons no seu microfone (Discord, jogos). Discord: bot de música com fila, votação e as suas playlists.",RectF((REAL)R_setSpad.left,(REAL)(R_setSpad.bottom+10),(REAL)(R_setDc.right-R_setSpad.left),16),S(10),&gray,false,StringTrimmingEllipsisCharacter);
+    }
     {   // HOST (acesso pelo celular)
         bool on=host::Running(); host::View hv=host::GetView();
         tgl(R_setHostOn,on?L"HOST: LIGADO":L"HOST: DESLIGADO",L"LIGAR O HOST",on);
@@ -959,12 +969,14 @@ static void DrawArtistEditor(Graphics& g,int w,int h){
     SolidBrush pb(Cs(Color(255,12,15,30),UI().surface)); Pen apn(Cs(ToGdi(g_theme.accent),UI().borderHi),2); DrawRoundRect(g,box,14,&pb,&apn);
     const Font *lab=UiFont(S(13),true),*sm=UiFont(S(10),false),*txt=UiFont(S(14),false);
     SolidBrush abr(ToGdi(g_theme.accent)), white(ToGdi(UI().text)), gray(ToGdi(UI().textFaint));
-    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":L"EDITAR NOME DO ARTISTA";
+    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":g_editMode==9?L"TOKEN DO BOT DO DISCORD":g_editMode==10?L"CARGO DJ DO DISCORD":L"EDITAR NOME DO ARTISTA";
     g.DrawString(etitle,-1,lab,PointF((REAL)(bx+22),(REAL)(by+18)),&abr);
     std::wstring t;
     if(g_editMode==6) t=L"Porta TCP de 1024 a 65535 (padrão 49875). Só números.";
     else if(g_editMode==7) t=L"De 4 a 12 números. O celular digita este PIN na primeira vez; depois você aceita o aparelho aqui.";
     else if(g_editMode==8) t=L"Como o seu PC aparece no celular.";
+    else if(g_editMode==9) t=L"Developer Portal > seu app > Bot > Reset Token > Copy. Cole com Ctrl+V (fica só neste PC, nunca aparece).";
+    else if(g_editMode==10) t=L"Nome do cargo (igual no servidor). Quem tem ele controla a música sem votação.";
     else if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
     else if(g_editMode==4||g_editMode==5) t=L"Música, álbum ou playlist do Spotify, YouTube / YouTube Music, Deezer, Apple Music ou SoundCloud  (Ctrl+V cola)";
     else if(g_editMode==3) t=L"Playlist: "+(g_editTrack>=0&&g_editTrack<(int)g_playlists.size()?g_playlists[(size_t)g_editTrack].name:L"");
@@ -975,8 +987,9 @@ static void DrawArtistEditor(Graphics& g,int w,int h){
     StringFormat sfL; sfL.SetFormatFlags(StringFormatFlagsNoWrap);
     PointF tp((REAL)(bx+32),(REAL)(by+82));
     Region old; g.GetClip(&old); g.SetClip(line);
-    RectF emw; g.MeasureString(g_editBuf.c_str(),-1,txt,tp,&sfL,&emw); REAL eoff=emw.Width>(REAL)(bw-64)?emw.Width-(REAL)(bw-64):0;   // link longo: mostra o final
-    g.DrawString(g_editBuf.c_str(),-1,txt,PointF(tp.X-eoff,tp.Y),&sfL,&white);
+    std::wstring shown=g_editMode==9?std::wstring(std::min<size_t>(g_editBuf.size(),60),L'•'):g_editBuf;   // token: so bolinhas
+    RectF emw; g.MeasureString(shown.c_str(),-1,txt,tp,&sfL,&emw); REAL eoff=emw.Width>(REAL)(bw-64)?emw.Width-(REAL)(bw-64):0;   // link longo: mostra o final
+    g.DrawString(shown.c_str(),-1,txt,PointF(tp.X-eoff,tp.Y),&sfL,&white);
     if((NowMs()/500)%2==0){ REAL cx=tp.X+(emw.Width>1.f?emw.Width-eoff:0.f); if(cx>tp.X+(REAL)(bw-64)) cx=tp.X+(REAL)(bw-64); Pen cp(ToGdi(UI().text),2); g.DrawLine(&cp,cx+3,(REAL)(by+80),cx+3,(REAL)(by+102)); }
     g.SetClip(&old);
     auto ebtnC=[&](RECT r,const wchar_t*s,bool primary){ RectF b=RF(r); SolidBrush fb(primary?Cs(ToGdi(g_theme.accent,60),g_theme.accent):Cs(Color(255,24,27,42),UI().surfaceHi)); Pen p(primary?ToGdi(g_theme.accent):Cs(Color(255,70,74,95),UI().borderHi),1.5f); DrawRoundRect(g,b,8,&fb,&p); SolidBrush pt(UiClassic()?ToGdi(g_theme.accent):ToGdi(UI().bg)); TextCenter(g,s,b,S(10),primary?(Brush*)&pt:(Brush*)&gray); };
@@ -1153,6 +1166,44 @@ static void DrawFxPanel(Graphics& g,int w,int h){
     if(!l2.empty()) TextTrim(g,l2,RectF(inf.X,inf.Y+S(22),inf.Width,S(20)),S(10.5f),&gray,false,StringTrimmingEllipsisCharacter,true);
     if(StemJobActive()) DrawPill(g,p.btnCancel,L"CANCELAR",false,S(10));
 }
+// ---- paineis montados no codigo comum (SOUNDPAD, DISCORD: app_panels.h) ------
+static Color PanelColorW(int c){
+    switch(c){ case PCL_GRAY: return ToGdi(UI().textFaint); case PCL_ACCENT: return ToGdi(g_theme.accent); case PCL_TITLE: return UiClassic()?ToGdi(g_theme.accent):ToGdi(UI().text);
+               case PCL_DANGER: return Color(255,255,120,130); case PCL_OK: return Color(255,110,220,150); default: return ToGdi(UI().text); }
+}
+static void DrawPanel(Graphics& g,const Panel& p){
+    Region baseClip; g.GetClip(&baseClip); bool clipped=false;
+    for(auto& it:p.items){
+        RectF r=RF(it.r);
+        switch(it.kind){
+        case PK_DIM: { SolidBrush ov(Cs(Color(200,2,4,10),UI().bg,200)); g.FillRectangle(&ov,r); } break;
+        case PK_BOX: { SolidBrush pb(Cs(Color(255,10,13,26),UI().surface)); Pen apn(Cs(ToGdi(g_theme.accent),UI().borderHi),1.8f); DrawRoundRect(g,r,(int)S(14),&pb,&apn); } break;
+        case PK_TEXT: {
+            SolidBrush b(PanelColorW(it.color));
+            if(it.text==L"✕"){ StringFormat cf; cf.SetAlignment(StringAlignmentCenter); cf.SetLineAlignment(StringAlignmentCenter); g.DrawString(it.text.c_str(),-1,SymFont(it.px),r,&cf,&b); }   // simbolo: fonte de simbolos (senao vira quadradinho)
+            else if(it.center) TextCenter(g,it.text,r,it.px,&b,it.bold); else TextTrim(g,it.text,r,it.px,&b,it.bold,StringTrimmingEllipsisCharacter,true);
+        } break;
+        case PK_PILL: DrawPill(g,it.r,it.text,it.on,it.px); break;
+        case PK_ROW: { SolidBrush rb(it.on?Cs(ToGdi(g_theme.accent,38),UI().surfaceHi):Cs(Color(255,16,19,34),UI().surfaceHi)); DrawRoundRect(g,r,(int)S(UI_R_PILL),&rb,nullptr); } break;
+        case PK_CLIP: g.SetClip(r,CombineModeIntersect); clipped=true; break;
+        case PK_UNCLIP: if(clipped){ g.SetClip(&baseClip); clipped=false; } break;
+        case PK_BAR: { SolidBrush bg(Cs(Color(255,40,44,65),UI().border)); g.FillRectangle(&bg,r); if(it.v>0){ SolidBrush fg(ToGdi(g_theme.accent)); g.FillRectangle(&fg,RectF(r.X,r.Y,r.Width*std::min(1.f,it.v),r.Height)); } } break;
+        case PK_TILE: {
+            SolidBrush fb(it.on?Cs(ToGdi(g_theme.accent,70),UI().surfaceHi):Cs(Color(255,16,19,34),UI().surfaceHi)); Pen ln(it.on?ToGdi(g_theme.accent):Cs(Color(255,50,54,76),UI().border),1.5f);
+            if(UiClassic()) DrawRoundRect(g,r,(int)S(10),&fb,&ln); else DrawRoundRect(g,r,(int)S(UI_R_CARD),&fb,it.on?&ln:nullptr);
+            SolidBrush wh(ToGdi(UI().text)), gr(ToGdi(UI().textFaint));
+            StringFormat wf; wf.SetTrimming(StringTrimmingEllipsisWord);   // quebra em ate 2 linhas
+            g.DrawString(it.text.c_str(),-1,UiFont(S(12),true),RectF(r.X+S(10),r.Y+S(8),r.Width-S(40),S(40)),&wf,&wh);
+            if(!it.sub.empty()){ StringFormat rf; rf.SetAlignment(StringAlignmentFar); rf.SetLineAlignment(StringAlignmentCenter); rf.SetFormatFlags(StringFormatFlagsNoWrap); g.DrawString(it.sub.c_str(),-1,UiFont(S(9),false),RectF(r.X+S(72),r.Y+r.Height-S(28),r.Width-S(82),S(20)),&rf,&gr); }
+            if(it.v>=0){ RectF pb(r.X+S(8),r.Y+r.Height-S(5),r.Width-S(16),S(3)); SolidBrush bg(Cs(Color(255,40,44,65),UI().border)), fg(ToGdi(g_theme.accent)); g.FillRectangle(&bg,pb); g.FillRectangle(&fg,RectF(pb.X,pb.Y,pb.Width*std::min(1.f,it.v),pb.Height)); }
+        } break;
+        default: break;
+        }
+    }
+    if(clipped) g.SetClip(&baseClip);
+}
+static void DrawSpadPanel(Graphics& g,int w,int h){ BuildSpadPanel(w,h); DrawPanel(g,g_spadP); }
+static void DrawDcPanel(Graphics& g,int w,int h){ BuildDcPanel(w,h); DrawPanel(g,g_dcP); }
 static void DrawHostPanel(Graphics& g,int w,int h){
     host::PanelUI& p=host::PU(); LayoutHostPanel(w,h); const host::View& v=p.v;
     { SolidBrush ov(Cs(Color(200,2,4,10),UI().bg,200)); g.FillRectangle(&ov,0,0,w,h); }

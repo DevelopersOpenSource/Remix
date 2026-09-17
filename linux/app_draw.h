@@ -152,6 +152,7 @@ static void DrawPlaylistCards(Color ab,Color white,Color gray){
         gfx::TextRect(isAll?L"clique: abrir a biblioteca":L"clique: abrir  ·  botão direito: opções",RectF(tx,card.Y+S(88),tw,S(16)),S(9),gray,false,gfx::Near,false,gfx::EllipsisChar);
         DrawPill(R_plPlay[(size_t)k],L"▶ TOCAR",false,S(10));
         DrawPill(R_plShuf[(size_t)k],L"⇄ ALEATÓRIO",false,S(10));
+        if((size_t)k<R_plDcBtns.size()&&R_plDcBtns[(size_t)k].right>R_plDcBtns[(size_t)k].left&&UiHot(rr)&&DcCardsOn()) DrawPill(R_plDcBtns[(size_t)k],L"▶ DISCORD",true,S(9));
     }
 }
 // marcando musicas para uma playlist: circulo de selecao por card/linha
@@ -196,6 +197,8 @@ static void DrawNormal(int w,int h){
     DrawPill(R_folderBtn,g_view==2?L"PASTA DA PLAYLIST ▾":L"PASTA ▾",g_folderMenuOpen,S(11));
     if(R_hostBtn.right>R_hostBtn.left) DrawPill(R_hostBtn,host::Running()?L"HOST ●":L"HOST",host::Running(),S(11));
     if(R_fxBtn.right>R_fxBtn.left) DrawPill(R_fxBtn,AnyFxOn()?L"EFEITOS ●":L"EFEITOS",AnyFxOn(),S(11));
+    if(R_spadBtn.right>R_spadBtn.left){ bool on=spad::Running(); DrawPill(R_spadBtn,on?L"SOUNDPAD ●":L"SOUNDPAD",on,S(11)); }
+    if(R_dcBtn.right>R_dcBtn.left){ bool on=dc::Ready(); DrawPill(R_dcBtn,on?L"DISCORD ●":L"DISCORD",on,S(11)); }
     DrawChromeButtons(white,gray);
     if(R_listBtn.right>R_listBtn.left){
         bool lm=g_cfg.listMode!=0;
@@ -435,6 +438,7 @@ static void DrawNormal(int w,int h){
             RectF gl(pb.X+pb.Width*.32f,pb.Y+pb.Height*.28f,pb.Width*.40f,pb.Height*.44f);
             if(cur&&g_player.playing) IconPause(gl,ToGdi(UI().bg)); else IconPlay(gl,ToGdi(UI().bg));
         }
+        if(!g_pickMode&&hot&&i<R_cardDcBtns.size()&&R_cardDcBtns[i].right>R_cardDcBtns[i].left&&DcCardsOn()) DrawPill(R_cardDcBtns[i],L"▶ DISCORD",true,S(10));   // tocar no bot, em cima da capa
         DrawOrderArrows(i,ab,gray);
         float tx=(float)(rr.left+SI(12)), tw=(float)(cw-SI(24));
         float ty=(float)(rr.top+SI(10))+cover+S(8);

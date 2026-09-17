@@ -60,6 +60,11 @@ Run the installer again from time to time: YouTube changes often and yt-dlp must
 Linux, about 1 GB): an isolated Python with CPU PyTorch and [Demucs](https://github.com/facebookresearch/demucs)
 (Meta, open source), only for Remix (`assets\tools\stems` on Windows, `~/.local/share/remix/stems` on Linux).
 
+**Optional — Discord bot:** the **DISCORD** option (`/discord` on Windows, `--discord` on Linux, about 60 MB) installs
+Node.js 22 (a portable copy in `assets\tools\node` on Windows; on Linux the system Node.js when it is 22.12+, otherwise the
+official build in `~/.local/share/remix/node`, SHA-256 checked) and the bot packages (`discord.js`, `@discordjs/voice`).
+The Linux installer also installs `pactl`, used by the Soundpad virtual microphone.
+
 ### If Remix closes by itself (Windows)
 
 Remix writes `remix-log.txt` next to `Remix.exe` (or in `%LOCALAPPDATA%\Remix`) with every startup step, the
@@ -164,6 +169,32 @@ is in progress: the PC app becomes a **server** and the phone uses it from the b
   Default port **49875**.
   Details, security model and API in [docs/HOST.md](docs/HOST.md) (Portuguese).
 
+## Soundpad: sounds on your microphone (PC only)
+
+- **SOUNDPAD** button in the header (or Settings > SOUNDPAD E DISCORD): add sounds (MP3, WAV, OGG and FLAC as they are;
+  M4A, Opus, WMA and others are converted) and play them **on your microphone** for Discord, games and calls. Click to
+  play/stop, keys **1 to 9** while the panel is open, per-sound volume, several sounds at once, progress bars.
+- **Linux:** Remix creates a virtual microphone, **Remix Microfone**, in PipeWire/PulseAudio (`pactl`); it goes away when
+  you turn it off. **Windows:** uses the free **VB-CABLE** virtual cable (pick "CABLE Output" in Discord/the game).
+- **Your voice** is mixed in (Remix never captures its own virtual mic, so no feedback loop) and **monitoring on your
+  headphones** is optional. Guide in [docs/SOUNDPAD.md](docs/SOUNDPAD.md) (Portuguese).
+
+## Discord music bot (PC only)
+
+- **Your own** bot in your server: `/play` (name or a YouTube, YouTube Music, SoundCloud, Spotify, Deezer or Apple Music
+  link), `/search` with a pick menu, `/playlist` (only the playlists you allow), `/queue`, `/nowplaying`, `/skip`,
+  `/effect` (slowed, sped up, reverb, bass boost, 8D) and more — shown in Portuguese or English following each user's
+  Discord language.
+- **Your PC does the work** with Remix's own engines (search, links, playlists, effects); the Node.js bot is only the
+  bridge to Discord. You choose: **public queue**, **playlists for everyone**, **online music**, **DJ role**, **per-user
+  limit** and **voting** (by default more than half of the voice channel to skip someone else's song, pause or stop) —
+  nobody ruins it for the listeners. Whoever requested a song can skip their own.
+- On the PC, **▶ DISCORD on top of a cover** (song or playlist card) plays it right away where you are in a voice channel;
+  the **DISCORD** panel shows and controls what each server is playing. The phone Host stays separate.
+- Needs **Node.js 22.12+** and discord.js (dependency installer with the Discord option, or **INSTALAR BOT** in the panel).
+  The token is protected (DPAPI on Windows, a user-only file on Linux). Setup, commands and security in
+  [docs/DISCORD.md](docs/DISCORD.md) (Portuguese).
+
 ## File safety (planned)
 
 A plan to protect users from malicious or corrupted music files — play only the decodable audio and the cover, sanitized in an isolated process, without breaking the app — is in [docs/SEGURANCA-DE-ARQUIVOS.md](docs/SEGURANCA-DE-ARQUIVOS.md) (Portuguese). Not implemented yet.
@@ -182,8 +213,8 @@ The plan for the Android port (reusing the raylib shell, pinned toolchain under 
 | `assets/` | branding, fonts and themes |
 | `docs/` | extra documentation (Portuguese) and screenshots |
 
-Run from the project folder (or a portable zip), Remix keeps `config.ini`, `covers.ini`, `artists.ini` and
-`playlists/` next to it. Installed packages and the AppImage use `~/.config/remix`. Caches live in
+Run from the project folder (or a portable zip), Remix keeps `config.ini`, `covers.ini`, `artists.ini`,
+`playlists/`, `soundpad/` and `discord.ini` next to it. Installed packages and the AppImage use `~/.config/remix`. Caches live in
 `~/.cache/remix` (Linux) or `%TEMP%\remix-cache` (Windows).
 
 ## Command line

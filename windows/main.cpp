@@ -143,6 +143,8 @@ static void OnPaint(HDC hdc){
         if(OU().open)DrawOnline(g,w,h);   // os menus (ex.: escolher playlist) ficam por cima
         if(host::PU().open)DrawHostPanel(g,w,h);
         if(g_fxp.open)DrawFxPanel(g,w,h);
+        if(g_spadP.open)DrawSpadPanel(g,w,h);
+        if(g_dcP.open)DrawDcPanel(g,w,h);
         if(g_folderMenuOpen)DrawFolderMenu(g,w,h);
         if(g_ctxOpen)DrawCtxMenu(g);
         if(g_editArtist)DrawArtistEditor(g,w,h);

@@ -7,13 +7,15 @@
 
 static bool IsEqId(int id){ return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8; }
 static const int Z_TRACK_RANGE=1000000, Z_EMPTY_ACTION=802;
-static bool AnyOverlay(){ return g_fxp.open||host::PU().open||g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
+static bool AnyOverlay(){ return g_fxp.open||g_spadP.open||g_dcP.open||host::PU().open||g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
 
 static int HitTest(int x,int y){
     if(g_confirmOpen){ if(PtIn(R_confirmYes,x,y)) return Z_CONFIRM_YES; if(PtIn(R_confirmNo,x,y)) return Z_CONFIRM_NO; return -1; }
     if(g_ctxOpen){ for(size_t i=0;i<R_ctxItems.size();++i) if(PtIn(R_ctxItems[i],x,y)) return Z_CTX_ITEM_BASE+(int)i; return -1; }
     if(g_folderMenuOpen){ for(size_t i=0;i<R_folderItems.size();++i) if(PtIn(R_folderItems[i],x,y)) return Z_FOLDER_ITEM_BASE+(int)i; return -1; }
     if(g_editArtist) return -1;
+    if(g_spadP.open){ BuildSpadPanel(g_winW,g_winH); int z=PanelHit(g_spadP,x,y); return z>0?z:-1; }   // SOUNDPAD
+    if(g_dcP.open){ BuildDcPanel(g_winW,g_winH); int z=PanelHit(g_dcP,x,y); return z>0?z:-1; }         // DISCORD
     if(g_fxp.open){   // painel EFEITOS
         FxPanelUI& p=g_fxp; LayoutFxPanel(g_winW,g_winH);
         if(PtIn(p.btnClose,x,y)) return Z_FX_CLOSE;
@@ -80,6 +82,7 @@ static int HitTest(int x,int y){
         if(PtIn(R_settingsModeCd,x,y)) return Z_SETTINGS_MODE_CD;
         if(PtIn(R_settingsModeVertical,x,y)) return Z_SETTINGS_MODE_VERTICAL;
         for(int k=0;k<UI_STYLE_COUNT;k++) if(PtIn(R_settingsStyle[k],x,y)) return Z_SETTINGS_STYLE_BASE+k;
+        if(PtIn(R_setSpad,x,y)) return Z_SET_SPAD; if(PtIn(R_setDc,x,y)) return Z_SET_DC;
         if(PtIn(R_setHostOn,x,y)) return Z_SET_HOST_ON; if(PtIn(R_setHostPanel,x,y)) return Z_SET_HOST_PANEL; if(PtIn(R_setHostPort,x,y)) return Z_SET_HOST_PORT; if(PtIn(R_setHostPin,x,y)) return Z_SET_HOST_PIN;
         if(PtIn(R_setHostName,x,y)) return Z_SET_HOST_NAME; if(PtIn(R_setHostTunnel,x,y)) return Z_SET_HOST_TUNNEL; if(PtIn(R_setHostLan,x,y)) return Z_SET_HOST_LAN;
         if(PtIn(R_setHostCopyTun,x,y)) return Z_SET_HOST_COPYTUN; if(PtIn(R_setHostCopyLan,x,y)) return Z_SET_HOST_COPYLAN; if(PtIn(R_setHostOnline,x,y)) return Z_SET_HOST_ONLINE;
@@ -145,6 +148,8 @@ static int HitTest(int x,int y){
     if(R_folderBtn.right>R_folderBtn.left&&PtIn(R_folderBtn,x,y))return Z_FOLDER_BTN;
     if(R_hostBtn.right>R_hostBtn.left&&PtIn(R_hostBtn,x,y))return Z_HOST_BTN;
     if(R_fxBtn.right>R_fxBtn.left&&PtIn(R_fxBtn,x,y))return Z_FX_BTN;
+    if(R_spadBtn.right>R_spadBtn.left&&PtIn(R_spadBtn,x,y))return Z_SPAD_BTN;
+    if(R_dcBtn.right>R_dcBtn.left&&PtIn(R_dcBtn,x,y))return Z_DC_BTN;
     if(PtIn(R_listBtn,x,y))return Z_LISTMODE;
     if(PtIn(R_play,x,y))return Z_PLAYPAUSE;
     if(PtIn(R_prev,x,y))return Z_PREV;
@@ -166,6 +171,7 @@ static int HitTest(int x,int y){
     if(R_plNew.right>R_plNew.left&&PtIn(R_plNew,x,y)) return Z_PL_NEW;
     if(R_searchClear.right>R_searchClear.left&&!g_searchBuf.empty()&&PtIn(R_searchClear,x,y)) return Z_SEARCH_CLEAR;
     if(R_searchBox.right>R_searchBox.left&&PtIn(R_searchBox,x,y)) return Z_SEARCH_BOX;
+    if(DcCardsOn()) for(size_t k=0;k<R_plDcBtns.size()&&k<R_plCards.size();++k) if(R_plDcBtns[k].right>R_plDcBtns[k].left&&PtIn(R_plDcBtns[k],x,y)&&UiHot(R_plCards[k])) return Z_DC_PLCARD_BASE+(int)k;
     for(size_t k=0;k<R_plCards.size();++k){ if(R_plCards[k].right<=R_plCards[k].left) continue; if(PtIn(R_plPlay[k],x,y)) return Z_PL_PLAY_BASE+(int)k; if(PtIn(R_plShuf[k],x,y)) return Z_PL_SHUF_BASE+(int)k; if(PtIn(R_plCards[k],x,y)) return Z_PL_CARD_BASE+(int)k; }
     if(g_pickMode){ for(size_t i=0;i<R_cardRects.size();++i) if(R_cardRects[i].right>R_cardRects[i].left&&PtIn(R_cardRects[i],x,y)) return Z_TRACK_BASE+(int)i; return -1; }   // marcando: o card inteiro marca
     for(size_t i=0;i<R_cardCoverButtons.size();++i)if(R_cardCoverButtons[i].right>R_cardCoverButtons[i].left&&PtIn(R_cardCoverButtons[i],x,y))return Z_COVER_BASE+(int)i;
@@ -173,7 +179,9 @@ static int HitTest(int x,int y){
         if(R_rowUp[i].right>R_rowUp[i].left&&PtIn(R_rowUp[i],x,y))return Z_ROW_UP_BASE+(int)i;
         if(R_rowDown[i].right>R_rowDown[i].left&&PtIn(R_rowDown[i],x,y))return Z_ROW_DOWN_BASE+(int)i;
     }
-    // Estilos novos: botao de play sobre a capa (faixa atual: pausa/continua; outra: toca).
+    // Estilos novos: ▶ DISCORD em cima da capa (bot conectado) e botao de play sobre a capa (faixa atual: pausa/continua; outra: toca).
+    if(!UiClassic()&&g_cfg.listMode==0&&DcCardsOn()) for(size_t i=0;i<R_cardDcBtns.size();++i)
+        if(R_cardDcBtns[i].right>R_cardDcBtns[i].left&&PtIn(R_cardDcBtns[i],x,y)) return Z_DC_CARD_BASE+(int)i;
     if(!UiClassic()&&g_cfg.listMode==0) for(size_t i=0;i<R_cardPlayBtns.size();++i)
         if(R_cardPlayBtns[i].right>R_cardPlayBtns[i].left&&PtIn(R_cardPlayBtns[i],x,y)) return (int)i==g_current?Z_PLAYPAUSE:(Z_TRACK_BASE+(int)i);
     // Classico: botoes de transporte dos cards ANTES da zona de seek.
@@ -239,6 +247,7 @@ static void OnLButtonDown(int x,int y){
             case CA_ADDPL: OpenPickPlaylistMenu(t,box.left,box.top); break;
             case CA_REMOVEPL: RemoveTrackFromOpenPlaylist(t); break;
             case CA_DELETE: AskDeleteTrack(t); OpenConfirm(); break;
+            case CA_DC_PLAY: DiscordPlayTrack(t); break;
             default: break;
             }
         } else if(g_ctxKind==CTX_PLAYLIST){
@@ -248,6 +257,8 @@ static void OnLButtonDown(int x,int y){
             case CA_PL_RENAME: StartPlaylistNameEdit(3,arg); break;
             case CA_PL_DELETE: AskDeletePlaylist(arg); OpenConfirm(); break;
             case CA_PL_HOST: HostTogglePlaylist(arg); break;
+            case CA_DC_PLPLAY: DiscordPlayPlaylist(arg,false); break;
+            case CA_DC_PLTOGGLE: DcToggleCfgPlaylist(arg); break;
             default: break;
             }
         } else if(g_ctxKind==CTX_PICKPL){
@@ -304,6 +315,14 @@ static void OnLButtonDown(int x,int y){
             return;
         }
     }
+    if(g_editArtist){
+        LayoutEditor(g_winW,g_winH);
+        if(PtIn(R_editSave,x,y)) CommitArtistEdit();
+        else if(PtIn(R_editCancel,x,y)||!PtIn(R_editBox,x,y)) CancelArtistEdit();
+        return;
+    }
+    if(g_spadP.open){ int z=HitTest(x,y); if(z<=0&&!PtIn(g_spadP.box,x,y)){ g_spadP.open=false; return; } if(z>0) SpadClick(z); return; }
+    if(g_dcP.open){ int z=HitTest(x,y); if(z<=0&&!PtIn(g_dcP.box,x,y)){ g_dcP.open=false; return; } if(z>0) DcClick(z); return; }
     if(g_fxp.open){   // painel EFEITOS
         int fid=HitTest(x,y);
         if(fid==Z_FX_CLOSE||!PtIn(g_fxp.box,x,y)){ g_fxp.open=false; return; }
@@ -352,12 +371,6 @@ static void OnLButtonDown(int x,int y){
         if(oid==Z_ON_ADDALL){ OnlineAddAll(u.btnAddAll.left,u.btnAddAll.top-(int)S(220)); return; }
         return;
     }
-    if(g_editArtist){
-        LayoutEditor(g_winW,g_winH);
-        if(PtIn(R_editSave,x,y)) CommitArtistEdit();
-        else if(PtIn(R_editCancel,x,y)||!PtIn(R_editBox,x,y)) CancelArtistEdit();
-        return;
-    }
     int id=HitTest(x,y);
     if(id==Z_CLOSE){RequestClose();return;} if(id==Z_MIN){PlatformMinimize();return;} if(id==Z_GEAR){g_showSettings=!g_showSettings;g_hkCapture=-1;if(g_showSettings)EnsureToolsAsync();return;}
     if(id==Z_TAB_TRACKS){ EnterLibraryView(); return; }
@@ -391,6 +404,10 @@ static void OnLButtonDown(int x,int y){
         g_cfg.uiStyle=id-Z_SETTINGS_STYLE_BASE; g_cfg.Save(); g_listScroll=0; BuildLayout();
         SetStatus(std::wstring(L"Estilo: ")+UiStyleName(g_cfg.uiStyle),2200); return; }
     if(id==Z_FX_BTN){ g_fxp.open=true; return; }
+    if(id==Z_SPAD_BTN||id==Z_SET_SPAD){ g_spadP.open=true; g_spadP.scroll=0; return; }
+    if(id==Z_DC_BTN||id==Z_SET_DC){ g_dcP.open=true; g_dcP.scroll=0; dc::ProbeTools(true); return; }
+    if(id>=Z_DC_CARD_BASE&&id<Z_DC_CARD_BASE+1000000){ DiscordPlayTrack(id-Z_DC_CARD_BASE); return; }
+    if(id>=Z_DC_PLCARD_BASE&&id<Z_DC_PLCARD_BASE+500){ DiscordPlayPlaylist(id-Z_DC_PLCARD_BASE-1,false); return; }
     if(id==Z_HOST_BTN||id==Z_SET_HOST_PANEL){ host::PU().open=true; host::PU().scroll=0; host::PU().v=host::GetView(); return; }
     if(id==Z_SET_HOST_ON){ HostToggle(); return; }
     if(id==Z_SET_HOST_PORT){ StartHostEdit(6); return; } if(id==Z_SET_HOST_PIN){ StartHostEdit(7); return; } if(id==Z_SET_HOST_NAME){ StartHostEdit(8); return; }
@@ -486,6 +503,8 @@ static void OnMouseDrag(int x){
 static void OnLButtonUp(){ if(g_dragSeek!=-1){g_dragSeek=-1;g_cfg.Save();} }
 static void OnWheel(int d){ // d = notches (>0 = pra cima)
     if(WP().open){WebPick& wb=WP();int rows=(int)((wb.cells.size()+3)/4);int content=rows*(int)S(150)+(int)S(40);wb.scroll-=d*SI(120);wb.scroll=std::max(0,std::min(wb.scroll,std::max(0,content-(int)(S(360)))));return;}
+    if(g_spadP.open){ g_spadP.scroll-=d*SI(60); g_spadP.ClampScroll(); return; }
+    if(g_dcP.open){ g_dcP.scroll-=d*SI(60); g_dcP.ClampScroll(); return; }
     if(host::PU().open){ host::PU().scroll-=d*SI(60); if(host::PU().scroll<0) host::PU().scroll=0; return; }
     if(OU().open){ OU().scroll-=d*SI(116); if(OU().scroll<0) OU().scroll=0; return; }   // LayoutOnline limita o maximo
     if(g_showSettings){g_setScroll-=d*(int)S(56);int maxSc=std::max(0,(int)(g_setContentH-(R_settingsPanel.bottom-R_settingsPanel.top-76)));g_setScroll=std::max(0,std::min(g_setScroll,maxSc));return;}
@@ -505,6 +524,8 @@ static void OnChar(int c){ // so caracteres imprimiveis
 // Enter/Esc/Backspace dos editores e da busca sao fixos; o resto passa pelos atalhos configuraveis.
 static void OnKeyEvent(int kc,int mods){
     if(g_fxp.open&&kc==KC_ESC){ g_fxp.open=false; return; }
+    if(g_spadP.open&&!g_editArtist){ if(kc==KC_ESC){ g_spadP.open=false; return; } if(kc>='1'&&kc<='9'&&mods==0){ SpadToggleSound((size_t)(kc-'1')); return; } }
+    if(g_dcP.open&&!g_editArtist&&kc==KC_ESC){ g_dcP.open=false; return; }
     if(host::PU().open&&kc==KC_ESC&&!g_editArtist&&!g_confirmOpen){ host::PU().open=false; return; }
     WebPick& wb=WP();
     if(g_hkCapture>=0){   // capturando um atalho nas configuracoes
@@ -577,6 +598,19 @@ static void RunAction(const std::string& a){
     else if(a=="hostno"){if(g_confirmOpen&&g_confirmKind==2){HostConfirm(false);g_confirmOpen=false;g_confirmKind=0;}}
     else if(a=="hostpanel"){host::PU().open=true;host::PU().v=host::GetView();}
     else if(a=="fxpanel"){g_fxp.open=true;}
+    else if(a=="spad"){g_spadP.open=true;}
+    else if(a=="spad:on"||a=="spad:off"){ spad::SetOnAsync(a=="spad:on",[]{ AppPost(EV_REDRAW); }); }
+    else if(a.rfind("spadadd:",0)==0){ std::wstring v=Utf8ToWide(a.substr(8)); for(auto& ch:v) if(ch==L'|') ch=L'\n'; OnPickedSoundpad(v); }
+    else if(a.rfind("spadplay:",0)==0){ BuildSpadPanel(g_winW,g_winH); SpadToggleSound((size_t)atoi(a.c_str()+9)); }
+    else if(a=="spaddump"){ spad::View v=spad::GetView(); fprintf(stderr,"[remix] soundpad: ligado=%d rodando=%d sons=%d tocando=%d saida=%s voz=%s estado=%s\n",(int)v.on,(int)v.running,(int)v.sounds.size(),(int)v.playing.size(),WideToUtf8(v.device).c_str(),WideToUtf8(v.inDevice).c_str(),WideToUtf8(v.status).c_str()); }
+    else if(a=="dc"){g_dcP.open=true; dc::ProbeTools(true);}
+    else if(a.rfind("dctoken:",0)==0){ std::wstring e; if(!dc::SetToken(Utf8ToWide(a.substr(8)),e)) fprintf(stderr,"[remix] token recusado: %s\n",WideToUtf8(e).c_str()); }
+    else if(a=="dc:on"||a=="dc:off"){ dc::SetOn(a=="dc:on"); }
+    else if(a.rfind("dcpl:",0)==0){ DcToggleCfgPlaylist(atoi(a.c_str()+5)); }
+    else if(a.rfind("dcplay:",0)==0){ DiscordPlayTrack(atoi(a.c_str()+7)); }
+    else if(a.rfind("dcplpl:",0)==0){ DiscordPlayPlaylist(atoi(a.c_str()+7),false); }
+    else if(a.rfind("dccfg:",0)==0){ std::string r=a.substr(6); dc::UpdateCfg([&](dc::Cfg& c){ if(r=="fila0") c.publicQueue=false; else if(r=="fila1") c.publicQueue=true; else if(r=="pls0") c.publicPlaylists=false; else if(r=="pls1") c.publicPlaylists=true; else if(r.rfind("vot",0)==0) c.votePct=atoi(r.c_str()+3); else if(r.rfind("lim",0)==0) c.maxPerUser=atoi(r.c_str()+3); else if(r=="on0") c.online=false; else if(r=="on1") c.online=true; }); }
+    else if(a=="dcdump"){ dc::View v=dc::GetView(); fprintf(stderr,"[remix] discord: fase=%d ligado=%d token=%d node=%d bot=%d estado=%s servidores=%d tocando=%d\n",v.phase,(int)v.on,(int)v.hasToken,(int)v.nodeOk,(int)v.depsOk,WideToUtf8(v.status).c_str(),v.guildCount,(int)v.guilds.size()); for(auto& g:v.guilds) fprintf(stderr,"[remix]   %s: %s pos=%d/%d fila=%d ouvindo=%d pausado=%d\n",WideToUtf8(g.name).c_str(),WideToUtf8(g.title).c_str(),g.pos,g.dur,g.queue,g.humans,(int)g.paused); for(auto& l:v.logs) fprintf(stderr,"[remix]   log: %s\n",WideToUtf8(l).c_str()); }
     else if(a=="wavedump"){ float pu; int fr,hop; { std::lock_guard<std::mutex> lk(WS().fm); pu=WS().pulse; fr=(int)(WS().spec.size()/48); hop=WS().specHopMs; } fprintf(stderr,"[remix] onda: pos=%lu pulso=%.2f quadros=%d hop=%d latencia=%u\n",(unsigned long)(g_player.loaded?g_player.GetPositionMs():0),pu,fr,hop,Player::OutputLatencyMs()); }
     else if(a.rfind("fx:",0)==0){ CycleFx(atoi(a.c_str()+3)); }
     else if(a=="fxclear"){ ClearFx(); }

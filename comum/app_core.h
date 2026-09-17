@@ -125,7 +125,9 @@ enum : int {
     EV_PICK_DLONCE,  // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
     EV_HOST_PEDIDO,  // host: celular pediu para parear (s = id do pedido)
     EV_HOST_STATUS,  // host: aviso do servidor/tunel (s = texto, n = 1 quando e a URL do tunel)
-    EV_STEMS         // stems: mudou o estado de uma separacao (s = chave, n = estado)
+    EV_STEMS,        // stems: mudou o estado de uma separacao (s = chave, n = estado)
+    EV_PICK_SOUNDPAD, // soundpad: arquivos escolhidos (s = caminhos separados por \n)
+    EV_SPAD_ADDED    // soundpad: sons copiados/convertidos (s = erro, n = quantos)
 };
 // Analise incremental do streaming (online_play.h entrega o PCM; esta converte em
 // onda/espectro e a UI publica em WS() para a musica online mostrar como a local).
@@ -195,6 +197,8 @@ enum : int {
     Z_HOST_NEWLINK, Z_HOST_COPYTUN, Z_HOST_COPYLAN, Z_HOST_QRMODE, Z_HOST_QRNEW, Z_HOST_ONLINE, Z_HOST_QRCONF, Z_HOST_IPV6,
     Z_HOST_DEVLIB_BASE=22100, Z_HOST_DPLOK_BASE=22200,   // +100 aparelhos, +500 playlists de aparelhos
     Z_FX_BTN=23000, Z_FX_CLOSE, Z_FX_CLEAR, Z_FX_CANCEL, Z_FX_BASE=23010, Z_STEM_BASE=23020,   // efeitos (+5) e stems (+6)
+    Z_SPAD_BTN=24000, Z_DC_BTN, Z_SET_SPAD, Z_SET_DC,   // SOUNDPAD e DISCORD (os paineis usam 24010..26800, app_panels.h)
+    Z_DC_PLCARD_BASE=16500, Z_DC_CARD_BASE=6000000,      // botao ▶ DISCORD sobre a capa: playlist (+500) e faixa (+1 milhao)
     Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo (ate 21500)
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
@@ -215,6 +219,8 @@ static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spo
 static RECT R_setHostCopyTun, R_setHostCopyLan, R_setHostOnline, R_setHostQrConf, R_setHostIpv6;
 static RECT R_setHostOn, R_setHostPort, R_setHostPin, R_setHostName, R_setHostTunnel, R_setHostLan, R_setHostPanel, R_hostBtn;   // HOST (docs/HOST.md)
 static RECT R_fxBtn;   // EFEITOS (cabecalho)
+static RECT R_spadBtn, R_dcBtn, R_setSpad, R_setDc;   // SOUNDPAD e DISCORD (cabecalho e configuracoes)
+static std::vector<RECT> R_cardDcBtns, R_plDcBtns;   // ▶ DISCORD sobre a capa (so com o bot conectado)
 struct FxPanelUI { bool open=false; RECT box{0,0,0,0}, btnClose{0,0,0,0}, btnClear{0,0,0,0}, btnCancel{0,0,0,0}, info{0,0,0,0}; RECT fx[5]{}; RECT stem[6]{}; };
 static FxPanelUI g_fxp;
 static RECT R_verticalCoverButton;
@@ -248,6 +254,7 @@ static int g_headerH = 0, g_sideW = 0;   // faixas solidas do cabecalho e da lat
 // Zonas que nao podem se sobrepor (a 1.4.0 teve HOST dentro da faixa do ESTILO).
 static_assert(Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT<=Z_ON_SRC_BASE+100 && Z_HOST_BTN>Z_HOST_PLDEV_BASE+4000, "zonas do host/estilo sobrepostas");
 static_assert(Z_HOST_DPLOK_BASE+500<=Z_FX_BTN && Z_FX_CANCEL<Z_FX_BASE && Z_FX_BASE+5<=Z_STEM_BASE && Z_STEM_BASE+10<Z_COVER_BASE, "faixa dos efeitos invade outra");
+static_assert(Z_STEM_BASE+10<=Z_SPAD_BTN && Z_ON_ADD_BASE+500<=Z_DC_PLCARD_BASE && Z_DC_PLCARD_BASE+500<=Z_HOST_ACCEPT_BASE && Z_CARD_NEXT_BASE+1000000<=Z_DC_CARD_BASE && Z_DC_CARD_BASE+1000000<=Z_ROW_UP_BASE, "botoes do discord invadem outra faixa");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
@@ -273,7 +280,7 @@ static std::vector<RECT> R_ctxItems;
 enum { CTX_TRACK=0, CTX_PLAYLIST=1, CTX_PICKPL=2, CTX_MENU=3, CTX_PICKON=4 };
 enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PL_HOST, CA_PICK_NEW,
        CA_ADD_LIB, CA_ADD_FILES, CA_ADD_FOLDERCOPY, CA_ADD_FOLDERLINK, CA_ADD_LINK, CA_ADD_SEARCH, CA_NEW_EMPTY, CA_NEW_FOLDER, CA_NEW_LINK, CA_NEW_SEARCH,
-       CA_PLF_PICK, CA_PLF_UNLINK, CA_PLF_LIBRARY, CA_PL_FOLDER, CA_PL_SYNC, CA_PL_DLALL, CA_PL_MODE, CA_DOWNLOAD, CA_OPEN_URL, CA_ACT_CANCEL, CA_ACT_OPENDIR, CA_PICKON_NEW,
+       CA_PLF_PICK, CA_PLF_UNLINK, CA_PLF_LIBRARY, CA_PL_FOLDER, CA_PL_SYNC, CA_PL_DLALL, CA_PL_MODE, CA_DOWNLOAD, CA_OPEN_URL, CA_ACT_CANCEL, CA_ACT_OPENDIR, CA_PICKON_NEW, CA_DC_PLAY, CA_DC_PLPLAY, CA_DC_PLTOGGLE,
        CA_PICK_BASE=100, CA_PLF_RECENT_BASE=200, CA_PICKON_BASE=300 };
 static int g_ctxKind=0, g_ctxArg=-1; static std::vector<std::wstring> g_ctxLabels; static std::vector<int> g_ctxActs; static std::vector<bool> g_ctxDanger;
 // confirmacao (excluir)
@@ -1038,10 +1045,22 @@ static void StartPlaylistNameEdit(int mode,int pl){ g_editArtist=true; g_editMod
 static void CancelArtistEdit(){ g_editArtist=false; g_editTrack=-1; g_editBuf.clear(); g_editMode=0; }
 // host: 6 = porta, 7 = PIN, 8 = nome do PC
 static void StartHostEdit(int mode){ g_editArtist=true; g_editMode=mode; g_editTrack=-1; g_editBuf=mode==6?std::to_wstring(g_cfg.hostPort):(mode==7?g_cfg.hostPin:g_cfg.hostName); }
+// Discord (discord_host.h entra mais abaixo, junto do Host): pontes usadas antes dele.
+static bool DcSetToken(const std::wstring& t,std::wstring& err);
+static void DcSetDjRole(const std::wstring& v);
+static bool DcReadyNow();
+static int DcPlaylistOnBot(const std::wstring& slug);   // -1 = sem token (nao mostra), 0 = nao, 1 = liberada
 static void CommitArtistEdit(){
     std::wstring s=g_editBuf;
     while(!s.empty()&&(s.back()==L' '||s.back()==L'\r'||s.back()==L'\n')) s.pop_back();
     if(g_editMode==1){ RenameTrackFile(g_editTrack,s); CancelArtistEdit(); return; }
+    if(g_editMode==9){   // token do bot: sai da memoria da tela na hora
+        std::wstring err; bool ok=DcSetToken(s,err); std::fill(g_editBuf.begin(),g_editBuf.end(),L'\0'); std::fill(s.begin(),s.end(),L'\0'); CancelArtistEdit();
+        if(!ok){ SetStatus(err,5000); return; }
+        SetStatus(L"Token salvo neste PC. Agora toque em LIGAR BOT.",3500);
+        return;
+    }
+    if(g_editMode==10){ std::wstring v=Config::Trim(s); if(v.size()>100) v.resize(100); CancelArtistEdit(); DcSetDjRole(v); SetStatus(v.empty()?L"Sem cargo DJ: só admins e o dono pulam sem votação.":L"Cargo DJ: "+v,2800); return; }
     if(g_editMode>=6&&g_editMode<=8){   // host: porta / PIN / nome
         int mode=g_editMode; CancelArtistEdit(); std::wstring v=Config::Trim(s);
         if(mode==6){ int p=_wtoi(v.c_str()); if(p<1024||p>65535){ SetStatus(L"Porta: use um número de 1024 a 65535.",3200); return; } g_cfg.hostPort=p; }
@@ -1115,6 +1134,7 @@ static void OpenCtxMenu(int track,int x,int y){   // menu de uma faixa
     if(IsOnlineTrack(g_tracks[(size_t)track])){
         std::vector<std::wstring> l={L"Tocar (streaming)",L"Baixar",L"Trocar capa...",L"Abrir o link no navegador",L"Adicionar à playlist..."};
         std::vector<int> a={CA_PLAY,CA_DOWNLOAD,CA_COVER,CA_OPEN_URL,CA_ADDPL}; std::vector<bool> d={false,false,false,false,false};
+        if(DcReadyNow()){ l.push_back(L"Tocar no bot do Discord"); a.push_back(CA_DC_PLAY); d.push_back(false); }
         if(g_view==2){ l.push_back(L"Remover da playlist"); a.push_back(CA_REMOVEPL); d.push_back(true); }
         OpenCtxMenuGeneric(x,y,CTX_TRACK,track,l,a,d,(int)S(250));
         return;
@@ -1122,6 +1142,7 @@ static void OpenCtxMenu(int track,int x,int y){   // menu de uma faixa
     std::vector<std::wstring> l={L"Tocar",L"Trocar capa...",L"Renomear artista...",L"Renomear arquivo...",L"Abrir pasta",L"Adicionar à playlist..."};
     std::vector<int> a={CA_PLAY,CA_COVER,CA_ARTIST,CA_RENAME,CA_FOLDER,CA_ADDPL};
     std::vector<bool> d={false,false,false,false,false,false};
+    if(DcReadyNow()){ l.push_back(L"Tocar no bot do Discord"); a.push_back(CA_DC_PLAY); d.push_back(false); }
     if(g_view==2){ l.push_back(L"Remover da playlist"); a.push_back(CA_REMOVEPL); d.push_back(true); }
     l.push_back(L"Excluir arquivo (lixeira)"); a.push_back(CA_DELETE); d.push_back(true);
     OpenCtxMenuGeneric(x,y,CTX_TRACK,track,l,a,d,(int)S(240));
@@ -1136,6 +1157,8 @@ static void OpenPlaylistCtxMenu(int pl,int x,int y){   // menu de um card de pla
     if(on>0){ l.push_back(L"Baixar as "+std::to_wstring(on)+L" músicas online"); a.push_back(CA_PL_DLALL); d.push_back(false); }
     l.push_back(p.mode.empty()?L"Modo online: padrão das configurações":(p.mode==L"download"?L"Modo online: baixar":L"Modo online: streaming")); a.push_back(CA_PL_MODE); d.push_back(false);
     l.push_back(HostPlLabel(p.slug)); a.push_back(CA_PL_HOST); d.push_back(false);
+    if(DcReadyNow()){ l.push_back(L"Tocar no bot do Discord"); a.push_back(CA_DC_PLPLAY); d.push_back(false); }
+    { int onb=DcPlaylistOnBot(p.slug); if(onb>=0){ l.push_back(onb?L"No bot do Discord: liberada (tirar)":L"No bot do Discord: liberar"); a.push_back(CA_DC_PLTOGGLE); d.push_back(false); } }
     l.push_back(L"Renomear..."); a.push_back(CA_PL_RENAME); d.push_back(false);
     l.push_back(L"Excluir playlist"); a.push_back(CA_PL_DELETE); d.push_back(true);
     OpenCtxMenuGeneric(x,y,CTX_PLAYLIST,pl,l,a,d,(int)S(280));
@@ -1247,6 +1270,12 @@ static void RemoveTrackFromOpenPlaylist(int track){
 #include "app_online_b.h"
 #include "app_online_c.h"
 #include "host_server.h"
+#include "discord_host.h"
+#include "soundpad.h"
+static bool DcSetToken(const std::wstring& t,std::wstring& err){ return dc::SetToken(t,err); }
+static void DcSetDjRole(const std::wstring& v){ dc::UpdateCfg([&](dc::Cfg& c){ c.djRole=v; }); }
+static bool DcReadyNow(){ return dc::Ready(); }
+static int DcPlaylistOnBot(const std::wstring& slug){ dc::View v=dc::GetView(); if(!v.hasToken) return -1; return v.cfg.pls.count(slug)?1:0; }
 // ---- Host: cola entre a UI e o servidor -----------------------------------------
 static std::wstring g_hostReq;   // pedido de pareamento em confirmacao na tela
 static std::string AccentHex(){ char b[16]; snprintf(b,sizeof b,"#%02x%02x%02x",GetRValue(g_theme.accent),GetGValue(g_theme.accent),GetBValue(g_theme.accent)); return b; }
@@ -1255,16 +1284,22 @@ static bool HostRunningNow(){ return host::Running(); }
 // playlist; nesse caso usa a ultima biblioteca conhecida (as playlists sao publicadas do mesmo jeito).
 static std::vector<Track> g_hostLib; static bool g_hostLibOk=false;
 static const std::vector<Track>* HostLibNow(){ if(g_libCached) return &g_libTracks; if(g_view!=2) return &g_tracks; return g_hostLibOk?&g_hostLib:nullptr; }
-static void HostPublishNow(){
-    const std::vector<Track>* lib=HostLibNow();
-    if(lib&&lib!=&g_hostLib){ g_hostLib=*lib; g_hostLibOk=true; }
-    static const std::vector<Track> vazio;
-    // playlist com pasta vinculada: o celular recebe tambem as musicas da pasta (o app mostra as duas coisas)
+// Playlists com as musicas da pasta vinculada junto (o app mostra as duas coisas): o que o Host e o Discord recebem.
+static std::vector<Playlist> ExpandedPlaylists(){
     std::vector<Playlist> pls=g_playlists;
     std::map<std::wstring,const Track*> known;   // titulo/artista ja lidos (biblioteca e playlist aberta): sem ler tag de novo
     for(auto& t:g_hostLib) known[t.path]=&t;
+    if(g_libCached) for(auto& t:g_libTracks) known[t.path]=&t;
+    if(const std::vector<Track>* lib=HostLibNow()) for(auto& t:*lib) known[t.path]=&t;
     if(g_view==2) for(auto& t:g_tracks) known[t.path]=&t;
     for(auto& p:pls){
+        for(auto& e:p.entries){   // faixa adicionada sem ler as tags: usa o que a biblioteca ja sabe
+            if(e.path.empty()||!e.url.empty()) continue;
+            auto k=known.find(e.path); if(k==known.end()) continue;
+            if(e.title.empty()) e.title=k->second->title;
+            if(e.artist.empty()) e.artist=k->second->artist;
+            if(e.dur<=0) e.dur=k->second->durSec;
+        }
         if(p.folder.empty()||!Config::DirExists(p.folder)) continue;
         std::set<std::wstring> have; for(auto& e:p.entries) if(!e.path.empty()) have.insert(e.path);
         std::vector<PlEntry> extra;
@@ -1277,7 +1312,13 @@ static void HostPublishNow(){
         std::sort(extra.begin(),extra.end(),[](const PlEntry& a,const PlEntry& b){ return _wcsicmp(a.file.c_str(),b.file.c_str())<0; });
         p.entries.insert(p.entries.begin(),extra.begin(),extra.end());
     }
-    host::Publish(lib?*lib:vazio,pls);
+    return pls;
+}
+static void HostPublishNow(){
+    const std::vector<Track>* lib=HostLibNow();
+    if(lib&&lib!=&g_hostLib){ g_hostLib=*lib; g_hostLibOk=true; }
+    static const std::vector<Track> vazio;
+    host::Publish(lib?*lib:vazio,ExpandedPlaylists());
 }
 // Impressao digital do que o Host mostra: caminho, titulo, artista, capa e duracao de cada faixa e de cada
 // entrada das playlists. Renomear, editar ou trocar faixa (mesmo sem mudar a quantidade) republica.
@@ -1322,6 +1363,25 @@ static void HostTick(){
         if(q.id.empty()||q.estado!=0){ g_confirmOpen=false; g_confirmKind=0; g_hostReq.clear(); SetStatus(L"O pedido de vínculo expirou.",2500); }
     }
     HostNextPending();
+}
+// Discord: publica as playlists quando mudam (so com o bot ligado) e reconecta se o processo caiu.
+// Soundpad: solta os sons que acabaram e redesenha o progresso com o painel aberto.
+static bool SpadPanelIsOpen();                        // app_panels.h (depois do layout)
+static void OnPickedSoundpad(const std::wstring& s);
+static void OnSpadAdded(const std::wstring& err,int n);
+static void ExtrasTick(){
+    dc::Poll();
+    static ULONGLONG lastPub=0; static unsigned long long lastFp=0; static unsigned lastRun=0;
+    ULONGLONG now=GetTickCount64();
+    if(now-lastPub>=2000){
+        lastPub=now;
+        if(dc::St().running.load()){
+            unsigned long long f=HostFingerprint(); unsigned rg=dc::St().runGen.load();
+            if(f!=lastFp||rg!=lastRun){ lastFp=f; lastRun=rg; dc::Publish(ExpandedPlaylists()); }
+        }
+    }
+    bool changed=spad::Tick();
+    if(changed||(SpadPanelIsOpen()&&spad::PlayingCount()>0)) PlatformRedraw();
 }
 static void HostAskPair(const std::wstring& reqId){
     host::PairReq q=host::FindReq(WideToUtf8(reqId)); if(q.id.empty()||q.estado!=0) return;
@@ -1434,6 +1494,8 @@ static void HandleEvent(int type,const std::wstring& s,int n){
     case EV_HOST_PEDIDO: HostAskPair(s); break;
     case EV_HOST_STATUS: SetStatus(s,n?6000:4000); break;
     case EV_STEMS: OnStemsEvent(s,n); break;
+    case EV_PICK_SOUNDPAD: OnPickedSoundpad(s); break;
+    case EV_SPAD_ADDED: OnSpadAdded(s,n); break;
     case EV_TRANSCODED: OnTranscoded(s,(unsigned)n); break;
     case EV_PICK_FOLDER: if(!s.empty()) SwitchFolder(s); break;
     case EV_PICK_IMAGE: ApplyCoverPick(n,s); break;
@@ -1486,6 +1548,7 @@ static void Tick(float dt){
     else g_bgIdleSec=0;
     if(g_player.playing) g_userPaused=false;
     HostTick();
+    ExtrasTick();
     if(g_showSplash){ if(GetTickCount64()-g_splashStart>=SPLASH_MS) g_showSplash=false; }
     else {
         ConsumeAutoScan(); PollFolderWatch(); PollLinkedFolders(); UpdateStreamQueue(); TickJournal();
@@ -1521,10 +1584,16 @@ static void CoreInit(){
                       L"Fechar a janela tocando: continua em 2º plano (abra o app de novo para voltar)", L"Ctrl+Q: sair de vez" };
     { std::wstring msg=OnlineStartupCleanup(g_lastOnlineUrl,g_lastOnlineTitle); if(!msg.empty()) SetStatus(msg,5000); }   // restos de download interrompido
     if(g_cfg.hostOn&&!g_cfg.hostPin.empty()) HostStartFromCfg();   // host ligado na ultima vez: volta sozinho
+    dc::St().onChange=[]{ AppPost(EV_REDRAW); };
+    if(dc::AutoStartWanted()) dc::StartAsync();                     // bot do Discord ligado na ultima vez
+    spad::Load();
+    if(spad::GetView().on) spad::SetOnAsync(true,[]{ AppPost(EV_REDRAW); });   // microfone virtual ligado na ultima vez
 }
 static void CoreShutdown(){
     g_cfg.Save();
     host::Stop();
+    dc::Stop();
+    spad::Stop(true);   // o microfone virtual some junto com o Remix
     PlatformWatchStop();
     if(g_waveThread.joinable())g_waveThread.detach();
     if(g_scanThread.joinable())g_scanThread.detach();

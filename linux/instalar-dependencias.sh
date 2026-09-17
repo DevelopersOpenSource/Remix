@@ -3,6 +3,8 @@
 #   yt-dlp, ffmpeg e um JavaScript runtime (Deno 2.3+ ou Node.js 22+)  ->  buscar, tocar e baixar musica online
 #   zenity (ou kdialog no KDE)                                        ->  janelas de escolher pasta e arquivo
 #   libcurl                                                           ->  capas e links do Spotify, Deezer e Apple Music
+#   pactl (pulseaudio-utils / libpulse)                               ->  Soundpad: o microfone virtual "Remix Microfone"
+#   opcional: Node.js 22.12+ e o discord.js (--discord)               ->  bot de musica do Discord (~60 MB)
 # Descobre a distro pelo /etc/os-release e usa o caminho certo para cada uma:
 #   Debian, Ubuntu, Mint, Pop!_OS, Zorin...   apt      yt-dlp e Deno oficiais (os do repositorio sao antigos)
 #   Fedora, Nobara, RHEL, Rocky, Alma...      dnf      ffmpeg ou ffmpeg-free; sem nenhum, o ffmpeg estatico oficial
@@ -18,18 +20,23 @@
 #   bash instalar-dependencias.sh --sim       instala sem perguntar
 #   bash instalar-dependencias.sh --mostrar   so mostra o que faria (nao instala nada)
 #   bash instalar-dependencias.sh --stems     tambem instala o separador de stems (Demucs, ~1 GB, opcional)
+#   bash instalar-dependencias.sh --discord   tambem instala o bot do Discord (Node.js 22 + discord.js, opcional)
 set -u
-AUTO=0; SHOW=0; STEMS=ask
+AUTO=0; SHOW=0; STEMS=ask; DISCORD=ask
 for a in "$@"; do
   case "$a" in
     --sim|-y) AUTO=1 ;;
     --mostrar|--dry-run) SHOW=1 ;;
     --stems) STEMS=1 ;;
     --sem-stems) STEMS=0 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    --discord) DISCORD=1 ;;
+    --sem-discord) DISCORD=0 ;;
+    -h|--help) sed -n '2,24p' "$0"; exit 0 ;;
   esac
 done
 STEMS_DIR="$HOME/.local/share/remix/stems"
+NODE_DIR="$HOME/.local/share/remix/node"        # Node.js oficial so para o bot (quando o do sistema e antigo)
+BOT_DIR="$HOME/.local/share/remix/discord"      # discord.js e @discordjs/voice (o Remix grava o bot.mjs sozinho)
 export PATH="$HOME/.local/bin:$HOME/.deno/bin:$PATH"
 # Testes: REMIX_DEPS_FINGIR_FALTA=1 finge que nada esta instalado; REMIX_DEPS_OS_RELEASE=arquivo no lugar
 # do /etc/os-release; REMIX_DEPS_PM=apt-get|dnf|pacman|zypper|xbps-install|eopkg|nenhum; REMIX_DEPS_IMUTAVEL=1
@@ -50,6 +57,7 @@ ok_js() {
 ok_ffmpeg() { have ffmpeg; }
 ok_cloudflared() { have cloudflared || [ -x "$HOME/.local/bin/cloudflared" ]; }
 ok_dialog() { have zenity || have kdialog; }
+ok_pactl() { have pactl; }
 ok_curl() {
   [ "$FAKE" = 1 ] && return 1
   { ldconfig -p 2>/dev/null || /sbin/ldconfig -p 2>/dev/null || /usr/sbin/ldconfig -p 2>/dev/null; } | grep -qE 'libcurl(-gnutls)?\.so\.4'
@@ -67,6 +75,7 @@ report() {
   line "Deno 2.3+ ou Node.js 22+${j:+ (tem$j)}" ok_js
   line "zenity ou kdialog (janelas de escolher pasta)" ok_dialog
   line "libcurl (capas e links)" ok_curl
+  line "pactl (Soundpad: microfone virtual)" ok_pactl
 }
 
 # ---- qual distro ----
@@ -157,6 +166,49 @@ user_stems() {
   echo "   baixando o modelo htdemucs (~80 MB)"
   if [ "$SHOW" != 1 ]; then TORCH_HOME="$STEMS_DIR/torch" "$STEMS_DIR/venv/bin/python" -c "from demucs.pretrained import get_model; get_model('htdemucs')" || return 1; fi
 }
+# ---- bot do Discord (opcional): Node.js 22.12+ e os pacotes do bot, so para o Remix ----
+node22() {   # imprime o node 22.12+ a usar (o do sistema ou o da pasta do Remix)
+  local n
+  for n in "$NODE_DIR/bin/node" "$(command -v node 2>/dev/null)"; do
+    [ -n "$n" ] && [ -x "$n" ] || continue
+    [ "$FAKE" = 1 ] && [ "$n" != "$NODE_DIR/bin/node" ] && continue
+    if vge "$(vnum "$n" --version)" 22.12.0; then echo "$n"; return 0; fi
+  done
+  return 1
+}
+ok_discord() { [ "$FAKE" = 1 ] && return 1; node22 >/dev/null && [ -f "$BOT_DIR/node_modules/discord.js/package.json" ] && [ -f "$BOT_DIR/node_modules/@discordjs/voice/package.json" ]; }
+user_node() {
+  local a tmp f sum
+  case "$ARCH" in x86_64) a=x64 ;; aarch64) a=arm64 ;; *) echo "   [erro] processador $ARCH sem o Node.js oficial"; return 1 ;; esac
+  echo "Node.js 22 oficial em $NODE_DIR (so para o bot do Discord)"
+  tmp="$(mktemp -d)"
+  fetch "https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt" "$tmp/SHASUMS256.txt" || { rm -rf "$tmp"; return 1; }
+  if [ "$SHOW" = 1 ]; then echo "   [faria] baixar node-v22.*-linux-$a.tar.xz, conferir o SHA-256 e extrair"; rm -rf "$tmp"; return 0; fi
+  f="$(grep -oE "node-v22\.[0-9.]+-linux-$a\.tar\.xz" "$tmp/SHASUMS256.txt" | head -n1)"
+  [ -n "$f" ] || { echo "   [erro] nao achei o Node 22 para $a"; rm -rf "$tmp"; return 1; }
+  fetch "https://nodejs.org/dist/latest-v22.x/$f" "$tmp/$f" || { rm -rf "$tmp"; return 1; }
+  sum="$(grep " $f\$" "$tmp/SHASUMS256.txt" | cut -d' ' -f1)"
+  if [ -z "$sum" ] || [ "$(sha256sum "$tmp/$f" | cut -d' ' -f1)" != "$sum" ]; then echo "   [erro] o arquivo baixado nao confere (SHA-256)"; rm -rf "$tmp"; return 1; fi
+  run rm -rf "$NODE_DIR"
+  run mkdir -p "$NODE_DIR"
+  run tar -xJf "$tmp/$f" -C "$NODE_DIR" --strip-components=1 || { rm -rf "$tmp"; return 1; }
+  rm -rf "$tmp"
+}
+user_discord() {
+  local n cli
+  n="$(node22)" || { user_node || return 1; n="$NODE_DIR/bin/node"; }
+  [ "$SHOW" = 1 ] && [ ! -x "$n" ] && { echo "   [faria] npm install discord.js@14.27.0 @discordjs/voice@0.19.2 em $BOT_DIR"; return 0; }
+  echo "Bot do Discord: discord.js + @discordjs/voice em $BOT_DIR (Node $(vnum "$n" --version))"
+  run mkdir -p "$BOT_DIR"
+  if [ "$SHOW" != 1 ]; then
+    printf '%s\n' '{' '  "name": "remix-discord-bot",' '  "private": true,' '  "type": "module",' '  "description": "Ponte do bot do Discord do Remix (instalada pelo app)",' '  "dependencies": { "discord.js": "14.27.0", "@discordjs/voice": "0.19.2" }' '}' > "$BOT_DIR/package.json"
+  fi
+  cli=""
+  for c in "$(dirname "$n")/../lib/node_modules/npm/bin/npm-cli.js" "$(dirname "$(readlink -f "$n")")/../lib/node_modules/npm/bin/npm-cli.js"; do [ -f "$c" ] && { cli="$c"; break; }; done
+  if [ -n "$cli" ]; then run "$n" "$cli" install --prefix "$BOT_DIR" --omit=dev --no-audit --no-fund --no-update-notifier --loglevel=error || return 1
+  elif command -v npm >/dev/null 2>&1; then run npm install --prefix "$BOT_DIR" --omit=dev --no-audit --no-fund --no-update-notifier --loglevel=error || return 1
+  else echo "   [erro] nao achei o npm junto do Node.js (instale o pacote npm da distro)"; return 1; fi
+}
 arch_ok() {
   case "$ARCH" in x86_64|aarch64) return 0 ;; esac
   echo "   [erro] processador $ARCH: nao ha versao oficial pronta, instale $1 pela sua distro"; return 1
@@ -221,9 +273,10 @@ if [ "$FAMILY" = alpine ] || { [ -z "${REMIX_DEPS_OS_RELEASE:-}" ] && ldd --vers
 fi
 echo
 report
-if [ "$MISSING" = 0 ] && { ok_stems || [ "$STEMS" != 1 ]; }; then
+if [ "$MISSING" = 0 ] && { ok_stems || [ "$STEMS" != 1 ]; } && { ok_discord || [ "$DISCORD" != 1 ]; }; then
   echo; echo "Tudo pronto: e so abrir o Remix."
   if ! ok_stems; then echo "(opcional: separador de stems com: bash instalar-dependencias.sh --stems)"; fi
+  if ! ok_discord; then echo "(opcional: bot do Discord com: bash instalar-dependencias.sh --discord)"; fi
   exit 0
 fi
 echo
@@ -251,6 +304,7 @@ if [ -n "$PM" ]; then
   if ! ok_dialog; then case "${XDG_CURRENT_DESKTOP:-}" in *KDE*) install_one kdialog zenity ;; *) install_one zenity kdialog ;; esac; fi
   if ! ok_curl; then case "$PM" in dnf|xbps-install) install_one libcurl ;; apt-get) install_one libcurl4t64 libcurl4 ;; pacman|eopkg) install_one curl ;; zypper) install_one libcurl4 ;; esac; fi
   if ! ok_ffmpeg; then case "$PM" in dnf) install_one ffmpeg ffmpeg-free ;; zypper) install_one ffmpeg-7 ffmpeg-6 ffmpeg ;; *) install_one ffmpeg ;; esac; fi
+  if ! ok_pactl; then case "$PM" in pacman) install_one libpulse ;; eopkg) install_one pulseaudio ;; *) install_one pulseaudio-utils ;; esac; fi
   # yt-dlp e runtime JavaScript do repositorio so onde costumam estar em dia (no apt sao antigos)
   if [ "$PM" != apt-get ] && ! ok_ytdlp; then install_one yt-dlp; fi
   if ! ok_js; then case "$PM" in pacman|xbps-install) install_one deno nodejs ;; dnf) install_one nodejs deno ;; zypper) install_one nodejs22 ;; esac; fi
@@ -259,6 +313,7 @@ if [ -n "$PM" ]; then
 else
   if ! ok_dialog; then echo "   Aviso: sem zenity ou kdialog o Remix nao abre a janela de escolher pasta; instale pela loja de apps da distro."; fi
   if ! ok_curl; then echo "   Aviso: falta a libcurl (capas e links); quase toda distro ja traz, instale pela loja de apps se precisar."; fi
+  if ! ok_pactl; then echo "   Aviso: sem o pactl o Soundpad nao cria o microfone virtual (pacote pulseaudio-utils ou libpulse)."; fi
 fi
 ok_ytdlp || user_ytdlp
 ok_js || user_deno
@@ -275,10 +330,22 @@ if ! ok_stems; then
   fi
   if [ "$STEMS" = 1 ] || { [ "$SHOW" = 1 ] && [ "$STEMS" != 0 ]; }; then user_stems || echo "   [aviso] o separador de stems nao foi instalado (o resto do Remix funciona igual)."; fi
 fi
+if ! ok_discord; then
+  if [ "$DISCORD" = ask ] && [ "$SHOW" = 0 ] && [ "$AUTO" = 0 ]; then
+    echo
+    echo "Opcional: bot de musica do Discord (o SEU bot toca as suas playlists e buscas no servidor,"
+    echo "com fila e votacao). Baixa o discord.js (~30 MB) e, se o Node.js do sistema for antigo, o Node 22."
+    printf 'Instalar o bot do Discord tambem? [s/N] '
+    read -r resp || resp=n
+    case "${resp:-n}" in s|S|sim|Sim|SIM|y|Y|yes) DISCORD=1 ;; *) DISCORD=0 ;; esac
+  fi
+  if [ "$DISCORD" = 1 ] || { [ "$SHOW" = 1 ] && [ "$DISCORD" != 0 ]; }; then user_discord || echo "   [aviso] o bot do Discord nao foi instalado (o resto do Remix funciona igual)."; fi
+fi
 echo
 if [ "$SHOW" = 1 ]; then echo "(--mostrar: nada foi instalado)"; exit 0; fi
 echo "Conferindo:"
 report
 echo
 if ok_stems; then echo "   [ok]     separador de stems (Demucs)"; else echo "   [opcional] separador de stems: bash instalar-dependencias.sh --stems"; fi
+if ok_discord; then echo "   [ok]     bot do Discord (Node $(vnum "$(node22)" --version) + discord.js)"; else echo "   [opcional] bot do Discord: bash instalar-dependencias.sh --discord"; fi
 if [ "$MISSING" = 0 ]; then echo "Tudo pronto: e so abrir o Remix."; else echo "Ainda falta algo acima. Veja as mensagens e rode de novo."; exit 1; fi

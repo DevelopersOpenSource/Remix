@@ -180,7 +180,9 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
 Precisa de **yt-dlp**, **ffmpeg** e de um "JavaScript runtime" que o YouTube passou a exigir (**Deno 2.3+**
 ou **Node.js 22+**). As versoes portateis trazem um instalador (que também oferece a opção **STEMS**: `/stems` no
 Windows, `--stems` no Linux, ~1 GB — um Python isolado só para o Remix com PyTorch de CPU e o
-[Demucs](https://github.com/facebookresearch/demucs), da Meta, código aberto):
+[Demucs](https://github.com/facebookresearch/demucs), da Meta, código aberto; e a opção **DISCORD**: `/discord` no
+Windows, `--discord` no Linux, ~60 MB — Node.js 22 e os pacotes do bot do Discord. No Linux ele também instala o
+`pactl`, que o Soundpad usa para criar o microfone virtual):
 
 - **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat` (na pasta do Remix). Ele baixa os arquivos oficiais do
   yt-dlp, do FFmpeg e do Deno direto para a pasta `assets\tools` **dentro do Remix**, com o `curl` e o `tar` que ja
@@ -231,6 +233,8 @@ e `--exit-after <ms>`.
 - `artists.ini` — artistas editados a mao.
 - `order.ini` — ordem manual da playlist.
 - `assets/covers/` — copias das capas escolhidas pelo usuario.
+- `soundpad/` — sons do Soundpad (copias) e `soundpad.ini`.
+- `discord.ini` — opcoes e token do bot do Discord (permissao 600 no Linux; token protegido com DPAPI no Windows).
 - Conversoes do ffmpeg (formatos extras) viram WAV temporarios numa pasta de cache, apagados sozinhos depois de 72 h.
 
 ## Compilacao
@@ -323,6 +327,31 @@ Android nativa é feita: o Remix do PC vira um **servidor** e o celular usa pelo
   (tirar a permissão corta na hora o que está tocando), aparelho sem "Lembrar" é temporário, trava contra adivinhar PIN/QR
   (por origem e geral), CSRF/XSS e DNS rebinding bloqueados, limites contra DoS e pedidos lentos, IPv6 opcional e só na rede local.
   Porta padrão **49875**. Detalhes, segurança e API em [docs/HOST.md](docs/HOST.md).
+
+## Soundpad: sons no seu microfone (só no PC)
+
+- Botão **SOUNDPAD** no cabeçalho (ou Configurações > SOUNDPAD E DISCORD): adicione sons (MP3, WAV, OGG e FLAC direto; M4A,
+  Opus, WMA e outros são convertidos) e toque **no seu microfone** para o Discord, jogos e chamadas. Clique toca/para,
+  teclas **1 a 9** com o painel aberto, volume por som, vários sons ao mesmo tempo, barra de progresso.
+- **Linux:** o Remix cria o microfone virtual **Remix Microfone** no PipeWire/PulseAudio (`pactl`) e ele some ao desligar.
+  **Windows:** usa o cabo virtual gratuito **VB-CABLE** (no Discord/jogo escolha "CABLE Output").
+- **Minha voz** vai junto (o Remix nunca captura o próprio microfone virtual, então não dá eco) e **ouvir no fone** é
+  opcional. Passo a passo em [docs/SOUNDPAD.md](docs/SOUNDPAD.md).
+
+## Bot de música do Discord (só no PC)
+
+- O **seu** bot no seu servidor: `/tocar` (nome ou link do YouTube, YouTube Music, SoundCloud, Spotify, Deezer, Apple Music),
+  `/buscar` com menu de escolha, `/playlist` (só as playlists que você liberar), `/fila`, `/agora`, `/pular`, `/efeito`
+  (slow, speed, reverb, grave, 8D) e mais — em português ou inglês conforme o Discord de cada pessoa.
+- **Quem faz o trabalho é o PC**, com os mesmos mecanismos do Remix (busca, links, playlists, efeitos); o bot em Node.js é
+  só a ponte com o Discord. Você decide: **fila pública**, **playlists para todos**, **músicas online**, **cargo DJ**,
+  **limite por pessoa** e **votação** (por padrão mais da metade da chamada para pular a música dos outros, pausar ou
+  parar) — ninguém atrapalha quem está ouvindo. Quem pediu a música pode pular a própria.
+- No PC, **▶ DISCORD em cima da capa** (card de música ou de playlist) toca na hora onde você está numa chamada; o painel
+  **DISCORD** mostra e controla o que toca em cada servidor. O Host do celular continua separado.
+- Precisa do **Node.js 22.12+** e do discord.js (instalador de dependências com a opção do Discord, ou **INSTALAR BOT** no
+  painel). O token fica protegido (DPAPI no Windows, arquivo só do seu usuário no Linux). Passo a passo, comandos e
+  segurança em [docs/DISCORD.md](docs/DISCORD.md).
 
 ## Segurança de arquivos (planejado)
 

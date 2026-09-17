@@ -18,7 +18,7 @@
 param(
   [switch]$SoWindows,
   [switch]$SoLinux,
-  [string]$Versao = '1.5.2'
+  [string]$Versao = '1.5.6'
 )
 $ErrorActionPreference = 'Stop'
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)   # raiz do projeto (pasta de cima)
@@ -67,7 +67,7 @@ if (-not $SoLinux) {
   if ($LASTEXITCODE -ne 0) { throw "falhou audio_backend.c (Windows)" }
   & $Gpp -std=gnu++20 -O2 -w -municode -mwindows -static -s ("-B" + ($Root -replace '\\','/') + '/windows/') "-I$Root\comum" "-I$Root\windows" `
       'windows\main.cpp' 'build\win\audio_backend.o' 'windows\app_res.o' -o 'build\win\Remix.exe' `
-      -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi -lws2_32 -liphlpapi
+      -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi -lws2_32 -liphlpapi -lcrypt32
   if ($LASTEXITCODE -ne 0) { throw "falhou a compilacao do Remix.exe (se o Remix estiver aberto, feche-o, inclusive pela bandeja, e rode de novo)" }
   Copy-Item 'build\win\Remix.exe' 'dist\windows\Remix.exe' -Force
   Copy-Item 'build\win\Remix.exe' 'windows\Remix.exe' -Force   # exe pronto na pasta windows\

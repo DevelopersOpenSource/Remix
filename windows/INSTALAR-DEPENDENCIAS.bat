@@ -6,10 +6,12 @@ set "SELF=%~f0"
 cd /d "%HERE%"
 set "AUTO="
 set "QUERSTEMS="
+set "QUERDISCORD="
 :args
 if "%~1"=="" goto args_fim
 if /i "%~1"=="/sim" set "AUTO=1"
 if /i "%~1"=="/stems" set "QUERSTEMS=1"
+if /i "%~1"=="/discord" set "QUERDISCORD=1"
 shift
 goto args
 :args_fim
@@ -88,6 +90,7 @@ if defined FALTA_deno call :baixar_deno
 if defined FALTA_ffmpeg call :baixar_ffmpeg
 if defined FALTA_cloudflared call :baixar_cloudflared
 call :stems_talvez
+call :discord_talvez
 rmdir /s /q "%TMPD%" >nul 2>nul
 echo.
 call :conferir_tudo
@@ -275,6 +278,63 @@ echo    [ok]     separador de stems instalado
 exit /b 0
 :stems_erro
 echo    [aviso] o separador de stems nao foi instalado ^(o resto do Remix funciona igual^).
+exit /b 0
+
+rem ---- bot do Discord (opcional): Node.js 22 portatil + discord.js, so dentro da pasta Remix ----
+:discord_talvez
+set "NODED=%TOOLS%\node"
+set "BOTD=%TOOLS%\discord"
+if exist "%NODED%\node.exe" if exist "%BOTD%\node_modules\discord.js\package.json" if exist "%BOTD%\node_modules\@discordjs\voice\package.json" (
+    echo    [ok]     bot do Discord ^(Node.js + discord.js^)
+    exit /b 0
+)
+if defined QUERDISCORD goto discord_instalar
+if defined AUTO exit /b 0
+echo.
+echo  Opcional: bot de musica do Discord ^(o SEU bot toca as suas playlists e buscas no
+echo  servidor, com fila e votacao^). Baixa o Node.js 22 portatil ^(~35 MB^) e o discord.js
+echo  ^(~30 MB^), so dentro da pasta Remix.
+choice /c SN /n /m " Instalar o bot do Discord tambem? [S/N] "
+if errorlevel 2 exit /b 0
+:discord_instalar
+echo.
+echo  Bot do Discord: Node.js 22 + discord.js + @discordjs/voice em
+echo  %TOOLS%
+if exist "%NODED%\node.exe" goto discord_pacotes
+rem a versao mais nova do Node 22 e o SHA-256 dela estao no SHASUMS256.txt oficial
+"%CURL%" -fsSL --retry 3 -o "%TMPD%\SHASUMS256.txt" "https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt"
+if errorlevel 1 goto discord_erro
+set "NODEZIP="
+set "NODESHA="
+for /f "tokens=1,2" %%A in ('findstr /c:"-win-x64.zip" "%TMPD%\SHASUMS256.txt"') do (
+    set "NODESHA=%%A"
+    set "NODEZIP=%%B"
+)
+if not defined NODEZIP goto discord_erro
+"%CURL%" -fL --retry 3 -o "%TMPD%\%NODEZIP%" "https://nodejs.org/dist/latest-v22.x/%NODEZIP%"
+if errorlevel 1 goto discord_erro
+certutil -hashfile "%TMPD%\%NODEZIP%" SHA256 | findstr /i /c:"%NODESHA%" >nul
+if errorlevel 1 (
+    echo    [erro] o arquivo do Node.js baixado nao confere ^(SHA-256^)
+    goto discord_erro
+)
+"%TAR%" -xf "%TMPD%\%NODEZIP%" -C "%TMPD%"
+if errorlevel 1 goto discord_erro
+set "NODEPASTA=%NODEZIP:.zip=%"
+if not exist "%TMPD%\%NODEPASTA%\node.exe" goto discord_erro
+if not exist "%NODED%" mkdir "%NODED%"
+xcopy /e /y /q "%TMPD%\%NODEPASTA%\*" "%NODED%\" >nul
+if not exist "%NODED%\node.exe" goto discord_erro
+:discord_pacotes
+if not exist "%BOTD%" mkdir "%BOTD%"
+>"%BOTD%\package.json" echo {"name":"remix-discord-bot","private":true,"type":"module","description":"Ponte do bot do Discord do Remix (instalada pelo app)","dependencies":{"discord.js":"14.27.0","@discordjs/voice":"0.19.2"}}
+"%NODED%\node.exe" "%NODED%\node_modules\npm\bin\npm-cli.js" install --prefix "%BOTD%" --omit=dev --no-audit --no-fund --no-update-notifier --loglevel=error
+if errorlevel 1 goto discord_erro
+if not exist "%BOTD%\node_modules\discord.js\package.json" goto discord_erro
+echo    [ok]     bot do Discord instalado ^(abra o painel DISCORD no Remix^)
+exit /b 0
+:discord_erro
+echo    [aviso] o bot do Discord nao foi instalado ^(o resto do Remix funciona igual^).
 exit /b 0
 
 :conferir_tudo
