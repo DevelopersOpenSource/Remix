@@ -168,6 +168,12 @@ o estado do host.
   (`LayoutHostPanel`/`DrawHostPanel` nas duas cascas), copiar link
   (`PlatformSetClipboardText`).
 
+## O que mudou na 1.5.1
+
+- Playlist hosteada com **pasta vinculada**: o celular recebe também as músicas da pasta (antes
+  só as adicionadas à mão), com os títulos que o PC já leu, e vê em poucos segundos quando uma
+  música entra ou sai da pasta.
+
 ## O que mudou na 1.5.0
 
 - **Corrigido:** os botões do Host usavam os mesmos códigos internos do seletor de estilo

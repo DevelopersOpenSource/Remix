@@ -15,7 +15,7 @@ English version: [README.md](README.md). Programa pronto para baixar: [Releases]
 **[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows.
 **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) entrou depois como co-desenvolvedor: participou da versão Windows,
 sugeriu e desenvolveu as playlists e a música online (streaming e downloads), levou o Remix para o Linux e teve a ideia
-do **Host** — o PC vira servidor para o celular — para o Remix chegar ao **iPhone (iOS)** enquanto o Nero faz a versão Android.
+do **Host** — o PC vira servidor para o celular — para o Remix chegar ao **iPhone (iOS) e a outros celulares** enquanto o Nero faz a versão Android.
 
 ## Pastas
 
