@@ -1,23 +1,56 @@
-# Remix Player
-
-A lightweight music player for **Windows and Linux** (C++, one shared core, ~3 MB). Play your local
-library, organize playlists and stream or download music from **YouTube, YouTube Music, SoundCloud,
-Spotify, Deezer and Apple Music** links.
-
-> The interface is currently in Brazilian Portuguese. Documentação em português: [README.pt-BR.md](README.pt-BR.md).
-
 <p align="center">
-  <img src="docs/screenshots/biblioteca.png" alt="Library grid (Linux)" width="32%">
-  <img src="docs/screenshots/busca-online.png" alt="Online search (Linux)" width="32%">
-  <img src="docs/screenshots/windows-lista.png" alt="List view (Windows)" width="32%">
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/v1.2.1/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: autor do Remix, ideia original e versão Windows" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/v1.2.1/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming e versão Linux" width="48%"></a>
 </p>
 
-## Credits
+**Versão de correção sobre a 1.2.0.** Portáteis para Windows 10/11 e Linux: é só extrair e abrir.
 
-<p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: Autor, original idea and Windows version" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): Co-Autor, online streaming and Linux version" width="48%"></a>
-</p>
+## O que mudou desde a 1.2.0
+
+- **Onda e espectro certos na música online:** a faixa tocada por streaming agora desenha na mesma escala da música do computador, não mostra trecho que ainda não baixou e acerta a duração assim que ela chega.
+- **Pacotes Linux e zip portátil** montados sem CRLF, mesmo quando os arquivos chegam com fim de linha do Windows (antes isso quebrava o `.rpm` e podia estragar os `.sh`).
+- **`INSTALAR-DEPENDENCIAS.bat`** vai no zip com o fim de linha do Windows, do jeito que o `cmd` espera.
+- **Créditos** de volta no README e nos cards.
+
+## Downloads
+
+| Sistema | Arquivo | Como usar |
+|---|---|---|
+| Windows 10/11 (x64) | `remix-1.2.1-windows-x64-portable.zip` | Extraia a pasta inteira e abra o `Remix.exe` |
+| Linux x86_64 (qualquer distro) | `remix-1.2.1-linux-x86_64-portable.zip` | Extraia e rode `./RODAR.sh` |
+
+Músicas do computador tocam sem instalar nada. Para a **música online** (busca, streaming e download), rode antes o instalador que vem na pasta:
+
+- **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat`. Ele baixa yt-dlp, FFmpeg e Deno dos sites oficiais para a pasta `assets\tools` **dentro do Remix**, usando o curl e o tar do próprio Windows. Nada é instalado no sistema, então não atrapalha essas mesmas ferramentas em outros projetos.
+- **Linux:** `bash instalar-dependencias.sh`. Ele reconhece a distro (Debian/Ubuntu/Mint, Fedora/Nobara, Arch/Manjaro/CachyOS, openSUSE, Void, Solus) e usa o gerenciador dela; em distro imutável ou sem sudo, instala na sua pasta pessoal.
+
+> **Windows:** o exe ainda não tem assinatura digital, então o SmartScreen pode mostrar "O Windows protegeu o computador". Clique em **Mais informações** e depois em **Executar assim mesmo**.
+
+Se o Remix fechar sozinho no Windows, abra uma issue e anexe o `remix-log.txt` (fica na pasta do `Remix.exe`).
+
+## Créditos
+
+**[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows. **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) entrou depois como co-desenvolvedor: participou da versão Windows, sugeriu e desenvolveu as playlists e a música online e levou o Remix para o Linux.
+
+<details>
+<summary>English</summary>
+
+Fix release over 1.2.0. Portable builds for Windows 10/11 and Linux: extract and run `Remix.exe` or `./RODAR.sh`.
+
+Changed since 1.2.0: correct waveform and spectrum for streamed songs (same scale as local files, no look-ahead into audio that has not been downloaded, duration fixed as soon as it arrives); Linux packages and the portable zip are built without CRLF; the Windows `.bat` keeps CRLF inside the zip; credits restored in the README.
+</details>
+
+**Changelog completo:** https://github.com/EchoGroupStudio/Remix/compare/v1.2.0...v1.2.1
+
+<details>
+<summary>SHA-256</summary>
+
+```text
+02201e3c54d6cfc13811a498ec925152ce5b87a3802f4ed6140cd03c454b86a2  remix-1.2.1-windows-x64-portable.zip
+20d980dbc78ecb77b2a909413db34d49ce9389cc126b749f9c971fea8b9e4ab5  remix-1.2.1-linux-x86_64-portable.zip
+```
+</details>
+
 
 The idea for Remix and the Windows version came from **[Nero-2077](https://github.com/Nero-2077)**; online streaming
 and the Linux version from **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
