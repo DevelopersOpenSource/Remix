@@ -10,8 +10,6 @@
 #include <cwctype>
 
 #ifdef _WIN32
-    #include <winsock2.h>   // antes de windows.h: o Host (host_net.h) usa Winsock2
-    #include <ws2tcpip.h>
     #include <windows.h>
     #define REMIX_SEP     L'\\'
     #define REMIX_SEP_STR L"\\"

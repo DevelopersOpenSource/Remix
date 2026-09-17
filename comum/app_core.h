@@ -51,7 +51,6 @@ bool PlatformScreenshot(const std::wstring& pngPath);           // testes
 void PlatformPickFolderFor(int evType, int ctx);                // pasta para outra finalidade (s = pasta, n = ctx)
 void PlatformPickAudioFilesAsync(int evType, int ctx);          // varios arquivos de audio (s = caminhos separados por \n)
 std::wstring PlatformClipboardText();                           // colar (Ctrl+V)
-bool PlatformSetClipboardText(const std::wstring& text);         // copiar (link do Host)
 bool PlatformHttpGet(const std::string& url, std::string& body);
 // busca de capa na web (HTTP + decodificacao de imagem sao por plataforma)
 static void WebSearchAsync(std::wstring q);
@@ -61,17 +60,6 @@ static void ClearWebResultsPlatform();
 
 // ------------------------------------------------------------ estado -------
 static Config g_cfg;
-#include "app_ui.h"
-// Estilo ativo (configuracoes > ESTILO). O LED e o corredor so existem no classico e no spotify.
-static inline const UiPal& UI(){ return UiPalFor(g_cfg.uiStyle); }
-static inline bool UiClassic(){ return g_cfg.uiStyle==UI_CLASSICO; }
-static inline bool UiGlow(){ return g_cfg.uiStyle!=UI_LIMPO; }
-static inline int  UiLed(){ return UiGlow()?g_cfg.ledBrightness:0; }
-static inline bool UiRunner(){ return UiGlow()&&g_cfg.runnerOn; }
-// Posicao do mouse (cada casca atualiza no seu laco): destaque do card/linha sob o
-// cursor e botoes que so aparecem ali (estilos novos).
-static int g_mouseX=-9999, g_mouseY=-9999;
-static inline bool UiHot(const RECT& r){ return g_mouseX>=r.left&&g_mouseX<r.right&&g_mouseY>=r.top&&g_mouseY<r.bottom; }
 static std::vector<Theme> g_themes;
 static Theme g_theme;
 static std::vector<Track> g_tracks;
@@ -93,7 +81,7 @@ static std::vector<Track> g_libTracks; static bool g_libCached=false;   // bibli
 static Track g_nowPlaying; static bool g_nowPlayingValid=false;        // faixa tocando (pode nao estar na lista visivel)
 static int g_hkCapture=-1;                 // acao cujo atalho esta sendo capturado (configuracoes)
 static std::wstring g_pendingAddPath;      // faixa a adicionar na playlist recem-criada
-static int g_confirmKind=0;                // 0 = excluir faixa, 1 = excluir playlist, 2 = aceitar dispositivo (host)
+static int g_confirmKind=0;                // 0 = excluir faixa, 1 = excluir playlist
 // ---- marcar musicas da biblioteca para uma playlist / musicas online ----
 static bool g_pickMode=false; static int g_pickPl=-1; static std::set<std::wstring> g_pickSel;
 static std::wstring g_lastOnlineUrl, g_lastOnlineTitle;         // ultima musica em streaming (diario)
@@ -122,10 +110,7 @@ enum : int {
     EV_PICK_FOLDER, EV_PICK_IMAGE, EV_PICK_WALL, EV_TRANSCODED,
     EV_ART_READY, EV_ONLINE_META, EV_ONLINE_READY, EV_ONLINE_FAIL, EV_ONLINE_THUMB, EV_ONLINE_SEARCH, EV_ONLINE_RESOLVED, EV_ONLINE_JOB,
     EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY,
-    EV_PICK_DLONCE,  // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
-    EV_HOST_PEDIDO,  // host: celular pediu para parear (s = id do pedido)
-    EV_HOST_STATUS,  // host: aviso do servidor/tunel (s = texto, n = 1 quando e a URL do tunel)
-    EV_STEMS         // stems: mudou o estado de uma separacao (s = chave, n = estado)
+    EV_PICK_DLONCE   // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
 };
 // Analise incremental do streaming (online_play.h entrega o PCM; esta converte em
 // onda/espectro e a UI publica em WS() para a musica online mostrar como a local).
@@ -133,7 +118,6 @@ enum : int {
 struct StreamJob;
 void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
 #include "online_play.h"
-#include "stems.h"
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
 // Teclas (mapeadas por cada plataforma).
@@ -152,8 +136,6 @@ struct WaveState {
     int specHopMs = 50;
     float bands[48] = {0};
     bool hasSpec = false;
-    float pulse = 0, onsetMax = 0.05f, energyMax = 0.02f;   // batida atual (0..1) e normalizacoes que se adaptam a musica
-    double specHopF = 50.0;    // passo exato do espectro em ms (1102 amostras a 44,1 kHz = 24,99 ms; em inteiro a onda adiantava 4%)
 };
 static WaveState& WS(){ static WaveState* s = new WaveState(); return *s; }
 struct ScanState {
@@ -186,16 +168,6 @@ enum : int {
     Z_AUTOPLAY=765, Z_SORT=766, Z_VOL_ICON=767, Z_FOLDER_BTN=768, Z_CONFIRM_YES=769, Z_CONFIRM_NO=770, Z_PERF_TOGGLE=771, Z_BG_TOGGLE=772, Z_QUIT_BTN=773, Z_SYSMEDIA_TOGGLE=774, Z_TAB_TRACKS=780, Z_TAB_PLAYLISTS=781, Z_SEARCH_BOX=782, Z_SEARCH_CLEAR=783, Z_PL_BACK=784, Z_PL_NEW=785, Z_HK_RESET=786,
     Z_TAB_ONLINE=787, Z_PL_ADD=788, Z_PICK_DONE=789, Z_PICK_CANCEL=790, Z_ACTIVITY=791, Z_SET_ON_MODE=792, Z_SET_ON_FMT=793, Z_SET_ON_SRC=794,
     Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810,
-    Z_SETTINGS_STYLE_BASE=820,   // +0 classico, +1 limpo, +2 spotify
-    // Host: faixa 22000+ (na 1.4.0 ficaram em 821..838 e colidiam com Z_SETTINGS_STYLE_BASE+1/+2:
-    // o botao HOST virava "Limpo" e LIGAR O HOST virava "Spotify + LED"). Os static_assert abaixo travam isso.
-    Z_HOST_BTN=22000, Z_SET_HOST_ON, Z_SET_HOST_PORT, Z_SET_HOST_PIN, Z_SET_HOST_NAME, Z_SET_HOST_TUNNEL, Z_SET_HOST_LAN, Z_SET_HOST_PANEL,
-    Z_SET_HOST_COPYTUN, Z_SET_HOST_COPYLAN, Z_SET_HOST_ONLINE, Z_SET_HOST_QRCONF, Z_SET_HOST_IPV6,
-    Z_HOST_CLOSE=22050, Z_HOST_TOGGLE, Z_HOST_TUNNEL, Z_HOST_HTML, Z_HOST_PASTA, Z_HOST_PORT, Z_HOST_PIN, Z_HOST_NAME, Z_HOST_LAN,
-    Z_HOST_NEWLINK, Z_HOST_COPYTUN, Z_HOST_COPYLAN, Z_HOST_QRMODE, Z_HOST_QRNEW, Z_HOST_ONLINE, Z_HOST_QRCONF, Z_HOST_IPV6,
-    Z_HOST_DEVLIB_BASE=22100, Z_HOST_DPLOK_BASE=22200,   // +100 aparelhos, +500 playlists de aparelhos
-    Z_FX_BTN=23000, Z_FX_CLOSE, Z_FX_CLEAR, Z_FX_CANCEL, Z_FX_BASE=23010, Z_STEM_BASE=23020,   // efeitos (+5) e stems (+6)
-    Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo (ate 21500)
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
     Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
@@ -211,12 +183,6 @@ static std::vector<RECT> R_cardCoverButtons;
 static std::vector<RECT> R_cardSeekRects;
 static RECT R_settingsPanel, R_settingsDefault, R_settingsCustom, R_settingsClose;
 static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
-static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spotify
-static RECT R_setHostCopyTun, R_setHostCopyLan, R_setHostOnline, R_setHostQrConf, R_setHostIpv6;
-static RECT R_setHostOn, R_setHostPort, R_setHostPin, R_setHostName, R_setHostTunnel, R_setHostLan, R_setHostPanel, R_hostBtn;   // HOST (docs/HOST.md)
-static RECT R_fxBtn;   // EFEITOS (cabecalho)
-struct FxPanelUI { bool open=false; RECT box{0,0,0,0}, btnClose{0,0,0,0}, btnClear{0,0,0,0}, btnCancel{0,0,0,0}, info{0,0,0,0}; RECT fx[5]{}; RECT stem[6]{}; };
-static FxPanelUI g_fxp;
 static RECT R_verticalCoverButton;
 static RECT R_playerPanel;
 static int g_panelArt = 300;
@@ -244,12 +210,6 @@ static int g_setContentH = 0;
 static std::vector<std::pair<RECT,std::wstring>> g_setSections;
 static RECT R_wavePanel, R_waveDragRect, R_shapeTgl, R_listBtn;
 static int g_gridCols = 0, g_contentH = 0;
-static int g_headerH = 0, g_sideW = 0;   // faixas solidas do cabecalho e da lateral (estilos novos)
-// Zonas que nao podem se sobrepor (a 1.4.0 teve HOST dentro da faixa do ESTILO).
-static_assert(Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT<=Z_ON_SRC_BASE+100 && Z_HOST_BTN>Z_HOST_PLDEV_BASE+4000, "zonas do host/estilo sobrepostas");
-static_assert(Z_HOST_DPLOK_BASE+500<=Z_FX_BTN && Z_FX_CANCEL<Z_FX_BASE && Z_FX_BASE+5<=Z_STEM_BASE && Z_STEM_BASE+10<Z_COVER_BASE, "faixa dos efeitos invade outra");
-static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
-static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
 static std::vector<RECT> R_rowUp, R_rowDown;
 static RECT R_setAutoplay, R_setSort, R_setSortDir, R_setEqOn, R_setEqReset;
@@ -271,7 +231,7 @@ static RECT R_ctxBox;
 static std::vector<RECT> R_ctxItems;
 // menu de contexto generico: rotulos + acao de cada item (faixa, card de playlist, escolher playlist)
 enum { CTX_TRACK=0, CTX_PLAYLIST=1, CTX_PICKPL=2, CTX_MENU=3, CTX_PICKON=4 };
-enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PL_HOST, CA_PICK_NEW,
+enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PICK_NEW,
        CA_ADD_LIB, CA_ADD_FILES, CA_ADD_FOLDERCOPY, CA_ADD_FOLDERLINK, CA_ADD_LINK, CA_ADD_SEARCH, CA_NEW_EMPTY, CA_NEW_FOLDER, CA_NEW_LINK, CA_NEW_SEARCH,
        CA_PLF_PICK, CA_PLF_UNLINK, CA_PLF_LIBRARY, CA_PL_FOLDER, CA_PL_SYNC, CA_PL_DLALL, CA_PL_MODE, CA_DOWNLOAD, CA_OPEN_URL, CA_ACT_CANCEL, CA_ACT_OPENDIR, CA_PICKON_NEW,
        CA_PICK_BASE=100, CA_PLF_RECENT_BASE=200, CA_PICKON_BASE=300 };
@@ -285,7 +245,6 @@ static RECT R_confirmBox, R_confirmYes, R_confirmNo;
 static bool g_converting = false;
 static unsigned g_openGen = 0;
 static bool g_pendingAutoplay = false;
-static DWORD g_resumeMs = 0;   // troca de fonte (stem <-> completa): a faixa reabre nesse ponto
 static std::wstring g_currentSource;          // arquivo realmente aberto (pode ser o WAV convertido)
 // seletor de imagem da web (imagens sao void* por plataforma)
 struct WebRes { std::wstring murl; std::wstring turl; void* img=nullptr; void* cpu=nullptr; };
@@ -302,8 +261,7 @@ struct WebDlState{std::mutex m;std::wstring path;bool ok=false;};
 static WebDlState& WDS(){static WebDlState* s=new WebDlState();return *s;}
 
 static bool PtIn(const RECT& r, int x, int y){ return x>=r.left && x<=r.right && y>=r.top && y<=r.bottom; }
-static float g_dpiMul = 1.f;   // casca: densidade da tela (celular = 2x..4x); 1 no desktop
-static float S(float v){ return v * g_cfg.uiScale / 100.0f * g_dpiMul; }
+static float S(float v){ return v * g_cfg.uiScale / 100.0f; }
 static int SI(int v){ return (int)std::lround(S((float)v)); }
 static float TextScale(int base, int pct){ return S((float)base) * pct / 100.0f; }
 static bool FxOn(){ return !g_cfg.perfMode&&!g_safeMode; }     // efeitos pesados (particulas, glitch, corredor, blur)
@@ -367,35 +325,26 @@ static float AudioWaveBar(int i,int count,DWORD posMs,DWORD lenMs,float t){
         look=(DWORD)std::min<double>((double)look,std::max(300.0,avail));
     }
     double center=(double)posMs-back+(double)look*p;
-    float v=-1.f, band=1.f, pulse=0.f;
+    float norm=(float)(center/std::max<double>(1,(double)lenMs));
+    norm=std::max(0.f,std::min(1.f,norm));
+    size_t n=WS().data.size();
+    size_t idx=(size_t)(norm*(float)(n-1));
+    size_t span=std::max<size_t>(1,n/110);
+    size_t a=idx>span?idx-span:0,b=std::min(n-1,idx+span);
+    float v=0; for(size_t j=a;j<=b;j++) v=std::max(v,WS().data[j]);
+    v=powf(v,.82f);
+    float micro=1.f+.18f*sinf(t*2.3f+p*9.f)+.09f*sinf(t*4.1f-p*17.f);
+    float out=v*micro;
+    float band=1.f;
     {
-        // Onda no ritmo: a altura vem da energia do espectro naquele instante (quadros de 25-50 ms) e o
-        // "pulo" vem da batida detectada agora (UpdateSpecBands), mais forte perto do ponto que esta tocando.
         std::lock_guard<std::mutex> lk(WS().fm);
-        int frames=(int)(WS().spec.size()/48); double hop=std::max(1.0,WS().specHopF);
-        if(frames>0&&center>=0){
-            int fi=(int)(center/hop);
-            if(fi<frames){ const float* f=&WS().spec[(size_t)fi*48]; float e=0; for(int k=0;k<48;k++) e+=f[k]; e/=48.f; v=std::min(1.f,sqrtf(e/std::max(0.0005f,WS().energyMax))); }
-        }
         if(WS().hasSpec){
             float q=powf(p,.7f);
             int bi=(int)(q*47.99f); if(bi<0)bi=0; if(bi>47)bi=47;
             band=.30f+1.15f*WS().bands[bi];
         }
-        pulse=WS().pulse;
     }
-    if(v<0){   // sem espectro ainda: os 320 pontos da musica inteira
-        float norm=(float)(center/std::max<double>(1,(double)lenMs));
-        norm=std::max(0.f,std::min(1.f,norm));
-        size_t n=WS().data.size();
-        size_t idx=(size_t)(norm*(float)(n-1));
-        size_t span=std::max<size_t>(1,n/110);
-        size_t a=idx>span?idx-span:0,b=std::min(n-1,idx+span);
-        v=0; for(size_t j=a;j<=b;j++) v=std::max(v,WS().data[j]);
-    }
-    v=powf(std::max(0.f,v),.82f);
-    float perto=1.f-std::min(1.f,(float)fabs(center-(double)posMs)/1800.f);   // ("near" e macro no Windows)
-    float out=v*(1.f+.60f*pulse*perto)*band;
+    out*=band;
     float idle=(.07f+.13f*WaveIdleAt(i,count,t*.7f))*band;
     return std::max(.06f,std::min(1.f,std::max(out,idle)));
 }
@@ -487,12 +436,12 @@ static void AnalyzeCurrentWave(){
             auto publishSpec=[&](){
                 if(specLocal.empty()) return;
                 std::lock_guard<std::mutex> lk(WS().fm);
-                if(job==WS().job.load()){ WS().spec.insert(WS().spec.end(),specLocal.begin(),specLocal.end()); WS().specHopMs=(int)(hop*1000/std::max(1,sr)); WS().specHopF=hop*1000.0/std::max(1,sr); }
+                if(job==WS().job.load()){ WS().spec.insert(WS().spec.end(),specLocal.begin(),specLocal.end()); WS().specHopMs=(int)(hop*1000/std::max(1,sr)); }
                 specLocal.clear();
             };
             bool ok=Player::DecodeMono(path,[&](const float* f,size_t n,unsigned srr)->bool{
                 if(job!=WS().job.load()) return false;
-                if(first){ sr=(int)srr; framesPerBucket=std::max<size_t>(256,(size_t)sr/20); hop=std::max<size_t>(256,(size_t)sr/40); first=false; }   // espectro a cada 25 ms (ritmo)
+                if(first){ sr=(int)srr; framesPerBucket=std::max<size_t>(256,(size_t)sr/20); hop=framesPerBucket; first=false; }
                 for(size_t i=0;i<n;i++){
                     float v=f[i];
                     bucket.push_back(fabsf(v));
@@ -522,7 +471,7 @@ static void AnalyzeCurrentWave(){
         } catch(...){}
     });
 }
-static void ClearWave(){ ++WS().job; { std::lock_guard<std::mutex> lk(WS().m); WS().data.clear(); WS().path.clear(); } { std::lock_guard<std::mutex> lk(WS().fm); WS().spec.clear(); WS().hasSpec=false; WS().pulse=0; WS().onsetMax=0.05f; WS().energyMax=0.02f; } }
+static void ClearWave(){ ++WS().job; { std::lock_guard<std::mutex> lk(WS().m); WS().data.clear(); WS().path.clear(); } { std::lock_guard<std::mutex> lk(WS().fm); WS().spec.clear(); WS().hasSpec=false; } }
 static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
     WaveState&W=WS();
     std::lock_guard<std::mutex> lk(W.fm);
@@ -531,28 +480,11 @@ static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
     if(!playingNow||frames==0){
         bool any=false; float decay=powf(.80f,tick);
         for(float&b:W.bands){b*=decay;if(b>.004f)any=true;}
-        W.pulse*=decay;
-        if(!any){for(float&b:W.bands)b=0;W.hasSpec=false;W.pulse=0;}
+        if(!any){for(float&b:W.bands)b=0;W.hasSpec=false;}
         return;
     }
-    // O que se ouve agora esta atrasado em relacao ao cursor (buffer da saida de som): antes a onda lia
-    // 50 ms A FRENTE e ficava adiantada. Agora le o instante que esta saindo nos fones.
-    static unsigned lat=0; static ULONGLONG latAt=0; ULONGLONG nowT=GetTickCount64();
-    if(nowT-latAt>2000){ lat=Player::OutputLatencyMs(); latAt=nowT; }
-    long long tms=(long long)posMs-(long long)lat; if(tms<0) tms=0;
-    double hop=std::max(1.0,W.specHopF);
-    int idx=(int)((double)tms/hop); if(idx>=frames)idx=frames-1; if(idx<0)idx=0;
+    int idx=(int)((posMs+50)/std::max(1,W.specHopMs)); if(idx>=frames)idx=frames-1; if(idx<0)idx=0;
     const float* v=&W.spec[(size_t)idx*48];
-    // batida: quanto cada banda subiu desde o quadro anterior (graves pesam mais: bumbo/caixa)
-    float flux=0, energy=0;
-    for(int k=0;k<48;k++) energy+=v[k];
-    energy/=48.f;
-    if(idx>0){ const float* pv=&W.spec[(size_t)(idx-1)*48]; for(int k=0;k<48;k++){ float d=v[k]-pv[k]; if(d>0) flux+=d*(k<12?1.6f:(k<30?1.0f:0.5f)); } }
-    W.onsetMax=std::max(W.onsetMax*powf(.995f,tick),flux);
-    W.energyMax=std::max(W.energyMax*powf(.998f,tick),energy);
-    float on=W.onsetMax>0.0001f?std::min(1.f,flux/W.onsetMax):0.f;
-    on=on>0.35f?(on-0.35f)/0.65f:0.f;              // so subida forte conta como batida
-    if(on>W.pulse) W.pulse=on; else W.pulse*=powf(.80f,tick);   // sobe na hora e cai em ~150 ms
     float rise=1.f-powf(1.f-.55f,tick), fall=1.f-powf(.86f,tick);
     for(int k=0;k<48;k++){float o=W.bands[k],t=v[k];W.bands[k]=(t>o)?o+(t-o)*rise:o+(t-o)*fall;}
     W.hasSpec=true;
@@ -616,7 +548,7 @@ static void PublishStreamWave(){
         size_t gridStart=(size_t)((w.firstAbs*1000ULL/rate)/50);
         std::vector<float> whole(gridStart+w.spec.size());
         memcpy(&whole[gridStart],w.spec.data(),w.spec.size()*sizeof(float));
-        { std::lock_guard<std::mutex> lkf(WS().fm); if(j->id==g_pubStreamId&&w.gen==g_pubGen){ WS().spec.swap(whole); WS().specHopMs=50; WS().specHopF=50.0; } }
+        { std::lock_guard<std::mutex> lkf(WS().fm); if(j->id==g_pubStreamId&&w.gen==g_pubGen){ WS().spec.swap(whole); WS().specHopMs=50; } }
         g_pubSpecN=w.spec.size();
     }
     // onda: 320 buckets do que ja chegou (com janela equivalente por fração)
@@ -759,7 +691,6 @@ static void SwitchFolder(const std::wstring& f){   // "" = padrao (pastas do usu
 static void OpenAndStart(const std::wstring& src,bool autoplay){
     if(g_player.Open(src)){
         g_currentSource=src;
-        if(g_resumeMs){ g_player.SeekMs(g_resumeMs); g_resumeMs=0; }
         ApplyVolume();
         AnalyzeCurrentWave();
         if(autoplay) g_player.Play();
@@ -778,7 +709,6 @@ static void RebuildShuffleQueue(int startIdx){
     if(startIdx>=0&&startIdx<n){ g_shufQueue.insert(g_shufQueue.begin(),startIdx); g_shufPos=0; }
 }
 static void PlayOnlineIndex(int idx,bool autoplay,unsigned gen);
-static std::wstring StemSourceFor(const Track& t); static int StemModeNow(); static void RequestStemsFor(int idx,bool front); static void StemsAhead();
 static void PlayIndex(int idx,bool autoplay=true){
     if(g_tracks.empty()) return; if(idx<0)idx=(int)g_tracks.size()-1; if(idx>=(int)g_tracks.size())idx=0;
     // aleatorio: se a faixa nao e a proxima da fila (clique do usuario), recomeca a fila a partir dela
@@ -789,11 +719,6 @@ static void PlayIndex(int idx,bool autoplay=true){
     unsigned gen=++g_openGen;
     g_currentSource.clear();
     g_player.Close(); g_curStreamOpen=false; g_curStreamId=0; g_queueTick=0;   // o canal antigo sai na proxima UpdateStreamQueue (se nao for uma das proximas)
-    {   // modo de stem ligado e ja separado: toca o stem (senao pede a separacao e toca a completa enquanto isso)
-        std::wstring ss=StemSourceFor(g_tracks[(size_t)idx]);
-        if(!ss.empty()){ ClearWave(); g_converting=false; OpenAndStart(ss,autoplay); StemsAhead(); return; }
-        if(StemModeNow()!=stems::M_FULL){ RequestStemsFor(idx,true); StemsAhead(); }
-    }
     if(IsOnlineTrack(g_tracks[(size_t)idx])){ PlayOnlineIndex(idx,autoplay,gen); return; }
     if(!Player::ProbeNative(path)){
         g_player.Close();
@@ -820,78 +745,6 @@ static void OnTranscoded(const std::wstring& dst,unsigned gen){
     OpenAndStart(dst,g_pendingAutoplay);
 }
 #include "app_online_a.h"
-// ---- efeitos de audio e stems (PC) ------------------------------------------------------------
-static void ApplyFxNow(){ Player::SetFx(g_cfg.fxSlow,g_cfg.fxSpeed,g_cfg.fxReverb,g_cfg.fxBass,g_cfg.fx8d); g_player.ApplyFx(); }
-static const wchar_t* FxName(int i){ static const wchar_t* n[5]={L"SLOW",L"SPEED",L"REVERB",L"GRAVE",L"8D"}; return n[std::max(0,std::min(4,i))]; }
-static int& FxLevel(int i){ switch(i){ case 0: return g_cfg.fxSlow; case 1: return g_cfg.fxSpeed; case 2: return g_cfg.fxReverb; case 3: return g_cfg.fxBass; default: return g_cfg.fx8d; } }
-static bool AnyFxOn(){ return g_cfg.fxSlow||g_cfg.fxSpeed||g_cfg.fxReverb||g_cfg.fxBass||g_cfg.fx8d||!g_cfg.stemMode.empty(); }
-static void CycleFx(int i){   // cada clique sobe um nivel (1, 2, 3) e o proximo desliga
-    int& v=FxLevel(i); v=(v+1)%4;
-    if(i==0&&v) g_cfg.fxSpeed=0;
-    if(i==1&&v) g_cfg.fxSlow=0;
-    g_cfg.Save(); ApplyFxNow();
-    SetStatus(std::wstring(FxName(i))+(v?L": nível "+std::to_wstring(v):std::wstring(L": desligado")),1600);
-}
-static void ClearFx(){ g_cfg.fxSlow=g_cfg.fxSpeed=g_cfg.fxReverb=g_cfg.fxBass=g_cfg.fx8d=0; g_cfg.Save(); ApplyFxNow(); SetStatus(L"Efeitos desligados.",1600); }
-static std::wstring StemIdOf(const Track& t){ return IsOnlineTrack(t)?t.url:t.path; }
-static std::wstring StemKeyOf(const Track& t){ return stems::KeyFor(StemIdOf(t),IsOnlineTrack(t)); }
-static std::wstring StemKeyCurrent(){   // para desenhar: guarda a chave da faixa atual (a de arquivo le tamanho/data)
-    static std::wstring id,key;
-    if(g_current<0||g_current>=(int)g_tracks.size()) return L"";
-    const Track& t=g_tracks[(size_t)g_current];
-    if(StemIdOf(t)!=id){ id=StemIdOf(t); key=StemKeyOf(t); }
-    return key;
-}
-static int StemModeNow(){ return stems::ModeFromKey(g_cfg.stemMode); }
-static std::wstring StemSourceFor(const Track& t){
-    int m=StemModeNow(); if(m==stems::M_FULL) return L"";
-    std::wstring f=stems::FileFor(StemKeyOf(t),m); std::error_code ec;
-    return (!f.empty()&&std::filesystem::exists(std::filesystem::path(f),ec))?f:L"";
-}
-static bool IsStemFile(const std::wstring& p){ return !p.empty()&&Config::StartsI(Config::NormSep(p),Config::NormSep(stems::Root())+REMIX_SEP_STR); }
-static void StemsNotify(const std::wstring& key,int st){ AppPost(EV_STEMS,key,st); }
-static void RequestStemsFor(int idx,bool front){
-    if(idx<0||idx>=(int)g_tracks.size()||!stems::Installed()) return;
-    const Track& t=g_tracks[(size_t)idx];
-    if(IsOnlineTrack(t)){ OTrack o=OTrackFor(t); stems::Request(t.url,true,o.play,o.title,o.artist,o.dur,front,StemsNotify); }
-    else stems::Request(t.path,false,L"",t.title,t.artist,t.durSec,front,StemsNotify);
-}
-static void StemsAhead(){   // modo de stem ligado: as proximas 2 da fila ja vao separando
-    if(StemModeNow()==stems::M_FULL||!stems::Installed()) return;
-    for(int i:UpcomingIndices(2)) RequestStemsFor(i,false);
-}
-// Troca o que esta tocando para o modo escolhido, no mesmo ponto (se o stem ja existe).
-static void SwitchStemSourceNow(){
-    if(g_current<0||g_current>=(int)g_tracks.size()) return;
-    const Track& t=g_tracks[(size_t)g_current];
-    int m=StemModeNow(); bool was=g_player.playing;
-    DWORD pos=g_player.GetPositionMs();
-    if(m==stems::M_FULL){
-        if(!IsStemFile(g_currentSource)) return;   // ja esta na completa
-        g_resumeMs=pos?pos:1; PlayIndex(g_current,was); return;
-    }
-    std::wstring want=StemSourceFor(t);
-    if(want.empty()){
-        if(!stems::Installed()){ SetStatus(L"Para separar em stems instale o Demucs: instalador de dependências, opção STEMS.",5000); return; }
-        RequestStemsFor(g_current,true); StemsAhead();
-        SetStatus(L"Separando esta música (na 1ª vez leva ~metade da duração). Enquanto isso toca a completa.",4500); return;
-    }
-    if(_wcsicmp(g_currentSource.c_str(),want.c_str())==0) return;
-    g_player.Close(); g_curStreamOpen=false; g_curStreamId=0; g_converting=false;
-    if(g_player.Open(want)){ g_currentSource=want; if(pos) g_player.SeekMs(pos); ApplyVolume(); AnalyzeCurrentWave(); if(was) g_player.Play(); }
-    else SetStatus(L"Não consegui abrir o stem.",3000);
-}
-static void SetStemMode(int m){
-    m=std::max(0,std::min((int)stems::M_COUNT-1,m));
-    g_cfg.stemMode=stems::ModeKey(m); g_cfg.Save();
-    if(m==stems::M_FULL) stems::CancelQueued(false);
-    SwitchStemSourceNow();
-}
-static void OnStemsEvent(const std::wstring& key,int st){
-    if(g_current<0||g_current>=(int)g_tracks.size()||StemKeyCurrent()!=key) return;
-    if(st==stems::S_READY&&StemModeNow()!=stems::M_FULL){ SwitchStemSourceNow(); SetStatus(std::wstring(L"Stems prontos: ")+stems::ModeName(StemModeNow()),2500); }
-    else if(st==stems::S_FAILED){ auto j=stems::Find(key); std::wstring e; if(j){ std::lock_guard<std::mutex> lk(j->m); e=j->err; } SetStatus(e.empty()?std::wstring(L"A separação falhou."):e,6000); }
-}
 static bool PlayFileDirect(const std::wstring& path,bool autoplay=true){
     std::error_code ec;
     if(path.empty() || !std::filesystem::exists(std::filesystem::path(path),ec)) return false;
@@ -1017,13 +870,6 @@ static void DeleteTrack(int i){
     SetStatus(L"Movido para a lixeira.",2500);
 }
 
-// ---- Host (host_server.h): cola definida mais abaixo; aqui so as assinaturas ----
-static bool HostRunningNow();
-static std::string HostTargetsOf(const std::wstring& slug);   // "" = playlist nao hosteada
-static unsigned g_hostFolderGen=0;   // sobe quando uma pasta vinculada muda (o Host republica)
-static void HostStopNow();
-static bool HostStartFromCfg();
-static std::wstring HostPlLabel(const std::wstring& slug);
 // ---- editor de texto (artista / nome do arquivo) --------------------------
 static void StartArtistEdit(int idx){
     if(idx<0||idx>=(int)g_tracks.size()) return;
@@ -1036,20 +882,10 @@ static void StartFileRename(int idx){
 static void StartPlaylistNameEdit(int mode,int pl){ g_editArtist=true; g_editMode=mode; g_editTrack=pl; g_editBuf=(mode==3&&pl>=0&&pl<(int)g_playlists.size())?g_playlists[(size_t)pl].name:L"";
     if(mode==4||mode==5){ std::wstring c=Config::Trim(PlatformClipboardText()); if(IsUrlText(c)&&c.size()<600) g_editBuf=c; } }   // link na area de transferencia ja vem colado
 static void CancelArtistEdit(){ g_editArtist=false; g_editTrack=-1; g_editBuf.clear(); g_editMode=0; }
-// host: 6 = porta, 7 = PIN, 8 = nome do PC
-static void StartHostEdit(int mode){ g_editArtist=true; g_editMode=mode; g_editTrack=-1; g_editBuf=mode==6?std::to_wstring(g_cfg.hostPort):(mode==7?g_cfg.hostPin:g_cfg.hostName); }
 static void CommitArtistEdit(){
     std::wstring s=g_editBuf;
     while(!s.empty()&&(s.back()==L' '||s.back()==L'\r'||s.back()==L'\n')) s.pop_back();
     if(g_editMode==1){ RenameTrackFile(g_editTrack,s); CancelArtistEdit(); return; }
-    if(g_editMode>=6&&g_editMode<=8){   // host: porta / PIN / nome
-        int mode=g_editMode; CancelArtistEdit(); std::wstring v=Config::Trim(s);
-        if(mode==6){ int p=_wtoi(v.c_str()); if(p<1024||p>65535){ SetStatus(L"Porta: use um número de 1024 a 65535.",3200); return; } g_cfg.hostPort=p; }
-        else if(mode==7){ bool ok=v.size()>=4&&v.size()<=12; for(wchar_t c:v) if(c<L'0'||c>L'9') ok=false; if(!ok){ SetStatus(L"PIN: só números, de 4 a 12 dígitos.",3200); return; } g_cfg.hostPin=v; }
-        else g_cfg.hostName=v.size()>40?v.substr(0,40):v;
-        g_cfg.Save(); if(HostRunningNow()){ HostStopNow(); HostStartFromCfg(); }
-        SetStatus(mode==6?L"Porta salva.":mode==7?L"PIN salvo.":L"Nome salvo.",2200); BuildLayout(); return;
-    }
     if(g_editMode==2){
         int pi=CreatePlaylistSafe(s.empty()?L"Playlist":s); CancelArtistEdit();
         if(pi>=0){
@@ -1135,7 +971,6 @@ static void OpenPlaylistCtxMenu(int pl,int x,int y){   // menu de um card de pla
     int on=0; for(auto& e:p.entries) if(!e.url.empty()&&e.path.empty()) ++on;
     if(on>0){ l.push_back(L"Baixar as "+std::to_wstring(on)+L" músicas online"); a.push_back(CA_PL_DLALL); d.push_back(false); }
     l.push_back(p.mode.empty()?L"Modo online: padrão das configurações":(p.mode==L"download"?L"Modo online: baixar":L"Modo online: streaming")); a.push_back(CA_PL_MODE); d.push_back(false);
-    l.push_back(HostPlLabel(p.slug)); a.push_back(CA_PL_HOST); d.push_back(false);
     l.push_back(L"Renomear..."); a.push_back(CA_PL_RENAME); d.push_back(false);
     l.push_back(L"Excluir playlist"); a.push_back(CA_PL_DELETE); d.push_back(true);
     OpenCtxMenuGeneric(x,y,CTX_PLAYLIST,pl,l,a,d,(int)S(280));
@@ -1246,115 +1081,13 @@ static void RemoveTrackFromOpenPlaylist(int track){
 }
 #include "app_online_b.h"
 #include "app_online_c.h"
-#include "host_server.h"
-// ---- Host: cola entre a UI e o servidor -----------------------------------------
-static std::wstring g_hostReq;   // pedido de pareamento em confirmacao na tela
-static std::string AccentHex(){ char b[16]; snprintf(b,sizeof b,"#%02x%02x%02x",GetRValue(g_theme.accent),GetGValue(g_theme.accent),GetBValue(g_theme.accent)); return b; }
-static bool HostRunningNow(){ return host::Running(); }
-// Biblioteca que o Host publica: com uma playlist aberta (g_view 2) e sem a biblioteca guardada, g_tracks e a
-// playlist; nesse caso usa a ultima biblioteca conhecida (as playlists sao publicadas do mesmo jeito).
-static std::vector<Track> g_hostLib; static bool g_hostLibOk=false;
-static const std::vector<Track>* HostLibNow(){ if(g_libCached) return &g_libTracks; if(g_view!=2) return &g_tracks; return g_hostLibOk?&g_hostLib:nullptr; }
-static void HostPublishNow(){
-    const std::vector<Track>* lib=HostLibNow();
-    if(lib&&lib!=&g_hostLib){ g_hostLib=*lib; g_hostLibOk=true; }
-    static const std::vector<Track> vazio;
-    // playlist com pasta vinculada: o celular recebe tambem as musicas da pasta (o app mostra as duas coisas)
-    std::vector<Playlist> pls=g_playlists;
-    std::map<std::wstring,const Track*> known;   // titulo/artista ja lidos (biblioteca e playlist aberta): sem ler tag de novo
-    for(auto& t:g_hostLib) known[t.path]=&t;
-    if(g_view==2) for(auto& t:g_tracks) known[t.path]=&t;
-    for(auto& p:pls){
-        if(p.folder.empty()||!Config::DirExists(p.folder)) continue;
-        std::set<std::wstring> have; for(auto& e:p.entries) if(!e.path.empty()) have.insert(e.path);
-        std::vector<PlEntry> extra;
-        WalkFiles(p.folder,[&](const std::filesystem::path& f){
-            if(!IsAudioExt(LowerExt(f))) return; std::wstring w=f.wstring(); if(!have.insert(w).second) return;
-            PlEntry e; e.path=w; e.file=f.filename().wstring();
-            auto k=known.find(w); if(k!=known.end()){ e.title=k->second->title; e.artist=k->second->artist; }
-            extra.push_back(e);
-        });
-        std::sort(extra.begin(),extra.end(),[](const PlEntry& a,const PlEntry& b){ return _wcsicmp(a.file.c_str(),b.file.c_str())<0; });
-        p.entries.insert(p.entries.begin(),extra.begin(),extra.end());
-    }
-    host::Publish(lib?*lib:vazio,pls);
-}
-// Impressao digital do que o Host mostra: caminho, titulo, artista, capa e duracao de cada faixa e de cada
-// entrada das playlists. Renomear, editar ou trocar faixa (mesmo sem mudar a quantidade) republica.
-static unsigned long long HostFingerprint(){
-    unsigned long long h=1469598103934665603ULL;
-    auto mix=[&](const std::wstring& w){ for(wchar_t c:w){ h^=(unsigned long long)c; h*=1099511628211ULL; } h^=0xFF; h*=1099511628211ULL; };
-    auto num=[&](long long v){ h^=(unsigned long long)v; h*=1099511628211ULL; };
-    const std::vector<Track>* lib=HostLibNow(); num(lib?(long long)lib->size():-1);
-    if(lib) for(auto& t:*lib){ mix(t.path); mix(t.title); mix(t.artist); mix(t.coverPath); num(t.durSec); }
-    num((long long)g_playlists.size()); num((long long)g_hostFolderGen);
-    for(auto& p:g_playlists){ mix(p.slug); mix(p.name); mix(p.folder); num((long long)p.entries.size()); for(auto& e:p.entries){ mix(e.path); mix(e.url); mix(e.play); mix(e.title); mix(e.artist); mix(e.thumb); num(e.dur); } }
-    return h;
-}
-static host::Options HostOptsFromCfg(){ host::Options o; o.port=g_cfg.hostPort; o.lanOk=g_cfg.hostLan; o.lan6=g_cfg.hostIPv6; o.pin=WideToUtf8(g_cfg.hostPin); o.name=g_cfg.hostName; o.accent=AccentHex(); o.onlineOk=g_cfg.hostOnline; o.qrConfirm=g_cfg.hostQrConfirm; return o; }
-static bool HostStartFromCfg(){
-    std::string err=host::Start(HostOptsFromCfg());
-    if(!err.empty()){ SetStatus(L"Host: "+Utf8ToWide(err),4500); return false; }
-    HostPublishNow(); if(g_cfg.hostTunnel) host::TunnelStart(g_cfg.hostPort);
-    SetStatus(L"Host ligado na porta "+std::to_wstring(g_cfg.hostPort)+L".",3000); return true;
-}
-static void HostStopNow(){ host::Stop(); SetStatus(L"Host desligado.",2500); }
-static void HostToggle(){
-    if(host::Running()){ HostStopNow(); g_cfg.hostOn=false; g_cfg.Save(); return; }
-    if(g_cfg.hostPin.empty()){ SetStatus(L"Defina um PIN (4 a 12 números) antes de ligar o Host.",3500); return; }
-    g_cfg.hostOn=HostStartFromCfg(); g_cfg.Save();
-}
-static void HostAskPair(const std::wstring& reqId);
-// Proximo pedido de vinculo esperando (o mais antigo), se nao tiver outro dialogo aberto.
-static void HostNextPending(){
-    if(g_confirmOpen) return;
-    host::View v=host::GetView(); const host::PairReq* best=nullptr;
-    for(auto& q:v.pending) if(!best||q.created<best->created) best=&q;
-    if(best) HostAskPair(Utf8ToWide(best->id));
-}
-static void HostTick(){
-    static unsigned long long last=0; static ULONGLONG lastMs=0;
-    if(!host::Running()) return;
-    ULONGLONG now=GetTickCount64(); if(now-lastMs<2000) return; lastMs=now;
-    unsigned long long f=HostFingerprint(); if(f!=last){ last=f; HostPublishNow(); }
-    if(g_confirmOpen&&g_confirmKind==2){   // pedido na tela expirou ou ja foi respondido pelo painel: fecha e mostra o proximo
-        host::PairReq q=host::FindReq(WideToUtf8(g_hostReq));
-        if(q.id.empty()||q.estado!=0){ g_confirmOpen=false; g_confirmKind=0; g_hostReq.clear(); SetStatus(L"O pedido de vínculo expirou.",2500); }
-    }
-    HostNextPending();
-}
-static void HostAskPair(const std::wstring& reqId){
-    host::PairReq q=host::FindReq(WideToUtf8(reqId)); if(q.id.empty()||q.estado!=0) return;
-    if(g_confirmOpen) return;   // ja tem um dialogo na tela; o HostTick mostra este quando ele fechar
-    g_hostReq=reqId; g_confirmOpen=true; g_confirmKind=2; g_confirmTrack=-1;
-    g_confirmText=L"\""+Utf8ToWide(q.name)+L"\" ("+Utf8ToWide(q.ip)+(q.viaTunnel?L", pela internet":L", rede local")+(q.viaQr?L", pelo QR":L"")+L") quer se conectar. Aceitando, ele não vê nada até você liberar a biblioteca ou hostear playlists.";
-}
-static void HostCopy(bool tunnel){
-    std::string u=tunnel?host::TunnelUrl():host::LanUrl();
-    if(u.empty()){ SetStatus(tunnel?(host::Running()?L"O link do túnel ainda não está pronto (ele é testado antes de aparecer).":L"Ligue o Host primeiro."):(host::Running()?L"Sem link de rede local (ligue REDE LOCAL).":L"Ligue o Host primeiro."),3500); return; }
-    if(PlatformSetClipboardText(Utf8ToWide(u))) SetStatus(L"Link copiado: "+Utf8ToWide(u),3500); else SetStatus(L"Não consegui copiar. Link: "+Utf8ToWide(u),6000);
-}
-static void HostSetOnline(bool on){ g_cfg.hostOnline=on; g_cfg.Save(); host::SetOptions(g_cfg.hostOnline,g_cfg.hostQrConfirm); SetStatus(on?L"O celular pode buscar e ouvir online (o PC faz o trabalho).":L"Online no celular desligado.",2800); }
-static void HostSetQrConfirm(bool on){ g_cfg.hostQrConfirm=on; g_cfg.Save(); host::SetOptions(g_cfg.hostOnline,g_cfg.hostQrConfirm); SetStatus(on?L"Vincular pelo QR agora também pede ACEITAR aqui no PC.":L"Vincular pelo QR não pede confirmação no PC (o QR só aparece na sua tela e vale uma vez).",3500); }
-static void HostSetIpv6(bool on){ g_cfg.hostIPv6=on; g_cfg.Save(); if(host::Running()){ HostStopNow(); HostStartFromCfg(); } SetStatus(on?L"IPv6 ligado (só rede local: link-local, ULA ou o mesmo /64).":L"IPv6 desligado: só IPv4 e túnel.",3200); }
-static void HostConfirm(bool ok){
-    bool valeu=!g_hostReq.empty()&&host::Approve(WideToUtf8(g_hostReq),ok); g_hostReq.clear();
-    if(!valeu) SetStatus(L"Esse pedido expirou: peça para o celular tentar de novo.",3500);
-    else SetStatus(ok?L"Dispositivo aceito. Libere no painel HOST o que ele pode ouvir.":L"Pedido recusado.",3000);
-}
-static void HostMakeHtml(){ std::wstring p=host::WriteConnectHtml(); if(p.empty()){ SetStatus(L"Não consegui gravar o arquivo.",3000); return; } SetStatus(L"Remix-conectar.html gravado na pasta do Remix: mande pelo WhatsApp.",4500); PlatformOpenFolder(Config::BaseDir()); }
-static std::wstring HostPlLabel(const std::wstring& slug){ return host::Targets(slug).empty()?L"Hostear no celular":L"Parar de hostear no celular"; }
-static std::string HostTargetsOf(const std::wstring& slug){ return host::Targets(slug); }
-static void HostTogglePlaylist(int pl){ if(pl<0||pl>=(int)g_playlists.size()) return; const std::wstring& slug=g_playlists[(size_t)pl].slug; bool on=host::Targets(slug).empty(); host::SetTargets(slug,on?"ALL":""); HostPublishNow(); SetStatus(on?L"Playlist hosteada para todos os dispositivos (ajuste no painel HOST).":L"Playlist não aparece mais nos celulares.",3200); }
 static void ConfirmYes(){
     int t=g_confirmTrack; int kind=g_confirmKind; g_confirmOpen=false; g_confirmKind=0;
-    if(kind==2){ HostConfirm(true); return; }
     if(kind==1){
-        if(t>=0&&t<(int)g_playlists.size()) host::SetTargets(g_playlists[(size_t)t].slug,"");   // playlist nova com o mesmo nome nao herda o "hostear"
         bool wasOpen=(g_openPl==t); DeletePlaylistDir(t);
         if(wasOpen){ g_openPl=-1; EnterLibraryView(); } else if(g_openPl>t) g_openPl--;
         if(g_openPl>=0&&g_openPl<(int)g_playlists.size()) g_cfg.openPlaylist=g_playlists[(size_t)g_openPl].slug;
-        SetStatus(L"Playlist excluída.",2000); if(host::Running()) HostPublishNow();
+        SetStatus(L"Playlist excluída.",2000);
     } else DeleteTrack(t);
     BuildLayout();
 }
@@ -1431,9 +1164,6 @@ static void HandleEvent(int type,const std::wstring& s,int n){
     case EV_WEB_DOWNLOAD_DONE: ConsumeWebDownload(); break;
     case EV_THUMBS_INVALIDATE: PlatformClearThumbs(); break;
     case EV_COMMAND: HandleCommand(s); break;
-    case EV_HOST_PEDIDO: HostAskPair(s); break;
-    case EV_HOST_STATUS: SetStatus(s,n?6000:4000); break;
-    case EV_STEMS: OnStemsEvent(s,n); break;
     case EV_TRANSCODED: OnTranscoded(s,(unsigned)n); break;
     case EV_PICK_FOLDER: if(!s.empty()) SwitchFolder(s); break;
     case EV_PICK_IMAGE: ApplyCoverPick(n,s); break;
@@ -1485,10 +1215,9 @@ static void Tick(float dt){
     if(g_hiddenToBg&&g_bgAutoQuit&&!g_player.playing&&!g_converting&&!g_userPaused){ g_bgIdleSec+=dt; if(g_bgIdleSec>3.f){ g_bgIdleSec=0; PlatformClose(); return; } }
     else g_bgIdleSec=0;
     if(g_player.playing) g_userPaused=false;
-    HostTick();
     if(g_showSplash){ if(GetTickCount64()-g_splashStart>=SPLASH_MS) g_showSplash=false; }
     else {
-        ConsumeAutoScan(); PollFolderWatch(); PollLinkedFolders(); UpdateStreamQueue(); TickJournal();
+        ConsumeAutoScan(); PollFolderWatch(); UpdateStreamQueue(); TickJournal();
         float sm=.4f+(g_cfg.ledSpeed/100.f)*1.6f;
         float k=dt/0.04f;
         if(g_player.playing&&g_cfg.artShape==L"cd")g_rotation+=1.2f*sm*k*(g_cfg.cdSpeed/100.f);
@@ -1514,17 +1243,14 @@ static void CoreInit(){
     ExtraFormatsEnabled()=PlatformHaveFfmpeg();
     Player::GlobalInit();
     Player::SetEq(g_cfg.eq,g_cfg.eqOn);
-    ApplyFxNow();
     LoadPlaylists();
     g_shortcutLines={ L"Espaço: tocar / pausar", L"← / →: anterior / próxima", L"↑ / ↓ ou + / -: volume", L"M: mudo   R: reinicia a faixa",
                       L"Del: excluir (lixeira)   F2: renomear arquivo", L"Ctrl+↑ / Ctrl+↓: mover na ordem manual", L"Botão direito numa faixa: menu", L"Esc: fecha painéis",
                       L"Fechar a janela tocando: continua em 2º plano (abra o app de novo para voltar)", L"Ctrl+Q: sair de vez" };
     { std::wstring msg=OnlineStartupCleanup(g_lastOnlineUrl,g_lastOnlineTitle); if(!msg.empty()) SetStatus(msg,5000); }   // restos de download interrompido
-    if(g_cfg.hostOn&&!g_cfg.hostPin.empty()) HostStartFromCfg();   // host ligado na ultima vez: volta sozinho
 }
 static void CoreShutdown(){
     g_cfg.Save();
-    host::Stop();
     PlatformWatchStop();
     if(g_waveThread.joinable())g_waveThread.detach();
     if(g_scanThread.joinable())g_scanThread.detach();

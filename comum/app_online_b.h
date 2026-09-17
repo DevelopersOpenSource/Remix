@@ -21,45 +21,7 @@ static void RefreshOpenPlaylist(){   // rele a playlist aberta sem perder a rola
     if(g_view!=2||g_openPl<0||g_openPl>=(int)g_playlists.size()) return;
     int sc=g_listScroll; OpenPlaylistView(g_openPl); g_listScroll=sc; BuildLayout();
 }
-static void AfterPlaylistChange(int pl){ if(g_view==2&&g_openPl==pl) RefreshOpenPlaylist(); else { RecountPlaylist(pl); BuildLayout(); } }
-// Pasta vinculada "sempre atualizada" de verdade: o monitor do sistema so olha a pasta da biblioteca, entao
-// a cada ~3 s uma thread compara a assinatura das pastas vinculadas (a da playlist aberta, ou todas nos
-// cards). Mudou: a playlist aberta e relida (mantendo a rolagem) e os cards recontam.
-struct LinkedFolderPoll { std::mutex m; std::map<std::wstring,std::string> result, known; std::atomic<bool> busy{false}; ULONGLONG last=0; };
-static LinkedFolderPoll& LFP(){ static LinkedFolderPoll* p=new LinkedFolderPoll(); return *p; }
-static void PollLinkedFolders(){
-    auto& lp=LFP();
-    std::map<std::wstring,std::string> got;
-    { std::lock_guard<std::mutex> lk(lp.m); got.swap(lp.result); }
-    for(auto& kv:got){
-        auto k=lp.known.find(kv.first);
-        bool changed=k!=lp.known.end()&&k->second!=kv.second;
-        lp.known[kv.first]=kv.second;
-        if(!changed) continue;
-        for(size_t i=0;i<g_playlists.size();++i){
-            if(g_playlists[i].folder!=kv.first) continue;
-            if(g_view==2&&g_openPl==(int)i) RefreshOpenPlaylist(); else RecountPlaylist((int)i);
-        }
-        g_hostFolderGen++;   // o Host (se ligado) republica no proximo HostTick
-        BuildLayout();
-    }
-    ULONGLONG now=GetTickCount64(); if(lp.busy.load()||now-lp.last<3000) return;
-    std::vector<std::wstring> folders;
-    auto add=[&](const std::wstring& f){ if(!f.empty()&&std::find(folders.begin(),folders.end(),f)==folders.end()) folders.push_back(f); };
-    bool olhando=false;
-    if(g_view==2&&g_openPl>=0&&g_openPl<(int)g_playlists.size()){ add(g_playlists[(size_t)g_openPl].folder); olhando=!folders.empty(); }
-    else if(g_view==1){ for(auto& p:g_playlists) add(p.folder); olhando=!folders.empty(); }
-    if(HostRunningNow()) for(auto& p:g_playlists) if(!p.folder.empty()&&!HostTargetsOf(p.slug).empty()) add(p.folder);   // hosteada no celular
-    if(folders.empty()){ lp.last=now; return; }
-    if(now-lp.last<(ULONGLONG)(olhando?3000:10000)) return;
-    lp.last=now; lp.busy=true;
-    std::thread([folders]{
-        std::map<std::wstring,std::string> r;
-        RemixSafe("pasta vinculada",[&]{ for(auto& f:folders) r[f]=FolderAudioSignature(f); });
-        auto& q=LFP(); { std::lock_guard<std::mutex> lk(q.m); for(auto& kv:r) q.result[kv.first]=kv.second; }
-        q.busy=false; AppPost(EV_REDRAW);
-    }).detach();
-}
+static void AfterPlaylistChange(int pl){ if(g_view==2&&g_openPl==pl) RefreshOpenPlaylist(); else BuildLayout(); }
 static int AddOnlineItemsToPlaylist(int pl,const std::vector<OTrack>& items){
     if(pl<0||pl>=(int)g_playlists.size()) return 0;
     int added=0; std::vector<std::pair<std::wstring,std::wstring>> th;
@@ -92,7 +54,6 @@ static void OnDownloadJob(int id){
         for(auto& tr:g_libTracks) if(tr.path==t.url){ tr.path=fin; tr.url=t.url; }
         if(g_nowPlayingValid&&g_nowPlaying.path==t.url){ g_nowPlaying.path=fin; g_nowPlaying.url=t.url; }
         AddDownloadedToLibrary(fin);
-        for(size_t i=0;i<g_playlists.size();++i){ bool has=false; for(auto& e:g_playlists[i].entries) if(e.url==t.url){ has=true; break; } if(has) RecountPlaylist((int)i); }   // online virou arquivo: o card reconta
         SetStatus(L"Baixada: "+(t.title.empty()?std::filesystem::path(fin).filename().wstring():t.title)+L"   →   "+std::filesystem::path(fin).parent_path().wstring(),4500);
     } else if(st==3){
         std::wstring e; { std::lock_guard<std::mutex> lk(j->m); e=j->err; }

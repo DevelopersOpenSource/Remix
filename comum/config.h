@@ -98,17 +98,6 @@ inline bool WriteAllUtf8Lines(const std::wstring& path, const std::vector<std::w
 struct Config {
     std::wstring musicFolder;
     std::wstring theme = L"azul";
-    int uiStyle = 1;                      // estilo da interface: 0 classico, 1 limpo, 2 spotify+LED (app_ui.h)
-    // Host (docs/HOST.md): o Remix vira um servidor para o celular.
-    bool hostOn = false;                  // liga o servidor ao abrir
-    int hostPort = 49875;                 // porta TCP (1024..65535); 49875 = fora do que os servicos comuns usam
-    std::wstring hostPin;                 // 4 a 12 digitos, obrigatorio para ligar
-    bool hostTunnel = true;               // sobe o tunel Cloudflare (cloudflared) junto
-    bool hostLan = true;                  // aceita a rede local (false = so 127.0.0.1, so pelo tunel)
-    std::wstring hostName;                // nome mostrado no celular (vazio = nome do PC)
-    bool hostOnline = true;               // o celular pode buscar/ouvir online (o PC roda yt-dlp + ffmpeg)
-    bool hostQrConfirm = false;           // vinculo pelo QR tambem pede ACEITAR no PC
-    bool hostIPv6 = false;                // aceita IPv6 da rede local (link-local, ULA ou o mesmo /64)
     std::wstring displayMode = L"normal"; // normal | vertical  (layout)
     std::wstring artShape = L"square";    // square | cd       (aparencia da capa)
     int cdSpeed = 33;                     // velocidade de giro do CD, % da antiga (100 = original; padrao ~3x mais lento)
@@ -117,10 +106,6 @@ struct Config {
     int ledSpeed = 75;
     std::wstring ledEffect = L"respiracao";
     int volume = 80;
-    // Efeitos de audio (0 = desligado, 1..3 = intensidade) e modo dos stems ("" = musica completa;
-    // vocal, instrumental, bateria, baixo, outros). Slow e speed nao valem juntos.
-    int fxSlow = 0, fxSpeed = 0, fxReverb = 0, fxBass = 0, fx8d = 0;
-    std::wstring stemMode;
     bool shuffle = false;
     bool repeat = false;
 
@@ -413,16 +398,6 @@ struct Config {
             if (k == L"MusicFolder") musicFolder = FromPortable(v);
             else if (k == L"Theme") theme = v;
             else if (k == L"DisplayMode") displayMode = v;
-            else if (k == L"Style") uiStyle = _wtoi(v.c_str());
-            else if (k == L"HostOn") hostOn = (v == L"1");
-            else if (k == L"HostPort") hostPort = _wtoi(v.c_str());
-            else if (k == L"HostPin") hostPin = v;
-            else if (k == L"HostTunnel") hostTunnel = (v != L"0");
-            else if (k == L"HostLan") hostLan = (v != L"0");
-            else if (k == L"HostName") hostName = v;
-            else if (k == L"HostOnline") hostOnline = (v != L"0");
-            else if (k == L"HostQrConfirm") hostQrConfirm = (v == L"1");
-            else if (k == L"HostIPv6") hostIPv6 = (v == L"1");
             else if (k == L"ArtShape") artShape = v;
             else if (k == L"CdSpeed") cdSpeed = _wtoi(v.c_str());
             else if (k == L"ListMode") listMode = _wtoi(v.c_str());
@@ -430,12 +405,6 @@ struct Config {
             else if (k == L"Speed") ledSpeed = _wtoi(v.c_str());
             else if (k == L"Effect") ledEffect = v;
             else if (k == L"Volume") volume = _wtoi(v.c_str());
-            else if (k == L"FxSlow") fxSlow = _wtoi(v.c_str());
-            else if (k == L"FxSpeed") fxSpeed = _wtoi(v.c_str());
-            else if (k == L"FxReverb") fxReverb = _wtoi(v.c_str());
-            else if (k == L"FxBass") fxBass = _wtoi(v.c_str());
-            else if (k == L"Fx8D") fx8d = _wtoi(v.c_str());
-            else if (k == L"StemMode") stemMode = (v == L"vocal" || v == L"instrumental" || v == L"bateria" || v == L"baixo" || v == L"outros") ? v : L"";
             else if (k == L"Shuffle") shuffle = (v == L"1");
             else if (k == L"Repeat") repeat = (v == L"1");
             else if (k == L"UIScale") uiScale = _wtoi(v.c_str());
@@ -496,9 +465,6 @@ struct Config {
         }
         if (!hkNovo) MigrateHotkeys();
         // Migracao do formato antigo: "square"/"cd"/"vertical" viviam num campo so.
-        uiStyle = std::max(0, std::min(2, uiStyle));
-        if (hostPort < 1024 || hostPort > 65535) hostPort = 49875;
-        { bool okPin = hostPin.size() >= 4 && hostPin.size() <= 12; for (wchar_t c : hostPin) if (c < L'0' || c > L'9') okPin = false; if (!okPin) hostPin.clear(); }
         if (displayMode == L"square") { displayMode = L"normal"; artShape = L"square"; }
         else if (displayMode == L"cd") { displayMode = L"normal"; artShape = L"cd"; }
         else if (displayMode == L"vertical") { if (artShape != L"square") artShape = L"cd"; }
@@ -519,8 +485,6 @@ struct Config {
         ledBrightness = std::max(0, std::min(100, ledBrightness));
         ledSpeed = std::max(0, std::min(100, ledSpeed));
         volume = std::max(0, std::min(100, volume));
-        for (int* f : { &fxSlow, &fxSpeed, &fxReverb, &fxBass, &fx8d }) *f = std::max(0, std::min(3, *f));
-        if (fxSlow && fxSpeed) fxSpeed = 0;
         for (int& g : eq) g = std::max(-12, std::min(12, g));
         if (winW < 0) winW = 0;
         if (winH < 0) winH = 0;
@@ -534,27 +498,10 @@ struct Config {
         ls.push_back(L"MusicFolder=" + ToPortable(musicFolder));
         ls.push_back(L"Theme=" + theme);
         ls.push_back(L"DisplayMode=" + displayMode);
-        swprintf(b, 64, L"Style=%d", uiStyle); ls.push_back(b);
-        ls.push_back(L"[Host]");
-        swprintf(b, 64, L"HostOn=%d", hostOn ? 1 : 0); ls.push_back(b);
-        swprintf(b, 64, L"HostPort=%d", hostPort); ls.push_back(b);
-        ls.push_back(L"HostPin=" + hostPin);
-        swprintf(b, 64, L"HostTunnel=%d", hostTunnel ? 1 : 0); ls.push_back(b);
-        swprintf(b, 64, L"HostLan=%d", hostLan ? 1 : 0); ls.push_back(b);
-        ls.push_back(L"HostName=" + hostName);
-        swprintf(b, 64, L"HostOnline=%d", hostOnline ? 1 : 0); ls.push_back(b);
-        swprintf(b, 64, L"HostQrConfirm=%d", hostQrConfirm ? 1 : 0); ls.push_back(b);
-        swprintf(b, 64, L"HostIPv6=%d", hostIPv6 ? 1 : 0); ls.push_back(b);
         ls.push_back(L"ArtShape=" + artShape);
         swprintf(b, 64, L"CdSpeed=%d", cdSpeed); ls.push_back(b);
         swprintf(b, 64, L"ListMode=%d", listMode ? 1 : 0); ls.push_back(b);
         swprintf(b, 64, L"Volume=%d", volume); ls.push_back(b);
-        swprintf(b, 64, L"FxSlow=%d", fxSlow); ls.push_back(b);
-        swprintf(b, 64, L"FxSpeed=%d", fxSpeed); ls.push_back(b);
-        swprintf(b, 64, L"FxReverb=%d", fxReverb); ls.push_back(b);
-        swprintf(b, 64, L"FxBass=%d", fxBass); ls.push_back(b);
-        swprintf(b, 64, L"Fx8D=%d", fx8d); ls.push_back(b);
-        ls.push_back(L"StemMode=" + stemMode);
         ls.push_back(L"Shuffle="); ls.back() += shuffle ? L"1" : L"0";
         ls.push_back(L"Repeat=");  ls.back() += repeat ? L"1" : L"0";
         swprintf(b, 64, L"UIScale=%d", uiScale); ls.push_back(b);

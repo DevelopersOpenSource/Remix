@@ -41,16 +41,13 @@ static void StartDownloads(std::vector<OTrack> items,const std::wstring& plName)
     if(g_cfg.askDlFolder){ g_pendingDl={items,plName}; SetStatus(L"Escolha a pasta para baixar…",3000); PlatformPickFolderFor(EV_PICK_DLONCE,0); }
     else QueueDownloadsInto(items,plName,OnlineDownloadBase());
 }
-// "N faixas" conta tudo o que a playlist mostra (pasta vinculada + avulsas + online, sem repetir);
-// "· M online" diz quantas dessas ainda sao online (nao baixadas).
 static std::wstring PlaylistCardSubtitle(int pi){
-    const Playlist& p=g_playlists[(size_t)pi]; size_t n=0,on=0;
-    auto it=g_plCount.find(p.slug);
-    if(it!=g_plCount.end()&&it->second.ok){ n=it->second.total; on=it->second.online; }
-    else { for(auto& e:p.entries) if(!e.url.empty()&&e.path.empty()) ++on; n=p.entries.size(); }
+    const Playlist& p=g_playlists[(size_t)pi]; size_t on=0;
+    for(auto& e:p.entries) if(!e.url.empty()&&e.path.empty()) ++on;
+    size_t n=p.entries.size();
     std::wstring s=std::to_wstring(n)+(n==1?L" faixa":L" faixas");
     if(on) s+=L" · "+std::to_wstring(on)+L" online";
-    if(!p.folder.empty()) s+=L" · pasta vinculada";
+    if(!p.folder.empty()) s+=L" + pasta vinculada";
     return s;
 }
 static const Playlist* OpenPlaylistPtr(){ return (g_view==2&&g_openPl>=0&&g_openPl<(int)g_playlists.size())?&g_playlists[(size_t)g_openPl]:nullptr; }
@@ -125,7 +122,6 @@ static void OnStreamReady(int id,int durSec){
     auto j=FindStreamId(id); if(!j) return;
     if(g_player.OpenStream(j->st,(unsigned)std::max(0,durSec))){
         g_curStreamOpen=true; g_converting=false; g_onlineFailRow=0; ApplyVolume();
-        if(g_resumeMs){ g_player.SeekMs(g_resumeMs); g_resumeMs=0; }   // voltou de um stem para a completa
         if(g_pendingAutoplay) g_player.Play();
     } else {
         g_converting=false; DropStream(j); g_curStreamId=0;

@@ -33,40 +33,21 @@ static void LayoutSettings(int w,int h){
         return rows;
     };
     auto sect=[&](int x,int y,int cw,int hh,const wchar_t*t){ g_setSections.push_back({{x,y,x+cw,y+hh},t}); };
-    // HOST (acesso pelo celular): ligar / painel, porta / PIN / nome, tunel / rede local, linha de estado
-    auto sectHost=[&](int x,int& y,int cw){
-        // ligar/painel; porta/PIN/nome; tunel/rede local; copiar links; online/QR com aceite/IPv6; linha de estado
-        sect(x,y,cw,318,L"HOST (ACESSO PELO CELULAR)");
-        int hw=(cw-50)/2, tw=(cw-60)/3;
-        R_setHostOn={x+20,y+52,x+20+hw,y+86}; R_setHostPanel={x+30+hw,y+52,x+cw-20,y+86};
-        R_setHostPort={x+20,y+96,x+20+tw,y+130}; R_setHostPin={x+30+tw,y+96,x+30+tw*2,y+130}; R_setHostName={x+40+tw*2,y+96,x+cw-20,y+130};
-        R_setHostTunnel={x+20,y+140,x+20+hw,y+174}; R_setHostLan={x+30+hw,y+140,x+cw-20,y+174};
-        R_setHostCopyTun={x+20,y+184,x+20+hw,y+218}; R_setHostCopyLan={x+30+hw,y+184,x+cw-20,y+218};
-        R_setHostOnline={x+20,y+228,x+20+tw,y+262}; R_setHostQrConf={x+30+tw,y+228,x+30+tw*2,y+262}; R_setHostIpv6={x+40+tw*2,y+228,x+cw-20,y+262};
-        y+=338;
-    };
-    // ESTILO: classico / limpo / spotify+LED (3 botoes iguais + uma linha de explicacao)
-    auto sectStyle=[&](int x,int& y,int cw){
-        sect(x,y,cw,124,L"ESTILO DA INTERFACE");
-        int bw=(cw-60)/3;
-        for(int k=0;k<UI_STYLE_COUNT;k++){ int bx=x+20+k*(bw+10); R_settingsStyle[k]={bx,y+52,bx+bw,y+88}; }
-        y+=144;
-    };
     // secoes comuns as duas larguras
     auto sectLibrary=[&](int x,int& y,int cw){
-        sect(x,y,cw,140,L"BIBLIOTECA");   // rotulo (y+50), botoes, caminho da pasta (y+110)
+        sect(x,y,cw,132,L"BIBLIOTECA");
         int bw=(cw-60)/2;
-        R_settingsDefault={x+20,y+68,x+20+bw,y+104}; R_settingsCustom={x+30+bw,y+68,x+cw-20,y+104};
-        y+=160;
+        R_settingsDefault={x+20,y+60,x+20+bw,y+96}; R_settingsCustom={x+30+bw,y+60,x+cw-20,y+96};
+        y+=152;
     };
     auto sectMode=[&](int x,int& y,int cw){
-        sect(x,y,cw,160,L"MODO DE EXIBIÇÃO");   // botoes + velocidade do CD
+        sect(x,y,cw,186,L"MODO DE EXIBIÇÃO");
         int mw3=(cw-60)/3;
         R_settingsModeSquare={x+20,y+58,x+20+mw3,y+94};
         R_settingsModeCd={x+30+mw3,y+58,x+30+mw3*2,y+94};
         R_settingsModeVertical={x+40+mw3*2,y+58,x+cw-20,y+94};
         slider(Z_CD_SPEED,x+20,y+122,cw-110,0,200);
-        y+=180;
+        y+=208;
     };
     auto sectThemes=[&](int x,int& y,int cw){
         sect(x,y,cw,120,L"TEMAS");
@@ -76,9 +57,8 @@ static void LayoutSettings(int w,int h){
     };
     auto sectEffects=[&](int x,int& y,int cw){
         sect(x,y,cw,96,L"EFEITOS");
-        int ew=(cw-60)/3;   // tres chaves iguais
-        R_setParticles={x+20,y+52,x+20+ew,y+86}; R_setGlitch={x+30+ew,y+52,x+30+ew*2,y+86};
-        R_setPerf={x+40+ew*2,y+52,x+cw-20,y+86};
+        R_setParticles={x+20,y+52,x+185,y+86}; R_setGlitch={x+195,y+52,x+320,y+86};
+        R_setPerf={x+330,y+52,x+cw-20,y+86};
         y+=116;
     };
     auto sectColors=[&](int x,int& y,int cw){
@@ -179,7 +159,7 @@ static void LayoutSettings(int w,int h){
     if(wide){
         int colW=(R-L-40)/2, xr=L+colW+40;
         int y=top;
-        sectStyle(L,y,colW); sectHost(L,y,colW); sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
+        sectLibrary(L,y,colW); sectMode(L,y,colW); sectThemes(L,y,colW); sectEffects(L,y,colW);
         sectColors(L,y,colW); sectBackground(L,y,colW); sectPlayback(L,y,colW); sectShortcuts(L,y,colW);
         int ry=top;
         sectOnline(xr,ry,colW); sectScales(xr,ry,colW); sectLed(xr,ry,colW); sectButtons(xr,ry,colW); sectRunner(xr,ry,colW); sectEq(xr,ry,colW);
@@ -187,7 +167,7 @@ static void LayoutSettings(int w,int h){
     } else {
         int cw=R-L;
         int cy=top;
-        sectStyle(L,cy,cw); sectHost(L,cy,cw); sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
+        sectLibrary(L,cy,cw); sectOnline(L,cy,cw); sectMode(L,cy,cw); sectThemes(L,cy,cw); sectEffects(L,cy,cw);
         sectColors(L,cy,cw); sectScales(L,cy,cw); sectLed(L,cy,cw); sectButtons(L,cy,cw); sectRunner(L,cy,cw);
         sectBackground(L,cy,cw); sectPlayback(L,cy,cw); sectEq(L,cy,cw); sectShortcuts(L,cy,cw);
         g_setContentH=cy-py;
@@ -199,9 +179,8 @@ static void LayoutSettings(int w,int h){
 static void BuildLayout(){
     int w=g_winW,h=g_winH;
     R_titlebar={0,0,w,44}; R_close={0,0,0,0}; R_min={0,0,0,0};
-    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_hostBtn={0,0,0,0}; R_fxBtn={0,0,0,0}; R_volIcon={0,0,0,0};
-    R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_cardPlayBtns.clear(); R_themeCircles.clear();
-    g_headerH=0; g_sideW=0;
+    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_volIcon={0,0,0,0};
+    R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_themeCircles.clear();
     R_rowUp.clear(); R_rowDown.clear();
     R_libBar=R_tabTracks=R_tabPlaylists=R_searchBox=R_searchClear=R_plBack=R_plNew={0,0,0,0};
     R_tabOnline=R_plAdd=R_plMode=R_pickDone=R_pickCancel=R_onlineInfo={0,0,0,0};
@@ -246,7 +225,6 @@ static void BuildLayout(){
         g_listScroll=0;
     } else {
         int headerH=SI(56), margin=SI(24);
-        g_headerH=headerH;
         R_heart={w-SI(96)-chrome,SI(12),w-SI(60)-chrome,SI(50)}; R_gear={w-SI(58)-chrome,SI(10),w-SI(14)-chrome,SI(54)};
         R_listBtn={w-SI(152)-chrome,SI(10),w-SI(100)-chrome,SI(54)};
         R_shapeTgl={SI(92),SI(8),SI(92)+(int)S(170),SI(52)};
@@ -256,14 +234,6 @@ static void BuildLayout(){
         int limit=R_listBtn.left-SI(10);
         if(R_folderBtn.right>limit){ R_folderBtn.right=std::max((int)R_folderBtn.left,limit); }
         if(R_folderBtn.right-R_folderBtn.left<SI(40)){ R_folderBtn={0,0,0,0}; if(R_sortBtn.right>limit) R_sortBtn.right=std::max((int)R_sortBtn.left,limit); }
-        {   // HOST: pilula depois da PASTA (some se nao couber; fica nas configuracoes)
-            int hx=(R_folderBtn.right>R_folderBtn.left?R_folderBtn.right:(R_sortBtn.right>R_sortBtn.left?R_sortBtn.right:R_autoTgl.right))+SI(10);
-            R_hostBtn={hx,SI(8),hx+(int)S(78),SI(52)}; if(R_hostBtn.right>limit) R_hostBtn={0,0,0,0};
-        }
-        {   // EFEITOS: pilula depois do HOST (some se nao couber)
-            int fx=(R_hostBtn.right>R_hostBtn.left?R_hostBtn.right:(R_folderBtn.right>R_folderBtn.left?R_folderBtn.right:(R_sortBtn.right>R_sortBtn.left?R_sortBtn.right:R_autoTgl.right)))+SI(10);
-            R_fxBtn={fx,SI(8),fx+(int)S(96),SI(52)}; if(R_fxBtn.right>limit) R_fxBtn={0,0,0,0};
-        }
         R_modeSquare=R_modeCd=R_modeVertical={0,0,0,0}; R_themeCircles.clear();
         float ps=g_cfg.playerScale/100.0f;
         int availH=h-headerH-SI(28);
@@ -276,7 +246,7 @@ static void BuildLayout(){
         R_art={margin+pad,panelY+pad,margin+pad+art,panelY+pad+art};
         int x0=R_art.left;
         int ay=R_art.bottom+SI(30);
-        int wy=UiClassic()?ay+SI(34):ay+SI(38), wb=UiClassic()?wy+SI(38):wy+SI(26);   // estilos novos: onda discreta
+        int wy=ay+SI(34), wb=wy+SI(38);
         R_wavePanel={x0,wy,x0+art,wb};
         int sy2=wb+SI(18);
         R_seek={x0,sy2-9,x0+art,sy2+9};
@@ -291,7 +261,6 @@ static void BuildLayout(){
         R_vol={x0+SI(30),tcy+SI(46),x0+art-SI(44),tcy+SI(52)};
         R_runnerSlider={R_playerPanel.right-SI(22),R_playerPanel.bottom-SI(22),R_playerPanel.right,R_playerPanel.bottom};
         int gx=R_playerPanel.right+SI(18);
-        if(!UiClassic()){ g_sideW=R_playerPanel.right+margin; gx=g_sideW+SI(20); }   // coluna solida + divisoria
         int gw=w-margin-gx;
         if(gw>=SI(280)){
             // barra da biblioteca: abas MUSICAS/PLAYLISTS (ou voltar + nome da playlist) e a busca
@@ -339,7 +308,7 @@ static void BuildLayout(){
                     else { int bw2=(cardW-SI(40))/2; R_plPlay.push_back({x+SI(16),y+cardH-SI(50),x+SI(16)+bw2,y+cardH-SI(16)}); R_plShuf.push_back({x+SI(24)+bw2,y+cardH-SI(50),x+cardW-SI(16),y+cardH-SI(16)}); }
                 }
             } else {
-                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0});
+                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0});
                 R_rowUp.assign(g_tracks.size(),RECT{0,0,0,0}); R_rowDown.assign(g_tracks.size(),RECT{0,0,0,0});
                 if(g_cfg.listMode!=0){
                     int rowH=SI(64);
@@ -353,7 +322,7 @@ static void BuildLayout(){
                         R_cardRects[i]=rr;
                         if(manual){ R_rowUp[i]={rr.right-SI(74),rr.top+SI(6),rr.right-SI(44),rr.top+SI(28)}; R_rowDown[i]={rr.right-SI(74),rr.top+SI(30),rr.right-SI(44),rr.top+SI(52)}; }
                     }
-                } else if(UiClassic()){
+                } else {
                     int cols=gw>=SI(760)?3:(gw>=SI(500)?2:1);
                     g_gridCols=cols;
                     int gapX=SI(20),gapY=SI(18),cardH=SI(225);
@@ -370,28 +339,6 @@ static void BuildLayout(){
                         // so a linha da barra de seek (nao invade os botoes de transporte)
                         R_cardSeekRects[i]={x+SI(180),y+SI(140),x+cardW-SI(22),y+SI(160)};
                         if(manual){ R_rowUp[i]={x+cardW-SI(42),y+SI(50),x+cardW-SI(14),y+SI(72)}; R_rowDown[i]={x+cardW-SI(42),y+SI(76),x+cardW-SI(14),y+SI(98)}; }
-                    }
-                } else {
-                    // Estilos novos: card em pe (capa grande, nome e artista embaixo). O transporte
-                    // fica so no player; sobre a capa aparece um botao de play quando o mouse passa.
-                    int gapX=SI(18),gapY=SI(20);
-                    int cols=std::max(1,(gw+gapX)/(SI(190)+gapX)); if(cols>6) cols=6;
-                    g_gridCols=cols;
-                    int cardW=(gw-(cols-1)*gapX)/cols;
-                    int cover=cardW-SI(20);
-                    int cardH=cover+SI(74);
-                    g_contentH=(int)(((int)g_visible.size()+cols-1)/cols)*(cardH+gapY);
-                    g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
-                    for(size_t vi=0;vi<g_visible.size();++vi){
-                        size_t i=(size_t)g_visible[vi];
-                        int row=(int)vi/cols,col=(int)vi%cols;
-                        int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
-                        if(y>h||y+cardH<gridTop-SI(40)) continue;
-                        R_cardRects[i]={x,y,x+cardW,y+cardH};
-                        R_cardCoverButtons[i]={x+cardW-SI(44),y+SI(14),x+cardW-SI(18),y+SI(40)};
-                        R_cardSeekRects[i]={0,0,0,0};   // sem seek no card: quem arrasta e a barra do player
-                        R_cardPlayBtns[i]={x+SI(10)+cover-SI(52),y+SI(10)+cover-SI(52),x+SI(10)+cover-SI(8),y+SI(10)+cover-SI(8)};
-                        if(manual){ R_rowUp[i]={x+SI(10),y+cover-SI(40),x+SI(38),y+cover-SI(16)}; R_rowDown[i]={x+SI(42),y+cover-SI(40),x+SI(70),y+cover-SI(16)}; }
                     }
                 }
             }
@@ -441,88 +388,6 @@ static bool LayoutActivity(int w,int h,int& waiting,float& pct,std::wstring& tit
 }
 // Geometria da tela de busca online: busca, fontes e resultados em linhas com ▶ ⬇ +.
 static RECT R_onList;
-// Painel EFEITOS (sobreposto): 5 efeitos com nivel 0..3, modos de stem e o estado da separacao.
-static bool StemJobActive(){ auto j=stems::Find(StemKeyCurrent()); int st=j?j->state.load():-1; return st==stems::S_QUEUED||st==stems::S_DOWNLOADING||st==stems::S_SEPARATING; }
-static void LayoutFxPanel(int w,int h){
-    FxPanelUI& p=g_fxp;
-    int bw=std::min((int)S(740),w-24), bh=std::min((int)S(400),h-24), bx=(w-bw)/2, by=(h-bh)/2;
-    p.box={bx,by,bx+bw,by+bh};
-    p.btnClose={bx+bw-SI(46),by+SI(8),bx+bw-SI(10),by+SI(44)};
-    int pad=SI(18), gap=SI(10), y=by+SI(76);
-    int cw=(bw-2*pad-4*gap)/5;
-    for(int i=0;i<5;i++){ int x=bx+pad+i*(cw+gap); p.fx[i]={x,y,x+cw,y+SI(52)}; }
-    y+=SI(52)+SI(12);
-    p.btnClear={bx+pad,y,bx+pad+(int)S(190),y+SI(34)};
-    y+=SI(34)+SI(44);
-    int sw=(bw-2*pad-5*gap)/6;
-    for(int i=0;i<6;i++){ int x=bx+pad+i*(sw+gap); p.stem[i]={x,y,x+sw,y+SI(44)}; }
-    y+=SI(44)+SI(14);
-    p.btnCancel={bx+bw-pad-(int)S(120),y,bx+bw-pad,y+SI(34)};
-    p.info={bx+pad,y,p.btnCancel.left-SI(12),by+bh-SI(12)};
-}
-// Texto do estado dos stems da faixa atual (duas linhas).
-static void FxStemStatus(std::wstring& l1,std::wstring& l2){
-    l1.clear(); l2.clear();
-    if(!stems::InstalledCached()){ l1=L"Separador não instalado: rode o instalador de dependências e escolha STEMS"; l2=L"(Demucs, código aberto, ~1 GB). Os efeitos funcionam sem ele."; return; }
-    if(g_current<0||g_current>=(int)g_tracks.size()){ l1=L"Toque uma música para separar."; return; }
-    std::wstring key=StemKeyCurrent();
-    if(stems::Complete(key)){ l1=L"Stems desta música prontos (ficam guardados): trocar de modo é na hora."; return; }
-    auto j=stems::Find(key); int st=j?j->state.load():-1;
-    if(st==stems::S_QUEUED) l1=L"Na fila para separar...";
-    else if(st==stems::S_DOWNLOADING) l1=L"Baixando o áudio para separar...";
-    else if(st==stems::S_SEPARATING){ l1=L"Separando: "+std::to_wstring(j->pct.load())+L"%"; l2=L"Na primeira vez leva cerca de metade da duração da música; enquanto isso toca a completa."; }
-    else if(st==stems::S_FAILED){ std::lock_guard<std::mutex> lk(j->m); l1=L"Falhou: "+j->err; }
-    else if(st==stems::S_CANCELED) l1=L"Separação cancelada.";
-    else l1=StemModeNow()==stems::M_FULL?L"Escolha um modo para separar esta música.":L"Vai separar quando a música tocar.";
-}
-// Painel HOST (sobreposto): estado, botoes, pedidos pendentes, dispositivos, playlists hosteadas.
-static void LayoutHostPanel(int w,int h){
-    host::PanelUI& p=host::PU();
-    if(p.v.version!=host::St().version.load()) p.v=host::GetView();
-    int bw=std::min((int)S(860),w-24), bh=std::min((int)S(700),h-24), bx=(w-bw)/2, by=(h-bh)/2;
-    p.box={bx,by,bx+bw,by+bh};
-    p.btnClose={bx+bw-SI(46),by+SI(12),bx+bw-SI(12),by+SI(46)};
-    int x=bx+SI(18), cw=bw-SI(36), y=by+SI(52), g=SI(8), bhgt=SI(34);
-    int b5=(cw-g*4)/5;
-    auto five=[&](RECT* r[5]){ for(int k=0;k<5;k++){ int xx=x+k*(b5+g); *r[k]={xx,y,k==4?x+cw:xx+b5,y+bhgt}; } y+=bhgt+g; };
-    { RECT* a[5]={&p.btnToggle,&p.btnTunnel,&p.btnNewLink,&p.btnHtml,&p.btnPasta}; five(a); }
-    { RECT* a[5]={&p.btnPort,&p.btnPin,&p.btnName,&p.btnLan,&p.btnIpv6}; five(a); }
-    // faixa do QR: quadrado a esquerda; a direita, estado + copiar + opcoes do QR
-    int band=SI(206), qs=std::min(band,SI(206));
-    p.qrBox={x,y,x+qs,y+qs};
-    int rx=x+qs+SI(16), rw=x+cw-rx, h2=(rw-g)/2;
-    p.info={rx,y,x+cw,y+SI(62)};
-    int ry=y+SI(66);
-    p.btnCopyTun={rx,ry,rx+h2,ry+bhgt}; p.btnCopyLan={rx+h2+g,ry,x+cw,ry+bhgt}; ry+=bhgt+g;
-    p.btnQrMode={rx,ry,rx+h2,ry+bhgt}; p.btnQrNew={rx+h2+g,ry,x+cw,ry+bhgt}; ry+=bhgt+g;
-    p.btnOnline={rx,ry,rx+h2,ry+bhgt}; p.btnQrConfirm={rx+h2+g,ry,x+cw,ry+bhgt};
-    y+=band+SI(10);
-    p.list={bx+SI(8),y,bx+bw-SI(8),by+bh-SI(12)};
-    int listTop=p.list.top, ly=listTop-p.scroll, rowH=SI(34);
-    auto row=[&](){ RECT r={x,ly,x+cw,ly+rowH-SI(6)}; ly+=rowH; return r; };
-    p.accept.clear(); p.deny.clear(); p.revoke.clear(); p.devLib.clear(); p.plHost.clear(); p.plDev.clear(); p.dplOk.clear();
-    ly+=SI(26);                                                        // titulo "pedidos"
-    for(size_t i=0;i<p.v.pending.size();i++){ RECT r=row(); p.deny.push_back({r.right-SI(90),r.top,r.right,r.bottom}); p.accept.push_back({r.right-SI(190),r.top,r.right-SI(98),r.bottom}); }
-    ly+=SI(26);                                                        // titulo "aparelhos"
-    if(p.v.devs.empty()) ly+=rowH;
-    for(size_t i=0;i<p.v.devs.size()&&i<100;i++){ RECT r=row(); p.revoke.push_back({r.right-SI(96),r.top,r.right,r.bottom}); p.devLib.push_back({r.right-SI(96)-SI(8)-SI(150),r.top,r.right-SI(104),r.bottom}); }
-    ly+=SI(26);                                                        // titulo "playlists do PC"
-    if(g_playlists.empty()) ly+=rowH;
-    for(size_t i=0;i<g_playlists.size()&&i<200;i++){
-        RECT r=row(); p.plHost.push_back({r.right-SI(130),r.top,r.right,r.bottom});
-        std::vector<RECT> chips; std::string t=host::Targets(g_playlists[i].slug);
-        if(!t.empty()&&!p.v.devs.empty()){ int cx=x+SI(16); for(size_t j=0;j<p.v.devs.size()&&j<20;j++){ int cwid=SI(120); if(cx+cwid>x+cw){ cx=x+SI(16); ly+=rowH; } chips.push_back({cx,ly,cx+cwid,ly+rowH-SI(8)}); cx+=cwid+SI(6); } ly+=rowH; }
-        p.plDev.push_back(chips);
-    }
-    ly+=SI(26);                                                        // titulo "playlists dos aparelhos"
-    if(p.v.dpls.empty()) ly+=rowH;
-    for(size_t i=0;i<p.v.dpls.size()&&i<500;i++){ RECT r=row(); p.dplOk.push_back(p.v.dpls[i].share?RECT{r.right-SI(120),r.top,r.right,r.bottom}:RECT{0,0,0,0}); }
-    p.contentH=ly+p.scroll-listTop;
-    int maxSc=std::max(0,p.contentH-(int)(p.list.bottom-p.list.top)); if(p.scroll>maxSc) p.scroll=maxSc; if(p.scroll<0) p.scroll=0;
-    // QR: texto atual (tunel testado ou rede local) -> so recodifica quando muda
-    bool isTun=false; std::string txt=p.v.running?host::QrUrl(p.qrTunnel,isTun):std::string();
-    if(txt!=p.qrText){ p.qrText=txt; p.qr=qr::Code(); if(!txt.empty()&&!qr::Encode(txt,p.qr,1,1,20)){ p.qr=qr::Code(); } }
-}
 static void LayoutOnline(int w,int h){
     OnlineUI& u=OU();
     int bw=std::min((int)S(860),w-24), bh=std::min((int)S(660),h-24), bx=(w-bw)/2, by=(h-bh)/2;

@@ -7,8 +7,8 @@
 //    original"; PipeWire/Pulse cuida do resto se o hardware pedir);
 //  - formatos nativos: MP3, WAV, FLAC, OGG Vorbis (outros via conversao pela
 //    casca, sys::TranscodeToWav);
-//  - cadeia de efeitos (audio_fx.h): som (pitch) -> grave -> reverb -> 8D -> equalizador de
-//    8 bandas (desligado = pulado) -> mestre (volume com curva, subida controlada e limitador) -> saida.
+//  - equalizador de 8 bandas (filtros peaking do miniaudio, encadeados entre
+//    o som e a saida; desligado = som ligado direto na saida).
 #include "platform.h"
 #include "config.h"
 #include <string>
@@ -26,7 +26,6 @@
 #define STB_VORBIS_HEADER_ONLY
 #include "audio/stb_vorbis.c"
 #include "audio/miniaudio.h"
-#include "audio_fx.h"
 
 // ---- audio online: PCM na memoria -----------------------------------------------
 // A thread de streaming (app_online.h) escreve PCM 16-bit estereo aqui; o miniaudio le
@@ -112,48 +111,6 @@ class Player {
         for (int i = 0; i < 8; ++i) ma_peak_node_uninit(&e.node[i], NULL);
         e.init = false;
     }
-    // ---- efeitos + mestre (audio_fx.h) ----
-    struct Fx { ma_loshelf_node bass; afx::ReverbNode reverb; afx::EightDNode eightD; afx::MasterNode master; bool init = false; int bassLv = 0; };
-    static Fx& FxState() { static Fx* f = new Fx(); return *f; }
-    static std::atomic<float>& VolTarget() { static std::atomic<float> v{ 0.512f }; return v; }
-    static void DestroyFx() {
-        Fx& f = FxState();
-        if (!f.init) return;
-        ma_node_uninit(&f.master, NULL); ma_node_uninit(&f.eightD, NULL); ma_node_uninit(&f.reverb, NULL); ma_loshelf_node_uninit(&f.bass, NULL);
-        f.init = false;
-    }
-    static void BuildFx() {
-        Fx& f = FxState();
-        DestroyFx();
-        if (!EngineOk()) return;
-        ma_node_graph* g = ma_engine_get_node_graph(&Engine());
-        ma_uint32 ch = ma_engine_get_channels(&Engine()), sr = ma_engine_get_sample_rate(&Engine());
-        f.bassLv = afx::L().bass.load();
-        ma_loshelf_node_config bc = ma_loshelf_node_config_init(ch, sr, afx::BassDb(f.bassLv), 1.0, 110.0);
-        if (ma_loshelf_node_init(g, &bc, NULL, &f.bass) != MA_SUCCESS) return;
-        ma_node_config nc = ma_node_config_init(); nc.pInputChannels = &ch; nc.pOutputChannels = &ch;
-        f.reverb.channels = ch; afx::ReverbSetup(f.reverb, sr); f.reverb.fade = 0; f.reverb.last = 0;
-        nc.vtable = afx::ReverbVt();
-        if (ma_node_init(g, &nc, NULL, &f.reverb) != MA_SUCCESS) { ma_loshelf_node_uninit(&f.bass, NULL); return; }
-        f.eightD.channels = ch; f.eightD.sr = sr; f.eightD.mix = 0; f.eightD.phase = 0;
-        nc.vtable = afx::EightDVt();
-        if (ma_node_init(g, &nc, NULL, &f.eightD) != MA_SUCCESS) { ma_node_uninit(&f.reverb, NULL); ma_loshelf_node_uninit(&f.bass, NULL); return; }
-        f.master.channels = ch; f.master.sr = sr; f.master.target = VolTarget().load(); f.master.cur = VolTarget().load(); f.master.env = 1.0f;   // faixa nova: sem rampa
-        nc.vtable = afx::MasterVt();
-        if (ma_node_init(g, &nc, NULL, &f.master) != MA_SUCCESS) { ma_node_uninit(&f.eightD, NULL); ma_node_uninit(&f.reverb, NULL); ma_loshelf_node_uninit(&f.bass, NULL); return; }
-        ma_node_attach_output_bus(&f.bass, 0, &f.reverb, 0);
-        ma_node_attach_output_bus(&f.reverb, 0, &f.eightD, 0);
-        ma_node_attach_output_bus(&f.master, 0, ma_engine_get_endpoint(&Engine()), 0);
-        f.init = true;
-    }
-    // Liga o fim da cadeia: 8D -> (equalizador ligado ? equalizador -> mestre : mestre).
-    static void RouteChain() {
-        Fx& f = FxState(); Eq& e = EqState();
-        if (!f.init) return;
-        if (e.init) ma_node_attach_output_bus(&e.node[7], 0, &f.master, 0);
-        if (e.on && e.init) ma_node_attach_output_bus(&f.eightD, 0, &e.node[0], 0);
-        else ma_node_attach_output_bus(&f.eightD, 0, &f.master, 0);
-    }
     static void BuildEq() {
         Eq& e = EqState();
         DestroyEq();
@@ -173,27 +130,19 @@ class Player {
     static void RouteSound(ma_sound* s) {
         Eq& e = EqState();
         if (!s) return;
-        if (FxState().init) { ma_node_attach_output_bus(s, 0, &FxState().bass, 0); return; }
         if (e.on && e.init) ma_node_attach_output_bus(s, 0, &e.node[0], 0);
         else ma_node_attach_output_bus(s, 0, ma_engine_get_endpoint(&Engine()), 0);
     }
     static bool InitEngine(ma_uint32 rate) {
         ma_engine_config cfg = ma_engine_config_init();
         cfg.sampleRate = rate; // 0 = taxa do dispositivo
-        if (std::getenv("REMIX_NULL_AUDIO")) {   // testes: saida "nula" (o tempo anda, nada sai nas caixas)
-            static ma_context nullCtx; static bool nullOk = false;
-            if (!nullOk) { ma_backend b[1] = { ma_backend_null }; nullOk = ma_context_init(b, 1, NULL, &nullCtx) == MA_SUCCESS; }
-            if (nullOk) cfg.pContext = &nullCtx;
-        }
         if (ma_engine_init(&cfg, &Engine()) != MA_SUCCESS) {
             if (rate == 0) return false;
             cfg.sampleRate = 0;
             if (ma_engine_init(&cfg, &Engine()) != MA_SUCCESS) return false;
         }
         EngineOk() = true;
-        BuildFx();
         BuildEq();
-        RouteChain();
         return true;
     }
 
@@ -214,7 +163,6 @@ public:
     static void GlobalShutdown() {
         if (!EngineOk()) return;
         DestroyEq();
-        DestroyFx();
         ma_engine_uninit(&Engine());
         EngineOk() = false;
     }
@@ -226,7 +174,6 @@ public:
         if (!rate || !EngineOk()) return;
         if (ma_engine_get_sample_rate(&Engine()) == rate) return;
         DestroyEq();
-        DestroyFx();
         ma_engine_uninit(&Engine());
         EngineOk() = false;
         InitEngine(rate);
@@ -261,28 +208,9 @@ public:
                 ma_peak_node_reinit(&pc, &e.node[i]);
             }
         }
-        RouteChain();
         if (current) RouteSound(current);
     }
     void ApplyEq() { if (sndInit) RouteSound(&snd); }
-    // Efeitos: niveis 0..3. Grave reconfigura o filtro; slow/speed mudam o pitch do som atual.
-    static void SetFx(int slow, int speed, int reverb, int bass, int eightD) {
-        auto c = [](int v) { return std::max(0, std::min(3, v)); };
-        afx::L().slow = c(slow); afx::L().speed = c(speed); afx::L().reverb = c(reverb); afx::L().bass = c(bass); afx::L().eightD = c(eightD);
-        Fx& f = FxState();
-        if (f.init && EngineOk() && f.bassLv != c(bass)) {
-            ma_uint32 ch = ma_engine_get_channels(&Engine()), sr = ma_engine_get_sample_rate(&Engine());
-            ma_loshelf_config lc = ma_loshelf2_config_init(ma_format_f32, ch, sr, afx::BassDb(c(bass)), 1.0, 110.0);
-            if (ma_loshelf_node_reinit(&lc, &f.bass) == MA_SUCCESS) f.bassLv = c(bass);
-        }
-    }
-    void ApplyFx() { if (sndInit) ma_sound_set_pitch(&snd, afx::PitchNow()); }
-    static unsigned OutputLatencyMs() {   // atraso da saida de som (para a onda andar junto com o que se ouve)
-        if (!EngineOk()) return 0;
-        ma_device* d = ma_engine_get_device(&Engine());
-        if (!d || !d->playback.internalSampleRate) return 0;
-        return (unsigned)((ma_uint64)d->playback.internalPeriodSizeInFrames * std::max<ma_uint32>(1, d->playback.internalPeriods) * 1000ULL / d->playback.internalSampleRate);
-    }
 
     // Testa se o arquivo e decodificavel nativamente; devolve a taxa nativa.
     static bool ProbeNative(const std::wstring& path, unsigned* outRate = nullptr) {
@@ -305,7 +233,7 @@ public:
         if (!ProbeNative(path, &nativeRate)) return false;
         EnsureEngineRate(nativeRate);
         if (!EngineOk()) return false;
-        ma_uint32 flags = MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_NO_SPATIALIZATION;   // com pitch: slow/speed
+        ma_uint32 flags = MA_SOUND_FLAG_STREAM | MA_SOUND_FLAG_NO_SPATIALIZATION | MA_SOUND_FLAG_NO_PITCH;
 #ifdef _WIN32
         if (ma_sound_init_from_file_w(&Engine(), path.c_str(), flags, NULL, NULL, &snd) != MA_SUCCESS) return false;
 #else
@@ -321,8 +249,7 @@ public:
         cachedLenMs = 0;
         if (ma_sound_get_length_in_pcm_frames(&snd, &len) == MA_SUCCESS && len > 0)
             cachedLenMs = (DWORD)std::min<ma_uint64>(len * 1000ULL / sampleRate, 0xFFFFFFFFULL);
-        ma_sound_set_volume(&snd, FxState().init ? 1.0f : curVol);   // com a cadeia, o volume fica no mestre
-        ma_sound_set_pitch(&snd, afx::PitchNow());
+        ma_sound_set_volume(&snd, curVol);
         RouteSound(&snd);
         loaded = true;
         playing = false;
@@ -343,15 +270,14 @@ public:
         if (ma_data_source_init(&dc, &streamDs->base) != MA_SUCCESS) { delete streamDs; streamDs = nullptr; return false; }
         streamDs->st = st; streamDs->cursor = 0;
         if (durSec) st->lenFrames = (uint64_t)durSec * st->rate;
-        ma_uint32 flags = MA_SOUND_FLAG_NO_SPATIALIZATION;
+        ma_uint32 flags = MA_SOUND_FLAG_NO_SPATIALIZATION | MA_SOUND_FLAG_NO_PITCH;
         if (ma_sound_init_from_data_source(&Engine(), (ma_data_source*)streamDs, flags, NULL, &snd) != MA_SUCCESS) {
             ma_data_source_uninit(&streamDs->base); delete streamDs; streamDs = nullptr; return false;
         }
         sndInit = true;
         sampleRate = st->rate;
         cachedLenMs = durSec * 1000;
-        ma_sound_set_volume(&snd, FxState().init ? 1.0f : curVol);
-        ma_sound_set_pitch(&snd, afx::PitchNow());
+        ma_sound_set_volume(&snd, curVol);
         RouteSound(&snd);
         loaded = true; playing = false;
         openPath = L"stream";
@@ -408,10 +334,8 @@ public:
 
     void SetVolume(int percent) {
         percent = std::max(0, std::min(100, percent));
-        curVol = afx::VolumeGain(percent);   // curva cubica (ver audio_fx.h)
-        VolTarget() = curVol;
-        if (FxState().init) FxState().master.target = curVol;   // o mestre chega la suave (e sobe no maximo 40 dB/s)
-        else if (sndInit) ma_sound_set_volume(&snd, curVol);
+        curVol = percent / 100.0f;
+        if (sndInit) ma_sound_set_volume(&snd, curVol);
     }
 
     bool ReachedEnd() {
