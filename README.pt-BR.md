@@ -8,14 +8,12 @@ English version: [README.md](README.md). Programa pronto para baixar: [Releases]
 ## Créditos
 
 <p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: autor do Remix, ideia original e versão Windows" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming, versão Linux e Host para iOS" width="48%"></a>
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: coautor, ideia original e versão Windows" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): autor, streaming online e versão Linux" width="48%"></a>
 </p>
 
-**[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows.
-**Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) entrou depois como co-desenvolvedor: participou da versão Windows,
-sugeriu e desenvolveu as playlists e a música online (streaming e downloads), levou o Remix para o Linux e teve a ideia
-do **Host** — o PC vira servidor para o celular — para o Remix chegar ao **iPhone (iOS) e a outros celulares** enquanto o Nero faz a versão Android.
+A ideia do Remix e a versão Windows vieram do **[Nero-2077](https://github.com/Nero-2077)**; o streaming online e a
+versão Linux, do **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
 
 ## Pastas
 
@@ -33,12 +31,6 @@ Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na 
 
 ## Interface
 
-- **Estilo da interface** (1.3, Configuracoes > ESTILO DA INTERFACE): **Classico** (o visual
-  original, com contorno da cor do tema, LED e transporte em cada card), **Limpo** (cinza neutro,
-  superficies lisas encostadas na janela, a cor do tema so no que esta tocando, sem LED) e
-  **Spotify + LED** (o Limpo com o LED e o corredor de luz ligados). Nos estilos novos o card
-  mostra capa grande, nome e artista; o play aparece sobre a capa ao passar o mouse e o
-  transporte fica so no player. A escolha vale para Windows e Linux (`Style=` no config.ini).
 - Modo **normal** redesenhado seguindo a referencia enviada: painel superior com Quadrado/CD e temas, seguido por cards de musica em grade.
 - Modo **vertical** minimalista, focado somente na musica, com CD/capa menor, onda, seek, controles e engrenagem.
 - O modo vertical pode voltar para **Quadrado** ou **CD** em Configuracoes.
@@ -79,20 +71,6 @@ Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na 
   Abrir o Remix de novo traz a janela de volta; Ctrl+Q ou "SAIR DO REMIX" encerram.
   Teclas de midia do teclado funcionam. Tudo ajustavel em Configuracoes > REPRODUCAO
   (vem ligado; pode desligar).
-
-## Volume, efeitos, stems e onda no ritmo
-
-- **Volume seguro:** curva perceptiva (cúbica, a mesma do PipeWire/Pulse), subida de no máximo 40 dB por segundo e
-  limitador em −0,3 dBFS. Antes o controle era linear (3% já era −30 dB): subir para 100% de uma vez dava +30 dB e
-  podia estourar o fone; grave ou equalizador também podiam distorcer.
-- **Efeitos (cabeçalho › EFEITOS):** Slow, Speed, Reverb, Grave e 8D, cada um com 3 níveis (cada clique sobe:
-  1 → 2 → 3 → desliga). Slow e speed mudam velocidade e tom juntos (estilo "slowed"/"sped up") e não somam.
-- **Stems (mesmo painel):** Completa, Só vocal, Só música, Bateria, Baixo e Outros, separados em segundo plano pelo
-  Demucs (opcional, veja o instalador de dependências). Na CPU a primeira separação leva cerca de metade da duração
-  da música; enquanto isso toca a completa, e quando termina o Remix troca para o stem no mesmo ponto. Fica guardado
-  (até 3 GB): da segunda vez é na hora. Com um modo ligado, as próximas da fila já vão sendo separadas.
-- **Onda no ritmo:** a altura vem da energia fina do áudio (25 ms), o "pulo" das batidas detectadas no espectro e o
-  atraso da saída de som é descontado (antes lia 50 ms à frente e ainda adiantava até 4% ao longo da música).
 
 ## Seek e onda
 
@@ -157,12 +135,8 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
   pular ou quando a musica acaba, a proxima sai **na hora** e o canal continua de onde parou. Na lista
   aparece TOCANDO / FILA: PRONTA / FILA: CARREGANDO com a barra do quanto ja carregou. Memoria: ~12 MB
   por musica da fila. Uma musica que falhou na fila e pulada sem esperar de novo.
-- **Começo rápido**: a extração do yt-dlp (~3 s, o que mais atrasava) fica guardada por 25 min e é
-  usada pelo player, pelo celular (Host) e pelo download; os 3 primeiros resultados de uma busca já são
-  extraídos em segundo plano. Tocar um deles começa em ~0,5 s em vez de ~3 s.
-- **Download**: fila em segundo plano com **várias músicas ao mesmo tempo** (metade dos núcleos do
-  processador, de 2 a 6), reaproveitando a extração que o streaming ou a busca já fizeram
-  (`--load-info-json`). Pilula no canto inferior direito (clique = abrir a pasta ou cancelar). O arquivo e montado numa pasta temporaria do cache e so vai para a pasta final
+- **Download**: fila em segundo plano (pilula no canto inferior direito; clique = abrir a pasta ou
+  cancelar). O arquivo e montado numa pasta temporaria do cache e so vai para a pasta final
   (`<Musicas>/Remix Online/<playlist>/`, configuravel) quando termina. MP3, M4A ou formato original,
   com titulo/artista/capa. Terminou: a entrada da playlist passa a apontar para o arquivo.
 - **Streaming ou download**: Configuracoes > ONLINE ("AO TOCAR: STREAMING / BAIXAR") vale para tudo;
@@ -178,9 +152,7 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
   selecionada e o streaming recomeca do inicio ao apertar play.
 
 Precisa de **yt-dlp**, **ffmpeg** e de um "JavaScript runtime" que o YouTube passou a exigir (**Deno 2.3+**
-ou **Node.js 22+**). As versoes portateis trazem um instalador (que também oferece a opção **STEMS**: `/stems` no
-Windows, `--stems` no Linux, ~1 GB — um Python isolado só para o Remix com PyTorch de CPU e o
-[Demucs](https://github.com/facebookresearch/demucs), da Meta, código aberto):
+ou **Node.js 22+**). As versoes portateis trazem um instalador:
 
 - **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat` (na pasta do Remix). Ele baixa os arquivos oficiais do
   yt-dlp, do FFmpeg e do Deno direto para a pasta `assets\tools` **dentro do Remix**, com o `curl` e o `tar` que ja
@@ -297,40 +269,6 @@ embutidas nos arquivos. Correcoes: clicar em certas faixas (a 11a, por exemplo) 
 da biblioteca ou mexia em escala/LED/modo (IDs de clique repetidos); PASTA com uma playlist
 aberta trocava a biblioteca inteira; aviso de lista vazia por cima da barra; trocar de pasta
 durante uma varredura podia deixar a lista vazia; `--home` abre instancia separada.
-
-## Host: ouvir as músicas do PC no celular (iPhone e Android)
-
-Ideia do Sodre para o Remix funcionar no **iPhone (iOS)** — e em qualquer celular — sem app de loja, enquanto a versão
-Android nativa é feita: o Remix do PC vira um **servidor** e o celular usa pelo navegador (dá para "adicionar à tela inicial").
-
-- **Vincular:** Configurações > HOST (ou o botão **HOST** no cabeçalho) > **LIGAR**. No celular, **escaneie o QR code** do
-  painel e digite só um nome — pronto. Sem o QR, abra o link, digite o **PIN** e aceite o aparelho no PC. O QR vale 10 min e
-  uma vez só (opção **QR PEDE ACEITE** para exigir confirmação no PC também).
-- **Você decide o que cada aparelho ouve:** por padrão um aparelho vinculado **não vê nada**. Libere a **BIBLIOTECA** por
-  aparelho, hosteie playlists (botão direito > "Hostear no celular"; todos ou alguns aparelhos) e libere, se quiser, as
-  playlists que um celular pediu para compartilhar. Cada celular tem as **playlists dele**, isoladas dos outros.
-- **Interface de app de música no celular:** Início, Buscar, Sua Biblioteca, tela da playlist com voltar, **Tocando agora**
-  em tela cheia e controles na tela de bloqueio, **efeitos e stems** aplicados pelo PC (o celular só toca o resultado,
-  então a tela bloqueada do iPhone continua funcionando) e **onda no ritmo** calculada pelo PC. Ajustada para o **Safari do iPhone**: todo botão reage ao toque, a barra
-  de posição funciona tocando ou arrastando em qualquer ponto, as folhas abrem o teclado e ficam acima dele, o play volta a
-  funcionar depois de um erro e a página do WhatsApp mostra os links até na pré-visualização do iPhone (sem JavaScript).
-- **Online no celular:** buscar e ouvir YouTube Music, YouTube e SoundCloud pelo celular — o **PC** roda o yt-dlp e o
-  ffmpeg e manda só o áudio; playlists do PC com músicas online também tocam. O celular nunca fala com esses sites.
-- **Rede local e internet:** pelo mesmo roteador (Wi-Fi ou cabo) ou por um **túnel Cloudflare** (HTTPS, sem abrir porta,
-  atravessa CGNAT, sem entregar seu IP). O link do túnel **só aparece depois de testado** (evita o erro de DNS
-  `DNS_PROBE_POSSIBLE`) e tem botão **COPIAR LINK**; **NOVO LINK** gera outro. **HTML P/ WHATSAPP** gera uma página com os links.
-- **Segurança:** só aceita conexões locais ou do túnel (mesmo com IP público), autorização por aparelho e por música
-  (tirar a permissão corta na hora o que está tocando), aparelho sem "Lembrar" é temporário, trava contra adivinhar PIN/QR
-  (por origem e geral), CSRF/XSS e DNS rebinding bloqueados, limites contra DoS e pedidos lentos, IPv6 opcional e só na rede local.
-  Porta padrão **49875**. Detalhes, segurança e API em [docs/HOST.md](docs/HOST.md).
-
-## Segurança de arquivos (planejado)
-
-Plano para proteger contra músicas com malware ou arquivos corrompidos — tocar só o que é reproduzível e a capa, higienizando o resto num processo isolado, sem quebrar o app — em [docs/SEGURANCA-DE-ARQUIVOS.md](docs/SEGURANCA-DE-ARQUIVOS.md). Ainda não implementado.
-
-## Android (em andamento)
-
-A estrutura para o porte Android (casca raylib reaproveitada, toolchain pinado em `third_party/android`, APK sem Gradle) esta em [docs/ANDROID.md](docs/ANDROID.md); o zip `docs/android-exemplo.zip` traz a pasta `android/` de exemplo.
 
 ## Linux (portátil, .deb, .rpm e AppImage)
 

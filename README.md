@@ -15,14 +15,12 @@ Spotify, Deezer and Apple Music** links.
 ## Credits
 
 <p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: author of Remix, original idea and Windows version" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): co-developer, playlists, streaming, Linux version and Host for iOS" width="48%"></a>
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: co-author, original idea and Windows version" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): author, online streaming and Linux version" width="48%"></a>
 </p>
 
-**[Nero-2077](https://github.com/Nero-2077)** created Remix: the original idea and the Windows version.
-**Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) joined later as co-developer: worked on the Windows version,
-proposed and built playlists and online music (streaming and downloads), brought Remix to Linux, and came up with **Host** —
-the PC acting as a server for the phone — so Remix reaches the **iPhone (iOS) and other mobile devices** while Nero builds the Android version.
+The idea for Remix and the Windows version came from **[Nero-2077](https://github.com/Nero-2077)**; online streaming
+and the Linux version from **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)).
 
 ## Download
 
@@ -56,10 +54,6 @@ include an installer:
 Then just open Remix: it finds the tools by itself, no restart needed. *Settings › ONLINE* shows what was found.
 Run the installer again from time to time: YouTube changes often and yt-dlp must stay up to date.
 
-**Optional — stem separation:** the installers also offer the **STEMS** option (`/stems` on Windows, `--stems` on
-Linux, about 1 GB): an isolated Python with CPU PyTorch and [Demucs](https://github.com/facebookresearch/demucs)
-(Meta, open source), only for Remix (`assets\tools\stems` on Windows, `~/.local/share/remix/stems` on Linux).
-
 ### If Remix closes by itself (Windows)
 
 Remix writes `remix-log.txt` next to `Remix.exe` (or in `%LOCALAPPDATA%\Remix`) with every startup step, the
@@ -86,25 +80,10 @@ inside the `.zip`) and that your antivirus did not quarantine it.
 - Spotify, Deezer and Apple Music links provide title, artist and duration (Spotify through its public embed page: no account or API key), and each song is matched on YouTube Music. No DRM is circumvented: audio always comes from YouTube or SoundCloud.
 - **In-memory streaming:** yt-dlp finds the audio URL and ffmpeg decodes straight to RAM. Nothing is written to disk and seeking works.
 - **Streaming queue:** the current song and the next two each get their own channel and preload in the background, so skipping (or reaching the end of a song) starts the next one instantly.
-- **Fast start:** yt-dlp's audio lookup (~3 s) is cached for 25 minutes and shared by the player, the phone (Host) and downloads, and the first search results are looked up in the background — playing one of them starts in about half a second.
-- **Downloads** (MP3, M4A or the original format, with tags and cover) run **several at once** (half your CPU cores, 2 to 6) and reuse the lookup already done by streaming or search; files are assembled in the cache and moved to `Music/Remix Online/<playlist>` only when complete. In download mode a song starts playing by streaming right away while it downloads.
+- **Downloads** (MP3, M4A or the original format, with tags and cover) run in a background queue; files are assembled in the cache and moved to `Music/Remix Online/<playlist>` only when complete.
 - Streaming or download can be chosen globally or per playlist. A small journal in the cache lets the app clean up interrupted downloads on the next start.
 
-**Sound: safe volume, effects, stems and a wave that follows the beat**
-- **Safe volume:** perceptual (cubic) volume curve, a master stage that rises at most 40 dB per second and a limiter at
-  −0.3 dBFS. Before, the slider was linear (3% was already −30 dB) and jumping to 100% could blast your headphones;
-  bass boost or the equalizer could also clip.
-- **Effects (header › EFFECTS):** Slow, Speed, Reverb, Bass and 8D, each with 3 levels (click cycles 1 → 2 → 3 → off).
-  Slow/Speed change tempo and pitch together ("slowed"/"sped up").
-- **Stems:** Full, Vocals only, Music only, Drums, Bass and Other, separated in the background with Demucs (optional,
-  see above). On a CPU the first separation takes about half of the song's length; the full song keeps playing, Remix
-  switches to the chosen stem at the same position when it is ready, and the stems are cached (switching is instant
-  afterwards). With a stem mode on, the next songs in the queue are separated ahead.
-- **Rhythm wave:** the wave follows the real audio — fine 25 ms energy, beats detected from the spectrum and the output
-  latency compensated (before it read 50 ms ahead and drifted up to 4% over a song).
-
 **Look and feel**
-- Three interface styles (Settings > INTERFACE STYLE): **Classic** (the original look: theme-colored outlines, LED glow, transport on every card), **Clean** (neutral grays, flat surfaces, theme color only on what is playing, no LED) and **Spotify + LED** (Clean with the LED glow and light runner on). The choice is saved as `Style=` in config.ini.
 - Square, CD or compact vertical layout; grid or list; themes; LED glow, particles and glitch effects (with a light mode for slower PCs); 8-band equalizer.
 
 **Desktop integration**
@@ -137,41 +116,6 @@ bash linux/build-windows.sh              # cross-compiles windows/Remix.exe with
 Double-click `windows\COMPILAR.bat`. It uses MinGW-w64 GCC (MSYS2 UCRT64, WinLibs, Scoop or Chocolatey)
 and explains how to install it when missing. Manual commands: [windows/LEIA-ME.txt](windows/LEIA-ME.txt).
 
-## Host: your PC library on the phone (iPhone and Android)
-
-Sodre's idea to bring Remix to the **iPhone (iOS)** — and any phone — with no app store, while the native Android version
-is in progress: the PC app becomes a **server** and the phone uses it from the browser ("Add to Home Screen" works).
-
-- **Link a phone:** Settings > HOST (or the **HOST** button in the header) > turn it on. On the phone, **scan the QR code**
-  and type a name — done. Without the QR, open the link, enter the **PIN** and accept the device on the PC. QR codes are
-  single-use and expire in 10 minutes (optionally also require approval on the PC).
-- **You decide what each device gets:** a newly linked device sees **nothing**. Share the whole **library** per device,
-  host playlists to all or some devices, and approve playlists a phone asks to share. Each phone keeps its **own playlists**,
-  isolated from other devices.
-- **A real music-app UI on the phone:** Home, Search, Your Library, playlist pages with back navigation, full-screen
-  **Now Playing** and lock-screen controls, **effects and stems** applied by the PC (the phone just plays the result, so
-  the iPhone lock screen keeps working) and a **wave that follows the beat** computed by the PC. Tuned for **iPhone Safari**: every button gives touch feedback, the seek bar
-  works by tapping or dragging anywhere on it, sheets open the keyboard and stay above it, playback recovers after an
-  error, and the WhatsApp connect page works even in the iPhone preview (no JavaScript needed).
-- **Online on the phone:** search and play YouTube Music, YouTube and SoundCloud from the phone — the **PC** runs yt-dlp and
-  ffmpeg and sends only the audio; hosted playlists with online tracks stream too. The phone never talks to those sites.
-- **LAN and internet:** same router (Wi-Fi or cable) or a **Cloudflare tunnel** (HTTPS, no port forwarding, CGNAT-friendly,
-  your IP stays hidden). The tunnel link is **shown only after it is verified** (avoids DNS `NXDOMAIN` caching) and has a
-  **COPY LINK** button.
-- **Security:** only local or tunnel connections are accepted (even on a public IP), per-device/per-track authorization
-  (revoking cuts playback immediately), devices linked without "Remember" are temporary, PIN/QR brute-force lockout (per
-  address and global), CSRF/XSS and DNS-rebinding protection, slow-request and DoS limits, optional LAN-only IPv6.
-  Default port **49875**.
-  Details, security model and API in [docs/HOST.md](docs/HOST.md) (Portuguese).
-
-## File safety (planned)
-
-A plan to protect users from malicious or corrupted music files — play only the decodable audio and the cover, sanitized in an isolated process, without breaking the app — is in [docs/SEGURANCA-DE-ARQUIVOS.md](docs/SEGURANCA-DE-ARQUIVOS.md) (Portuguese). Not implemented yet.
-
-## Android (work in progress)
-
-The plan for the Android port (reusing the raylib shell, pinned toolchain under `third_party/android`, APK built without Gradle) is in [docs/ANDROID.md](docs/ANDROID.md) (Portuguese); `docs/android-exemplo.zip` holds the example `android/` folder.
-
 ## Project layout
 
 | Folder | Contents |
@@ -197,10 +141,9 @@ remix --home <folder>        use another folder for settings and library (portab
 ## License
 
 Remix Player is released under the [Apache License 2.0](LICENSE). Bundled third-party code keeps its own
-license: raylib and GLFW (zlib), miniaudio and stb (public domain / MIT), the QR encoder derived from Project Nayuki's
-QR Code generator (MIT), DejaVu fonts (Bitstream Vera) and
+license: raylib and GLFW (zlib), miniaudio and stb (public domain / MIT), DejaVu fonts (Bitstream Vera) and
 Droid Sans Japanese (Apache 2.0). See [linux/packaging/copyright](linux/packaging/copyright). yt-dlp and ffmpeg
-are separate programs and are not distributed with Remix, and neither is cloudflared (Apache 2.0, used by Host).
+are separate programs and are not distributed with Remix.
 
 Please respect each platform's terms of service and the copyright law of your country: download only what
 you have the right to.

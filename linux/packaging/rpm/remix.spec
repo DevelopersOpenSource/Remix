@@ -9,7 +9,7 @@
 %global __brp_check_rpaths %{nil}
 
 Name:           remix
-Version:        %{?remix_version}%{!?remix_version:1.5.2}
+Version:        %{?remix_version}%{!?remix_version:1.2.0}
 Release:        %{?remix_release}%{!?remix_release:1}%{?dist}
 Summary:        Remix Player — player de música MP3/WAV com visual neon
 License:        Apache-2.0 AND zlib AND MIT AND Bitstream-Vera
@@ -54,27 +54,6 @@ cp -a usr %{buildroot}/
 %doc %{_docdir}/%{name}/
 
 %changelog
-* Thu Sep 17 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.2-1
-- Volume com curva perceptiva, subida controlada e limitador (nao estoura mais); efeitos slow, speed, reverb, grave e 8D (3 niveis) no PC e no celular; stems com Demucs (so vocal, so musica, bateria, baixo, outros); onda no ritmo real
-
-* Wed Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.1-1
-- Playlists com pasta vinculada atualizam sozinhas e o card conta todas as faixas (pasta, avulsas e online); o celular recebe as musicas da pasta vinculada
-
-* Wed Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.0-1
-- Host: corrige o conflito de botoes com o estilo, QR code para vincular, cada aparelho so ve o que o PC liberar, online no celular, link do tunel testado antes de aparecer e botao de copiar
-
-* Wed Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.4.0-1
-- Host: o Remix vira servidor para o celular (PIN + aceite no PC, tunel Cloudflare, rede local, playlists por aparelho)
-
-* Tue Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.3.1-1
-- Configuracoes afinadas nos estilos novos: chaves liga/desliga, secoes na medida, textos sem vazar, versao no titulo
-
-* Tue Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.3.0-1
-- Estilo da interface: Classico (original), Limpo e Spotify + LED, escolhido nas configuracoes
-
-* Mon Sep 15 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.2.1-1
-- Onda e espectro corretos na musica online (streaming)
-- Pacotes montados sem CRLF; creditos no README
 * Sat Sep 05 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.2.0-1
 - Nucleo compartilhado Windows/Linux (mesma logica nos dois sistemas)
 - Icone de volume com mudo (clique ou M), atalhos de teclado (espaco, setas, +/-, R, Del, F2)

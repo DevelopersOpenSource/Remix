@@ -17,19 +17,15 @@
 #   bash instalar-dependencias.sh             mostra o que falta e pergunta antes de instalar
 #   bash instalar-dependencias.sh --sim       instala sem perguntar
 #   bash instalar-dependencias.sh --mostrar   so mostra o que faria (nao instala nada)
-#   bash instalar-dependencias.sh --stems     tambem instala o separador de stems (Demucs, ~1 GB, opcional)
 set -u
-AUTO=0; SHOW=0; STEMS=ask
+AUTO=0; SHOW=0
 for a in "$@"; do
   case "$a" in
     --sim|-y) AUTO=1 ;;
     --mostrar|--dry-run) SHOW=1 ;;
-    --stems) STEMS=1 ;;
-    --sem-stems) STEMS=0 ;;
-    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,19p' "$0"; exit 0 ;;
   esac
 done
-STEMS_DIR="$HOME/.local/share/remix/stems"
 export PATH="$HOME/.local/bin:$HOME/.deno/bin:$PATH"
 # Testes: REMIX_DEPS_FINGIR_FALTA=1 finge que nada esta instalado; REMIX_DEPS_OS_RELEASE=arquivo no lugar
 # do /etc/os-release; REMIX_DEPS_PM=apt-get|dnf|pacman|zypper|xbps-install|eopkg|nenhum; REMIX_DEPS_IMUTAVEL=1
@@ -48,7 +44,6 @@ ok_js() {
   return 1
 }
 ok_ffmpeg() { have ffmpeg; }
-ok_cloudflared() { have cloudflared || [ -x "$HOME/.local/bin/cloudflared" ]; }
 ok_dialog() { have zenity || have kdialog; }
 ok_curl() {
   [ "$FAKE" = 1 ] && return 1
@@ -63,7 +58,6 @@ report() {
   have node && j="$j node $(vnum node --version)"
   line "yt-dlp 2025.11 ou mais novo${y:+ (tem $y)}" ok_ytdlp
   line "ffmpeg" ok_ffmpeg
-  line "cloudflared (tunel do Host: celular pela internet)" ok_cloudflared
   line "Deno 2.3+ ou Node.js 22+${j:+ (tem$j)}" ok_js
   line "zenity ou kdialog (janelas de escolher pasta)" ok_dialog
   line "libcurl (capas e links)" ok_curl
@@ -135,28 +129,6 @@ fetch() {   # url destino
   elif command -v wget >/dev/null 2>&1; then run wget -O "$2" "$1"
   else echo "   [erro] precisa do curl ou do wget para baixar"; return 1; fi
 }
-# ---- separador de stems (opcional): Demucs num Python isolado, so para o Remix ----
-ok_stems() { [ "$FAKE" = 1 ] && return 1; ls -d "$STEMS_DIR"/venv/lib/python3*/site-packages/demucs >/dev/null 2>&1; }
-user_stems() {
-  echo "Separador de stems: Demucs (Meta, codigo aberto) + PyTorch de CPU em $STEMS_DIR (~1 GB)"
-  local uvb a tmp
-  uvb="$(command -v uv 2>/dev/null)"
-  if [ -z "$uvb" ]; then
-    case "$ARCH" in x86_64) a=x86_64 ;; aarch64) a=aarch64 ;; *) echo "   [erro] processador $ARCH sem o uv oficial"; return 1 ;; esac
-    tmp="$(mktemp -d)"
-    fetch "https://github.com/astral-sh/uv/releases/latest/download/uv-$a-unknown-linux-gnu.tar.gz" "$tmp/uv.tar.gz" || return 1
-    run tar -xzf "$tmp/uv.tar.gz" -C "$tmp" || return 1
-    run mkdir -p "$HOME/.local/bin"
-    if [ "$SHOW" != 1 ]; then uvb="$(find "$tmp" -type f -name uv -perm -u+x | head -n1)"; [ -n "$uvb" ] || { echo "   [erro] nao achei o uv no pacote"; return 1; }; run cp "$uvb" "$HOME/.local/bin/uv"; fi
-    uvb="$HOME/.local/bin/uv"
-  fi
-  run mkdir -p "$STEMS_DIR"
-  run "$uvb" venv --allow-existing --python 3.12 "$STEMS_DIR/venv" || return 1
-  run "$uvb" pip install --python "$STEMS_DIR/venv/bin/python" "torch==2.5.1" "torchaudio==2.5.1" --index-url https://download.pytorch.org/whl/cpu || return 1
-  run "$uvb" pip install --python "$STEMS_DIR/venv/bin/python" "demucs==4.0.1" soundfile || return 1
-  echo "   baixando o modelo htdemucs (~80 MB)"
-  if [ "$SHOW" != 1 ]; then TORCH_HOME="$STEMS_DIR/torch" "$STEMS_DIR/venv/bin/python" -c "from demucs.pretrained import get_model; get_model('htdemucs')" || return 1; fi
-}
 arch_ok() {
   case "$ARCH" in x86_64|aarch64) return 0 ;; esac
   echo "   [erro] processador $ARCH: nao ha versao oficial pronta, instale $1 pela sua distro"; return 1
@@ -186,13 +158,6 @@ user_deno() {
   run chmod +x "$HOME/.deno/bin/deno"
   rm -rf "$tmp"
 }
-user_cloudflared() {
-  echo "cloudflared: binario oficial da Cloudflare em ~/.local/bin (tunel do Host)"
-  local a="amd64"; [ "$ARCH" = aarch64 ] && a="arm64"
-  run mkdir -p "$HOME/.local/bin"
-  fetch "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-$a" "$HOME/.local/bin/cloudflared" || return 1
-  run chmod +x "$HOME/.local/bin/cloudflared"
-}
 user_ffmpeg() {
   arch_ok ffmpeg || return 1
   echo "ffmpeg: versao estatica oficial (BtbN, cerca de 100 MB) em ~/.local/bin"
@@ -221,11 +186,7 @@ if [ "$FAMILY" = alpine ] || { [ -z "${REMIX_DEPS_OS_RELEASE:-}" ] && ldd --vers
 fi
 echo
 report
-if [ "$MISSING" = 0 ] && { ok_stems || [ "$STEMS" != 1 ]; }; then
-  echo; echo "Tudo pronto: e so abrir o Remix."
-  if ! ok_stems; then echo "(opcional: separador de stems com: bash instalar-dependencias.sh --stems)"; fi
-  exit 0
-fi
+if [ "$MISSING" = 0 ]; then echo; echo "Tudo pronto: e so abrir o Remix."; exit 0; fi
 echo
 if [ "$FAMILY" = nixos ]; then
   echo "No NixOS programas baixados soltos nao rodam. Instale pelo nix:"
@@ -263,22 +224,9 @@ fi
 ok_ytdlp || user_ytdlp
 ok_js || user_deno
 ok_ffmpeg || user_ffmpeg
-ok_cloudflared || user_cloudflared
-if ! ok_stems; then
-  if [ "$STEMS" = ask ] && [ "$SHOW" = 0 ] && [ "$AUTO" = 0 ]; then
-    echo
-    echo "Opcional: separador de stems (so vocal, so musica, bateria, baixo...). Baixa ~1 GB e na CPU"
-    echo "leva cerca de metade da duracao de cada musica na primeira vez."
-    printf 'Instalar o separador de stems tambem? [s/N] '
-    read -r resp || resp=n
-    case "${resp:-n}" in s|S|sim|Sim|SIM|y|Y|yes) STEMS=1 ;; *) STEMS=0 ;; esac
-  fi
-  if [ "$STEMS" = 1 ] || { [ "$SHOW" = 1 ] && [ "$STEMS" != 0 ]; }; then user_stems || echo "   [aviso] o separador de stems nao foi instalado (o resto do Remix funciona igual)."; fi
-fi
 echo
 if [ "$SHOW" = 1 ]; then echo "(--mostrar: nada foi instalado)"; exit 0; fi
 echo "Conferindo:"
 report
 echo
-if ok_stems; then echo "   [ok]     separador de stems (Demucs)"; else echo "   [opcional] separador de stems: bash instalar-dependencias.sh --stems"; fi
 if [ "$MISSING" = 0 ]; then echo "Tudo pronto: e so abrir o Remix."; else echo "Ainda falta algo acima. Veja as mensagens e rode de novo."; exit 1; fi

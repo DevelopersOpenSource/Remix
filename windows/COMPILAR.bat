@@ -73,7 +73,7 @@ if defined SAIDA (
     set "EXEOUT=%SAIDA%\Remix.exe"
     if not exist "%SAIDA%" mkdir "%SAIDA%"
 )
-"%GPP%" -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"%BDIR%" -I"%COMUM%" -I. main.cpp audio_backend.o app_res.o -o "%EXEOUT%" -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -lws2_32 -liphlpapi -ldwmapi
+"%GPP%" -std=gnu++20 -O2 -w -municode -mwindows -static -s -B"%BDIR%" -I"%COMUM%" -I. main.cpp audio_backend.o app_res.o -o "%EXEOUT%" -lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi
 if errorlevel 1 goto :falhou
 del /q audio_backend.o 2>nul
 

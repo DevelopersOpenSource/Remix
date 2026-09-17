@@ -4,11 +4,7 @@
 // em app_core.h (compartilhada com o Windows).
 #include "app_core.h"
 #include "gfx.h"
-#if defined(__ANDROID__)
-#include "sys_android.h"   // casca Android (docs/ANDROID.md): mesma API sys::, sem zenity/inotify/socket
-#else
 #include "sys_linux.h"
-#endif
 #include <ctime>
 
 using gfx::RectF;
@@ -20,14 +16,11 @@ static std::map<std::wstring, Img*> g_thumbCache;
 
 static inline Color ToGdi(COLORREF c, BYTE a=255){ return gfx::Col(c, a); }
 static inline Color Argb(int a,int r,int g,int b){ return gfx::ARGB(a,r,g,b); }
-// Cor por estilo: no classico a cor original; nos estilos novos o token da paleta.
-static inline Color Cs(Color classico,COLORREF novo,BYTE a=255){ return UiClassic()?classico:ToGdi(novo,a); }
 static RectF RF(const RECT& r){ return gfx::FromRECT(r); }
 static RectFC RC(const RectF& r){ return RectFC{r.X,r.Y,r.Width,r.Height}; }
-// Texto: segue a paleta do estilo ativo (app_ui.h). No classico sao as cores originais.
-#define C_WHITE (ToGdi(UI().text))
-#define C_GRAY  (ToGdi(UI().textDim))
-#define C_GRAY2 (ToGdi(UI().textFaint))
+static const Color C_WHITE = gfx::ARGB(255,235,236,242);
+static const Color C_GRAY  = gfx::ARGB(255,145,147,160);
+static const Color C_GRAY2 = gfx::ARGB(255,150,152,165);
 
 static void DrawRoundRect(const RectF& r, float radius, const Color* fill, const Color* pen, float penW=1.f){ gfx::RoundRect(r, radius, fill, pen, penW); }
 
@@ -184,9 +177,7 @@ void PlatformPickImageAsync(int evType,int ctx){ sys::PickAsync(sys::DLG_IMAGE,L
 void PlatformPickFolderFor(int evType,int ctx){ sys::PickAsync(sys::DLG_FOLDER,L"Escolha a pasta",evType,ctx); }
 void PlatformPickAudioFilesAsync(int evType,int ctx){ sys::PickAsync(sys::DLG_AUDIO_MULTI,L"Escolha as músicas",evType,ctx); }
 std::wstring PlatformClipboardText(){ const char* c=GetClipboardText(); return c?Utf8ToWide(c):L""; }
-bool PlatformSetClipboardText(const std::wstring& t){ SetClipboardText(WideToUtf8(t).c_str()); return true; }
 bool PlatformHttpGet(const std::string& url,std::string& body){ long st=0; body=sys::HttpGet(url,nullptr,&st); return !body.empty()&&(st==0||(st>=200&&st<400)); }
-bool PlatformHttpGetNoRedirect(const std::string& url,std::string& body){ long st=0; body=sys::HttpGet(url,nullptr,&st,false); if(st<200||st>=300) body.clear(); return !body.empty(); }
 void PlatformRedraw(){}
 void PlatformLoadCover(const std::wstring& path){
     if(g_coverImg){ gfx::FreeImg(g_coverImg); g_coverImg=nullptr; }

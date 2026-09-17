@@ -90,13 +90,6 @@ std::wstring PlatformClipboardText(){
     if(h){ wchar_t* p=(wchar_t*)GlobalLock(h); if(p){ r=p; GlobalUnlock(h); } }
     CloseClipboard(); return r;
 }
-bool PlatformSetClipboardText(const std::wstring& t){
-    if(!OpenClipboard(g_hwnd)) return false;
-    EmptyClipboard();
-    size_t bytes=(t.size()+1)*sizeof(wchar_t); HGLOBAL h=GlobalAlloc(GMEM_MOVEABLE,bytes); bool ok=false;
-    if(h){ wchar_t* p=(wchar_t*)GlobalLock(h); if(p){ memcpy(p,t.c_str(),bytes); GlobalUnlock(h); ok=SetClipboardData(CF_UNICODETEXT,h)!=NULL; } if(!ok) GlobalFree(h); }
-    CloseClipboard(); return ok;
-}
 
 // ---- lixeira / abrir pasta -------------------------------------------------
 bool PlatformTrash(const std::wstring& path){

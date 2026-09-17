@@ -5,11 +5,9 @@ set "HERE=%~dp0"
 set "SELF=%~f0"
 cd /d "%HERE%"
 set "AUTO="
-set "QUERSTEMS="
 :args
 if "%~1"=="" goto args_fim
 if /i "%~1"=="/sim" set "AUTO=1"
-if /i "%~1"=="/stems" set "QUERSTEMS=1"
 shift
 goto args
 :args_fim
@@ -86,8 +84,6 @@ call :conferir_tudo quieto
 if defined FALTA_yt-dlp call :baixar_ytdlp
 if defined FALTA_deno call :baixar_deno
 if defined FALTA_ffmpeg call :baixar_ffmpeg
-if defined FALTA_cloudflared call :baixar_cloudflared
-call :stems_talvez
 rmdir /s /q "%TMPD%" >nul 2>nul
 echo.
 call :conferir_tudo
@@ -222,60 +218,9 @@ if not defined FFX goto baixar_erro
 copy /y "!FFX!" "%TOOLS%\ffmpeg.exe" >nul
 exit /b 0
 
-:baixar_cloudflared
-echo.
-echo  cloudflared (tunel do Host: ouvir as musicas no celular pela internet)
-"%CURL%" -fL --retry 3 -o "%TOOLS%\cloudflared.exe.part" "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe"
-if errorlevel 1 goto baixar_erro
-move /y "%TOOLS%\cloudflared.exe.part" "%TOOLS%\cloudflared.exe" >nul
-exit /b 0
-
 :baixar_erro
 echo    [erro] nao consegui baixar ou extrair. Confira a internet e rode de novo.
 exit /b 1
-
-rem ---- separador de stems (opcional): Demucs num Python isolado dentro da pasta Remix ----
-:stems_talvez
-set "STEMS=%TOOLS%\stems"
-if exist "%STEMS%\venv\Lib\site-packages\demucs" (
-    echo    [ok]     separador de stems ^(Demucs^)
-    exit /b 0
-)
-if defined QUERSTEMS goto stems_instalar
-if defined AUTO exit /b 0
-echo.
-echo  Opcional: separador de stems ^(so vocal, so musica, bateria, baixo...^).
-echo  Baixa cerca de 1 GB e, no processador, leva mais ou menos metade da
-echo  duracao de cada musica na primeira vez ^(depois fica guardado^).
-choice /c SN /n /m " Instalar o separador de stems tambem? [S/N] "
-if errorlevel 2 exit /b 0
-:stems_instalar
-echo.
-echo  Separador de stems: uv + Python 3.12 + PyTorch ^(CPU^) + Demucs em
-echo  %STEMS%
-if not exist "%STEMS%" mkdir "%STEMS%"
-"%CURL%" -fL --retry 3 -o "%TMPD%\uv.zip" "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-pc-windows-msvc.zip"
-if errorlevel 1 goto stems_erro
-"%TAR%" -xf "%TMPD%\uv.zip" -C "%STEMS%"
-if errorlevel 1 goto stems_erro
-set "UV_PYTHON_INSTALL_DIR=%STEMS%\python"
-set "UV_CACHE_DIR=%TMPD%\uvcache"
-set "UV_LINK_MODE=copy"
-"%STEMS%\uv.exe" venv --allow-existing --python 3.12 "%STEMS%\venv"
-if errorlevel 1 goto stems_erro
-"%STEMS%\uv.exe" pip install --python "%STEMS%\venv\Scripts\python.exe" torch==2.5.1 torchaudio==2.5.1 --index-url https://download.pytorch.org/whl/cpu
-if errorlevel 1 goto stems_erro
-"%STEMS%\uv.exe" pip install --python "%STEMS%\venv\Scripts\python.exe" demucs==4.0.1 soundfile
-if errorlevel 1 goto stems_erro
-echo    baixando o modelo htdemucs ^(~80 MB^)
-set "TORCH_HOME=%STEMS%\torch"
-"%STEMS%\venv\Scripts\python.exe" -c "from demucs.pretrained import get_model; get_model('htdemucs')"
-if errorlevel 1 goto stems_erro
-echo    [ok]     separador de stems instalado
-exit /b 0
-:stems_erro
-echo    [aviso] o separador de stems nao foi instalado ^(o resto do Remix funciona igual^).
-exit /b 0
 
 :conferir_tudo
 set "QUIETO=%~1"
@@ -286,7 +231,6 @@ set "FALTA="
 call :conferir yt-dlp
 call :conferir ffmpeg
 call :conferir deno
-call :conferir cloudflared
 if not defined QUIETO echo.
 exit /b 0
 
@@ -301,4 +245,4 @@ if defined ACHOU (
     set "FALTA=!FALTA! %~1"
     set "FALTA_%~1=1"
 )
-exit /b 0
+exit /b 0

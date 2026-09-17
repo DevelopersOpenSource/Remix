@@ -127,8 +127,6 @@ static void Render(){
     if(g_cfg.displayMode==L"vertical")DrawVertical(w,h);else DrawNormal(w,h);
     if(g_imgMenuOpen)DrawImgMenu(w,h);
     if(OU().open)DrawOnline(w,h);   // os menus (ex.: escolher playlist) ficam por cima
-    if(host::PU().open)DrawHostPanel(w,h);
-    if(g_fxp.open)DrawFxPanel(w,h);
     if(g_folderMenuOpen)DrawFolderMenu(w,h);
     if(g_ctxOpen)DrawCtxMenu(w,h);
     if(g_editArtist)DrawArtistEditor(w,h);
@@ -268,7 +266,7 @@ int main(int argc,char** argv){
         if(exitAfter>0&&GetTickCount64()-t0>=(ULONGLONG)exitAfter) break;
         if(g_quit) break;
         if(g_hiddenToBg){ PollInputEvents(); WaitTime(0.05); continue; }   // 2o plano: sem desenhar
-        Vector2 mp=GetMousePosition(); int mx=(int)mp.x,my=(int)mp.y; g_mouseX=mx; g_mouseY=my;
+        Vector2 mp=GetMousePosition(); int mx=(int)mp.x,my=(int)mp.y;
         if(IsMouseButtonPressed(MOUSE_BUTTON_LEFT)) OnLButtonDown(mx,my);
         else if(IsMouseButtonDown(MOUSE_BUTTON_LEFT)&&g_dragSeek!=-1) OnMouseDrag(mx);
         if(IsMouseButtonReleased(MOUSE_BUTTON_LEFT)) OnLButtonUp();

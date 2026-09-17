@@ -6,7 +6,7 @@
 #include <winhttp.h>
 #include <gdiplus.h>
 
-static std::string HttpGetBytes(const std::wstring& host,const std::wstring& path,std::wstring* outType=nullptr,DWORD* status=nullptr,bool noRedirect=false){
+static std::string HttpGetBytes(const std::wstring& host,const std::wstring& path,std::wstring* outType=nullptr,DWORD* status=nullptr){
     std::string out;
     HINTERNET ses=WinHttpOpen(L"Mozilla/5.0 (Windows NT 10.0; Win64; x64) RemixPlayer/1.2",WINHTTP_ACCESS_TYPE_DEFAULT_PROXY,WINHTTP_NO_PROXY_NAME,WINHTTP_NO_PROXY_BYPASS,0);
     if(!ses)return out;
@@ -18,7 +18,6 @@ static std::string HttpGetBytes(const std::wstring& host,const std::wstring& pat
     if(con){
         HINTERNET req=WinHttpOpenRequest(con,L"GET",path.c_str(),NULL,WINHTTP_NO_REFERER,WINHTTP_DEFAULT_ACCEPT_TYPES,WINHTTP_FLAG_SECURE);
         if(req){
-            if(noRedirect){ DWORD f=WINHTTP_DISABLE_REDIRECTS; WinHttpSetOption(req,WINHTTP_OPTION_DISABLE_FEATURE,&f,sizeof(f)); }   // Host: capa a pedido do celular nao segue para outro lugar
             std::wstring hdr=L"Accept-Language: pt-BR,pt;q=0.9,en;q=0.8\r\n";
             WinHttpAddRequestHeaders(req,hdr.c_str(),(DWORD)-1,WINHTTP_ADDREQ_FLAG_ADD);
             if(WinHttpSendRequest(req,WINHTTP_NO_ADDITIONAL_HEADERS,0,WINHTTP_NO_REQUEST_DATA,0,0,0)&&WinHttpReceiveResponse(req,NULL)){
@@ -50,13 +49,6 @@ bool PlatformHttpGet(const std::string& url,std::string& body){
     if(host.empty()) return false;
     DWORD st=0; body=HttpGetBytes(host,path,nullptr,&st);
     return !body.empty()&&(st==0||(st>=200&&st<400));
-}
-bool PlatformHttpGetNoRedirect(const std::string& url,std::string& body){
-    std::wstring host,path; SplitUrl(Utf8ToWide(url),host,path);
-    if(host.empty()) return false;
-    DWORD st=0; body=HttpGetBytes(host,path,nullptr,&st,true);
-    if(st<200||st>=300) body.clear();
-    return !body.empty();
 }
 static void ClearWebResultsPlatform(){
     WebPick& wb=WP();
