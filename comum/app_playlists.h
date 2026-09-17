@@ -144,6 +144,9 @@ static void RefreshPlaylistCover(Playlist& pl){
         std::wstring c=FindCoverInFolder(std::filesystem::path(e.path).parent_path()); if(!c.empty()){ pl.coverPath=c; return; } }
     if(!pl.folder.empty()) pl.coverPath=FindCoverInFolder(std::filesystem::path(pl.folder));   // so pasta vinculada: imagem da pasta
 }
+struct PlCount { size_t total=0, online=0; bool ok=false; };
+static std::map<std::wstring,PlCount> g_plCount;   // slug -> faixas de verdade (pasta vinculada + avulsas + online) para os cards
+static void RecountPlaylists();
 static void LoadPlaylists(){
     g_playlists.clear(); std::error_code ec; std::filesystem::path root(PlaylistsDir());
     if(!std::filesystem::exists(root,ec)) return;
@@ -151,6 +154,7 @@ static void LoadPlaylists(){
         if(ec) break; std::error_code e2; if(!it->is_directory(e2)) continue;
         Playlist pl; if(LoadPlaylistFile(it->path().wstring(),pl)){ RefreshPlaylistCover(pl); g_playlists.push_back(std::move(pl)); } }
     SortPlaylists();
+    g_plCount.clear(); RecountPlaylists();
 }
 static int FindPlaylistBySlug(const std::wstring& slug){ for(size_t i=0;i<g_playlists.size();++i) if(g_playlists[i].slug==slug) return (int)i; return -1; }
 static int CreatePlaylist(const std::wstring& name){
@@ -235,7 +239,34 @@ static std::vector<Track> PlaylistTracks(int i,const std::vector<Track>& lib,int
         else { e.ok=false; missing++; }
     }
     if(changed) SavePlaylist(pl);
+    { PlCount c; c.total=out.size(); for(auto& t:out) if(!t.url.empty()&&t.path==t.url) ++c.online; c.ok=true; g_plCount[pl.slug]=c; }   // conta exata de quem acabou de montar a lista
     return out;
+}
+// Conta sem ler tags (so lista a pasta): para os cards das playlists que nao estao abertas.
+static void RecountPlaylist(int i){
+    if(i<0||i>=(int)g_playlists.size()) return;
+    const Playlist& pl=g_playlists[(size_t)i]; std::set<std::wstring> seen; size_t on=0; std::error_code ec;
+    if(!pl.folder.empty()&&Config::DirExists(pl.folder)) WalkFiles(pl.folder,[&](const std::filesystem::path& p){ if(IsAudioExt(LowerExt(p))) seen.insert(p.wstring()); });
+    for(auto& e:pl.entries){
+        if(!e.path.empty()&&std::filesystem::exists(std::filesystem::path(e.path),ec)){ seen.insert(e.path); continue; }
+        if(!e.url.empty()&&seen.insert(e.url).second) ++on;
+    }
+    PlCount c; c.total=seen.size(); c.online=on; c.ok=true; g_plCount[pl.slug]=c;
+}
+static void RecountPlaylists(){ for(size_t i=0;i<g_playlists.size();++i) RecountPlaylist((int)i); }
+// Assinatura barata de uma pasta vinculada (quantos arquivos de audio, nomes, tamanhos e datas):
+// muda quando entra, sai, renomeia ou regrava musica. Roda fora da thread da UI.
+static std::string FolderAudioSignature(const std::wstring& folder){
+    unsigned long long h=1469598103934665603ULL, n=0; std::error_code ec;
+    auto mix=[&](unsigned long long v){ h^=v; h*=1099511628211ULL; };
+    if(!Config::DirExists(folder)) return "sem-pasta";
+    WalkFiles(folder,[&](const std::filesystem::path& p){
+        if(!IsAudioExt(LowerExt(p))) return;
+        ++n; for(wchar_t c:p.wstring()) mix((unsigned long long)c);
+        std::error_code e2; mix((unsigned long long)std::filesystem::file_size(p,e2));
+        auto t=std::filesystem::last_write_time(p,e2); if(!e2) mix((unsigned long long)t.time_since_epoch().count());
+    });
+    return std::to_string(n)+":"+std::to_string(h);
 }
 static bool PlaylistSetFolder(int i,const std::wstring& folder){ if(i<0||i>=(int)g_playlists.size()) return false; g_playlists[(size_t)i].folder=folder; return SavePlaylist(g_playlists[(size_t)i]); }
 // adiciona um arquivo local pelo caminho (arquivos escolhidos / pasta copiada)

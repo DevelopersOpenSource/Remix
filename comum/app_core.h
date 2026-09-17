@@ -904,6 +904,8 @@ static void DeleteTrack(int i){
 
 // ---- Host (host_server.h): cola definida mais abaixo; aqui so as assinaturas ----
 static bool HostRunningNow();
+static std::string HostTargetsOf(const std::wstring& slug);   // "" = playlist nao hosteada
+static unsigned g_hostFolderGen=0;   // sobe quando uma pasta vinculada muda (o Host republica)
 static void HostStopNow();
 static bool HostStartFromCfg();
 static std::wstring HostPlLabel(const std::wstring& slug);
@@ -1141,7 +1143,26 @@ static const std::vector<Track>* HostLibNow(){ if(g_libCached) return &g_libTrac
 static void HostPublishNow(){
     const std::vector<Track>* lib=HostLibNow();
     if(lib&&lib!=&g_hostLib){ g_hostLib=*lib; g_hostLibOk=true; }
-    static const std::vector<Track> vazio; host::Publish(lib?*lib:vazio,g_playlists);
+    static const std::vector<Track> vazio;
+    // playlist com pasta vinculada: o celular recebe tambem as musicas da pasta (o app mostra as duas coisas)
+    std::vector<Playlist> pls=g_playlists;
+    std::map<std::wstring,const Track*> known;   // titulo/artista ja lidos (biblioteca e playlist aberta): sem ler tag de novo
+    for(auto& t:g_hostLib) known[t.path]=&t;
+    if(g_view==2) for(auto& t:g_tracks) known[t.path]=&t;
+    for(auto& p:pls){
+        if(p.folder.empty()||!Config::DirExists(p.folder)) continue;
+        std::set<std::wstring> have; for(auto& e:p.entries) if(!e.path.empty()) have.insert(e.path);
+        std::vector<PlEntry> extra;
+        WalkFiles(p.folder,[&](const std::filesystem::path& f){
+            if(!IsAudioExt(LowerExt(f))) return; std::wstring w=f.wstring(); if(!have.insert(w).second) return;
+            PlEntry e; e.path=w; e.file=f.filename().wstring();
+            auto k=known.find(w); if(k!=known.end()){ e.title=k->second->title; e.artist=k->second->artist; }
+            extra.push_back(e);
+        });
+        std::sort(extra.begin(),extra.end(),[](const PlEntry& a,const PlEntry& b){ return _wcsicmp(a.file.c_str(),b.file.c_str())<0; });
+        p.entries.insert(p.entries.begin(),extra.begin(),extra.end());
+    }
+    host::Publish(lib?*lib:vazio,pls);
 }
 // Impressao digital do que o Host mostra: caminho, titulo, artista, capa e duracao de cada faixa e de cada
 // entrada das playlists. Renomear, editar ou trocar faixa (mesmo sem mudar a quantidade) republica.
@@ -1151,8 +1172,8 @@ static unsigned long long HostFingerprint(){
     auto num=[&](long long v){ h^=(unsigned long long)v; h*=1099511628211ULL; };
     const std::vector<Track>* lib=HostLibNow(); num(lib?(long long)lib->size():-1);
     if(lib) for(auto& t:*lib){ mix(t.path); mix(t.title); mix(t.artist); mix(t.coverPath); num(t.durSec); }
-    num((long long)g_playlists.size());
-    for(auto& p:g_playlists){ mix(p.slug); mix(p.name); num((long long)p.entries.size()); for(auto& e:p.entries){ mix(e.path); mix(e.url); mix(e.play); mix(e.title); mix(e.artist); mix(e.thumb); num(e.dur); } }
+    num((long long)g_playlists.size()); num((long long)g_hostFolderGen);
+    for(auto& p:g_playlists){ mix(p.slug); mix(p.name); mix(p.folder); num((long long)p.entries.size()); for(auto& e:p.entries){ mix(e.path); mix(e.url); mix(e.play); mix(e.title); mix(e.artist); mix(e.thumb); num(e.dur); } }
     return h;
 }
 static host::Options HostOptsFromCfg(){ host::Options o; o.port=g_cfg.hostPort; o.lanOk=g_cfg.hostLan; o.lan6=g_cfg.hostIPv6; o.pin=WideToUtf8(g_cfg.hostPin); o.name=g_cfg.hostName; o.accent=AccentHex(); o.onlineOk=g_cfg.hostOnline; o.qrConfirm=g_cfg.hostQrConfirm; return o; }
@@ -1208,6 +1229,7 @@ static void HostConfirm(bool ok){
 }
 static void HostMakeHtml(){ std::wstring p=host::WriteConnectHtml(); if(p.empty()){ SetStatus(L"Não consegui gravar o arquivo.",3000); return; } SetStatus(L"Remix-conectar.html gravado na pasta do Remix: mande pelo WhatsApp.",4500); PlatformOpenFolder(Config::BaseDir()); }
 static std::wstring HostPlLabel(const std::wstring& slug){ return host::Targets(slug).empty()?L"Hostear no celular":L"Parar de hostear no celular"; }
+static std::string HostTargetsOf(const std::wstring& slug){ return host::Targets(slug); }
 static void HostTogglePlaylist(int pl){ if(pl<0||pl>=(int)g_playlists.size()) return; const std::wstring& slug=g_playlists[(size_t)pl].slug; bool on=host::Targets(slug).empty(); host::SetTargets(slug,on?"ALL":""); HostPublishNow(); SetStatus(on?L"Playlist hosteada para todos os dispositivos (ajuste no painel HOST).":L"Playlist não aparece mais nos celulares.",3200); }
 static void ConfirmYes(){
     int t=g_confirmTrack; int kind=g_confirmKind; g_confirmOpen=false; g_confirmKind=0;
@@ -1350,7 +1372,7 @@ static void Tick(float dt){
     HostTick();
     if(g_showSplash){ if(GetTickCount64()-g_splashStart>=SPLASH_MS) g_showSplash=false; }
     else {
-        ConsumeAutoScan(); PollFolderWatch(); UpdateStreamQueue(); TickJournal();
+        ConsumeAutoScan(); PollFolderWatch(); PollLinkedFolders(); UpdateStreamQueue(); TickJournal();
         float sm=.4f+(g_cfg.ledSpeed/100.f)*1.6f;
         float k=dt/0.04f;
         if(g_player.playing&&g_cfg.artShape==L"cd")g_rotation+=1.2f*sm*k*(g_cfg.cdSpeed/100.f);
