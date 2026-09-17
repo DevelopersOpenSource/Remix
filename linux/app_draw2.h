@@ -70,14 +70,21 @@ static void DrawSettings(int w,int h){
     {   // HOST (acesso pelo celular)
         bool on=host::Running(); host::View hv=host::GetView();
         tgl(R_setHostOn,on?L"HOST: LIGADO":L"HOST: DESLIGADO",L"LIGAR O HOST",on);
-        btn(R_setHostPanel,L"ABRIR PAINEL DO HOST",false);
+        btn(R_setHostPanel,L"ABRIR PAINEL (QR CODE)",false);
         btn(R_setHostPort,L"PORTA: "+std::to_wstring(g_cfg.hostPort),false);
         btn(R_setHostPin,g_cfg.hostPin.empty()?L"PIN: DEFINIR...":L"PIN: "+std::wstring(g_cfg.hostPin.size(),L'•'),!g_cfg.hostPin.empty());
         btn(R_setHostName,L"NOME: "+(g_cfg.hostName.empty()?Utf8ToWide(hostnet::HostName()):g_cfg.hostName),false);
         tgl(R_setHostTunnel,g_cfg.hostTunnel?L"TÚNEL: LIGADO":L"TÚNEL: DESLIGADO",L"TÚNEL CLOUDFLARE (internet)",g_cfg.hostTunnel);
         tgl(R_setHostLan,g_cfg.hostLan?L"REDE LOCAL: SIM":L"REDE LOCAL: NÃO",L"REDE LOCAL (mesmo roteador)",g_cfg.hostLan);
-        std::wstring st=on?L"Ligado na porta "+std::to_wstring(hv.port)+(hv.lanUrls.empty()?L"":L"   ·   "+Utf8ToWide(hv.lanUrls[0]))+L"   ·   túnel: "+Utf8ToWide(hv.tunUrl.empty()?hv.tunStatus:hv.tunUrl):L"Desligado. O celular abre um site (túnel ou rede local), digita o PIN e você aceita aqui.";
-        gfx::TextRect(st,RectF((float)R_setHostTunnel.left,(float)R_setHostTunnel.bottom+10,(float)(R_setHostLan.right-R_setHostTunnel.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+        btn(R_setHostCopyTun,hv.tunUrl.empty()?(hv.tunPending.empty()?L"COPIAR LINK DO TÚNEL":L"TESTANDO O LINK..."):L"COPIAR LINK DO TÚNEL",!hv.tunUrl.empty());
+        btn(R_setHostCopyLan,L"COPIAR LINK LOCAL",!hv.lanUrls.empty());
+        tgl(R_setHostOnline,g_cfg.hostOnline?L"ONLINE NO CELULAR: SIM":L"ONLINE NO CELULAR: NÃO",L"ONLINE NO CELULAR",g_cfg.hostOnline);
+        tgl(R_setHostQrConf,g_cfg.hostQrConfirm?L"QR PEDE ACEITE: SIM":L"QR PEDE ACEITE: NÃO",L"QR PEDE ACEITE",g_cfg.hostQrConfirm);
+        tgl(R_setHostIpv6,g_cfg.hostIPv6?L"IPv6: SIM":L"IPv6: NÃO",L"IPv6 (LAN)",g_cfg.hostIPv6);
+        std::wstring st=on?L"Ligado na porta "+std::to_wstring(hv.port)+(hv.lanUrls.empty()?L"":L"   ·   local: "+Utf8ToWide(hv.lanUrls[0]))+L"   ·   túnel: "+Utf8ToWide(hv.tunUrl.empty()?hv.tunStatus:hv.tunUrl)
+                          :L"Desligado. No painel tem o QR code: o celular escaneia, digita um nome e já fica vinculado.";
+        gfx::TextRect(st,RectF((float)R_setHostOnline.left,(float)R_setHostOnline.bottom+12,(float)(R_setHostIpv6.right-R_setHostOnline.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(L"Aparelho vinculado não vê nada até você liberar: BIBLIOTECA por aparelho ou playlists hosteadas (painel).",RectF((float)R_setHostOnline.left,(float)R_setHostOnline.bottom+30,(float)(R_setHostIpv6.right-R_setHostOnline.left),16),sm,gray,false,gfx::Near,false,gfx::EllipsisChar);
     }
     // biblioteca
     std::wstring mode=g_cfg.musicFolder.empty()?L"PADRÃO — detectar músicas do PC":L"PASTA PERSONALIZADA";
@@ -469,43 +476,70 @@ static void DrawHostPanel(int w,int h){
     bool on=v.running;
     DrawPill(p.btnToggle,on?L"DESLIGAR":L"LIGAR",on,S(11));
     DrawPill(p.btnTunnel,v.tunRunning?L"TÚNEL: LIGADO":L"TÚNEL: DESLIGADO",v.tunRunning,S(10));
+    DrawPill(p.btnNewLink,L"NOVO LINK",false,S(10));
     DrawPill(p.btnHtml,L"HTML P/ WHATSAPP",false,S(10));
     DrawPill(p.btnPasta,L"ABRIR PASTA",false,S(10));
     DrawPill(p.btnPort,L"PORTA: "+std::to_wstring(g_cfg.hostPort),false,S(10));
     DrawPill(p.btnPin,g_cfg.hostPin.empty()?L"PIN: DEFINIR...":L"PIN: "+std::wstring(g_cfg.hostPin.size(),L'•'),!g_cfg.hostPin.empty(),S(10));
     DrawPill(p.btnName,L"NOME: "+(g_cfg.hostName.empty()?Utf8ToWide(hostnet::HostName()):g_cfg.hostName),false,S(10));
     DrawPill(p.btnLan,g_cfg.hostLan?L"REDE LOCAL: SIM":L"REDE LOCAL: NÃO",g_cfg.hostLan,S(10));
-    // linhas de estado
-    float ix=box.X+S(18), iy=(float)p.btnLan.bottom+S(8), iw=box.Width-S(36);
-    std::wstring l1=on?L"Ligado na porta "+std::to_wstring(v.port)+(g_cfg.hostLan?L"  ·  rede local: "+(v.lanUrls.empty()?L"nenhum IP encontrado":Utf8ToWide(v.lanUrls[0]))+(v.lanUrls.size()>1?L" (+"+std::to_wstring(v.lanUrls.size()-1)+L")":L""):L"  ·  só pelo túnel"):L"Desligado"+std::wstring(v.lastError.empty()?L"":L"  ·  "+Utf8ToWide(v.lastError));
-    std::wstring l2=L"Túnel: "+Utf8ToWide(v.tunUrl.empty()?v.tunStatus:v.tunUrl)+(v.tunUrl.empty()?L"":L"   (HTTPS, atravessa CGNAT, não mostra seu IP)");
-    std::wstring l3=g_cfg.hostPin.empty()?L"Defina um PIN para ligar. O celular digita o PIN uma vez e você aceita o aparelho aqui.":L"Celular: abra o link, digite o PIN, e aceite o pedido que aparece aqui. Mande o HTML pelo WhatsApp para não digitar o link.";
-    gfx::TextRect(l1,RectF(ix,iy,iw,16),S(11),on?white:gray,false,gfx::Near,false,gfx::EllipsisChar);
-    gfx::TextRect(l2,RectF(ix,iy+S(17),iw,16),S(11),v.tunUrl.empty()?gray:ab,false,gfx::Near,false,gfx::EllipsisChar);
-    gfx::TextRect(l3,RectF(ix,iy+S(34),iw,16),S(10),gray,false,gfx::Near,false,gfx::EllipsisChar);
+    DrawPill(p.btnIpv6,g_cfg.hostIPv6?L"IPv6: SIM":L"IPv6: NÃO",g_cfg.hostIPv6,S(10));
+    // QR code (fundo branco + zona de silencio de 4 modulos)
+    {
+        RectF q=RF(p.qrBox); Color wb=Argb(255,255,255,255);
+        if(!p.qr.modules.empty()&&p.qr.size>0){
+            int n=p.qr.size+8; float m=std::floor(q.Width/(float)n); if(m<1.f) m=1.f;
+            float side=m*n, ox=q.X+(q.Width-side)/2.f, oy=q.Y+(q.Height-side)/2.f;
+            gfx::FillRect(ox,oy,side,side,wb);
+            Color blk=Argb(255,0,0,0);
+            for(int yy=0;yy<p.qr.size;yy++) for(int xx=0;xx<p.qr.size;xx++) if(p.qr.get(xx,yy)) gfx::FillRect(ox+(xx+4)*m,oy+(yy+4)*m,m,m,blk);
+        } else {
+            Color ph=Cs(Argb(255,16,19,34),UI().surfaceHi); DrawRoundRect(q,S(UI_R_CARD),&ph,nullptr);
+            gfx::TextRect(on?L"Gerando o QR...":L"Ligue o Host para ver o QR code",RectF(q.X+S(10),q.Y,q.Width-S(20),q.Height),S(11),gray,false,gfx::Center,true,gfx::EllipsisChar);
+        }
+    }
+    {   // estado ao lado do QR
+        RectF inf=RF(p.info); bool viaTun=p.qrText.rfind("https://",0)==0; long long left=host::QrSecondsLeft();
+        std::wstring l1=!on?L"Desligado"+std::wstring(v.lastError.empty()?L"":L"  ·  "+Utf8ToWide(v.lastError))
+                        :p.qrText.empty()?L"Sem link para o QR ainda (ligue REDE LOCAL ou espere o túnel)."
+                        :std::wstring(L"Escaneie com a câmera do celular  ·  ")+(viaTun?L"pela internet":L"rede local")+L"  ·  uso único, vale "+std::to_wstring(left/60)+L" min";
+        std::wstring l2=L"Local: "+(v.lanUrls.empty()?std::wstring(g_cfg.hostLan?L"nenhum IP de rede local":L"desligada"):Utf8ToWide(v.lanUrls[0]))+(v.lan6Urls.empty()?L"":L"  ·  IPv6 ligado");
+        std::wstring l3=L"Túnel: "+(v.tunUrl.empty()?Utf8ToWide(v.tunStatus):Utf8ToWide(v.tunUrl));
+        gfx::TextRect(l1,RectF(inf.X,inf.Y,inf.Width,S(18)),S(11),on?white:gray,true,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(l2,RectF(inf.X,inf.Y+S(21),inf.Width,S(18)),S(11),gray,false,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(l3,RectF(inf.X,inf.Y+S(40),inf.Width,S(18)),S(11),v.tunUrl.empty()?gray:ab,false,gfx::Near,false,gfx::EllipsisChar);
+    }
+    DrawPill(p.btnCopyTun,v.tunUrl.empty()?(v.tunPending.empty()?L"COPIAR LINK DO TÚNEL":L"TESTANDO O LINK..."):L"COPIAR LINK DO TÚNEL",!v.tunUrl.empty(),S(10));
+    DrawPill(p.btnCopyLan,L"COPIAR LINK LOCAL",!v.lanUrls.empty(),S(10));
+    DrawPill(p.btnQrMode,p.qrTunnel?L"QR: INTERNET":L"QR: REDE LOCAL",false,S(10));
+    DrawPill(p.btnQrNew,L"NOVO QR",false,S(10));
+    DrawPill(p.btnOnline,g_cfg.hostOnline?L"ONLINE NO CELULAR: SIM":L"ONLINE NO CELULAR: NÃO",g_cfg.hostOnline,S(10));
+    DrawPill(p.btnQrConfirm,g_cfg.hostQrConfirm?L"QR PEDE ACEITE: SIM":L"QR PEDE ACEITE: NÃO",g_cfg.hostQrConfirm,S(10));
     // lista com rolagem
     gfx::PushClip(RF(p.list));
+    float ix=box.X+S(18), iw=box.Width-S(36);
     float y=(float)p.list.top-p.scroll, rowH=S(34); float x=ix;
     auto title=[&](const std::wstring& t){ gfx::Text(t,x,y+S(4),S(11),UiClassic()?ab:white,true); y+=S(26); };
     auto rowBg=[&](float yy){ RectF r(x,yy,iw,rowH-S(6)); Color rb=Cs(Argb(255,16,19,34),UI().surfaceHi); DrawRoundRect(r,S(UI_R_PILL),&rb,nullptr); };
     title(L"PEDIDOS PARA CONECTAR ("+std::to_wstring(v.pending.size())+L")");
     for(size_t i=0;i<v.pending.size()&&i<p.accept.size();i++){
         rowBg(y); const host::PairReq& q=v.pending[i];
-        gfx::TextRect(Utf8ToWide(q.name)+L"   ·   "+Utf8ToWide(q.ip)+(q.viaTunnel?L" (internet)":L" (rede local)"),RectF(x+S(10),y,iw-S(210),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        gfx::TextRect(Utf8ToWide(q.name)+L"   ·   "+Utf8ToWide(q.ip)+(q.viaTunnel?L" (internet)":L" (rede local)")+(q.viaQr?L"  ·  QR":L"  ·  PIN"),RectF(x+S(10),y,iw-S(210),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
         DrawPill(p.accept[i],L"ACEITAR",true,S(10)); DrawPill(p.deny[i],L"RECUSAR",false,S(10)); y+=rowH;
     }
-    title(L"DISPOSITIVOS PAREADOS ("+std::to_wstring(v.devs.size())+L")");
-    if(v.devs.empty()){ gfx::Text(L"Nenhum ainda.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
+    title(L"APARELHOS VINCULADOS ("+std::to_wstring(v.devs.size())+L")");
+    if(v.devs.empty()){ gfx::Text(L"Nenhum ainda. Escaneie o QR code com o celular.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
     for(size_t i=0;i<v.devs.size()&&i<p.revoke.size();i++){
         rowBg(y); const host::Device& d=v.devs[i]; long long ago=host::NowSec()-d.lastSeen; std::wstring seen=ago<120?L"agora":ago<3600?std::to_wstring(ago/60)+L" min atrás":ago<86400?std::to_wstring(ago/3600)+L" h atrás":std::to_wstring(ago/86400)+L" d atrás";
-        gfx::TextRect(Utf8ToWide(d.name)+L"   ·   "+Utf8ToWide(d.ip)+L"   ·   visto "+seen,RectF(x+S(10),y,iw-S(120),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        gfx::TextRect(Utf8ToWide(d.name)+(d.persist?L"":L" (temporário)")+L"   ·   "+Utf8ToWide(d.ip)+L"   ·   visto "+seen,RectF(x+S(10),y,iw-S(290),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        if(i<p.devLib.size()) DrawPill(p.devLib[i],d.lib?L"BIBLIOTECA: SIM":L"BIBLIOTECA: NÃO",d.lib,S(10));
         DrawPill(p.revoke[i],L"REMOVER",false,S(10)); y+=rowH;
     }
     title(L"PLAYLISTS DO PC NO CELULAR");
     if(g_playlists.empty()){ gfx::Text(L"Você não tem playlists. Crie uma na aba PLAYLISTS e hosteie aqui.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
     for(size_t i=0;i<g_playlists.size()&&i<p.plHost.size();i++){
         rowBg(y); std::string t=host::Targets(g_playlists[i].slug);
-        gfx::TextRect(g_playlists[i].name,RectF(x+S(10),y,iw-S(140),rowH-S(6)),S(11),white,true,gfx::Near,true,gfx::EllipsisChar);
+        gfx::TextRect(g_playlists[i].name,RectF(x+S(10),y,iw-S(150),rowH-S(6)),S(11),white,true,gfx::Near,true,gfx::EllipsisChar);
         std::wstring lab=t.empty()?L"HOST: NÃO":t=="ALL"?L"HOST: TODOS":L"HOST: ALGUNS";
         DrawPill(p.plHost[i],lab,!t.empty(),S(10)); y+=rowH;
         for(size_t j=0;j<p.plDev[i].size()&&j<v.devs.size();j++){
@@ -514,9 +548,16 @@ static void DrawHostPanel(int w,int h){
         }
         if(!p.plDev[i].empty()) y=(float)p.plDev[i].back().bottom+S(8);
     }
-    title(L"PLAYLISTS DOS CELULARES (só leitura)");
-    if(v.dpls.empty()){ gfx::Text(L"Nenhuma. O celular cria as dele na aba MINHAS; elas ficam guardadas aqui, mas não entram nas suas.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
-    for(auto& dp:v.dpls){ std::wstring dn=L"?"; for(auto& d:v.devs) if(d.id==dp.dev) dn=Utf8ToWide(d.name); gfx::TextRect(Utf8ToWide(dp.name)+L"   ·   "+dn+L"   ·   "+std::to_wstring(dp.ids.size())+L" faixas",RectF(x+S(10),y,iw-S(20),rowH-S(6)),S(11),gray,false,gfx::Near,true,gfx::EllipsisChar); y+=rowH; }
+    title(L"PLAYLISTS DOS APARELHOS (cada uma é só do dono, a não ser que você libere)");
+    if(v.dpls.empty()){ gfx::Text(L"Nenhuma. O celular cria as dele; elas ficam guardadas aqui, separadas por aparelho.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
+    for(size_t i=0;i<v.dpls.size()&&i<p.dplOk.size();i++){
+        const host::DevPlaylist& dp=v.dpls[i]; rowBg(y);
+        std::wstring dn=L"?"; for(auto& d:v.devs) if(d.id==dp.dev) dn=Utf8ToWide(d.name);
+        std::wstring st=!dp.share?L"privada":dp.pcOk?L"compartilhada com os outros aparelhos":L"pediu para compartilhar";
+        gfx::TextRect(Utf8ToWide(dp.name)+L"   ·   "+dn+L"   ·   "+std::to_wstring(dp.ids.size())+L" faixas   ·   "+st,RectF(x+S(10),y,iw-S(140),rowH-S(6)),S(11),dp.share&&!dp.pcOk?white:gray,false,gfx::Near,true,gfx::EllipsisChar);
+        if(p.dplOk[i].right>p.dplOk[i].left) DrawPill(p.dplOk[i],dp.pcOk?L"BLOQUEAR":L"LIBERAR",!dp.pcOk,S(10));
+        y+=rowH;
+    }
     gfx::PopClip();
 }
 // ---- menus flutuantes / confirmacao (Linux) --------------------------------

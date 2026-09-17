@@ -210,8 +210,9 @@ inline void Proc::CloseAll() { for (int* fd : { &outR, &errR, &inW }) if (*fd >=
 // Roda e captura stdout/stderr. timeoutMs <= 0 = sem limite. onLine recebe cada linha
 // (stdout e stderr, usado para progresso). cancel = mata o processo quando virar true.
 struct CapResult { int code = -1; std::string out, err; bool started = false, timedOut = false, canceled = false; };
+// keepMax = quanto guardar de stdout/stderr (0 = nada: so onLine; o tunel roda horas).
 inline CapResult RunCapture(const std::vector<std::wstring>& args, int timeoutMs, const std::atomic<bool>* cancel = nullptr,
-                            std::function<void(const std::string&)> onLine = nullptr) {
+                            std::function<void(const std::string&)> onLine = nullptr, size_t keepMax = (size_t)96 * 1024 * 1024) {
     CapResult r;
     Proc p;
     if (!p.Start(args, true, true, false)) return r;
@@ -226,7 +227,7 @@ inline CapResult RunCapture(const std::vector<std::wstring>& args, int timeoutMs
             if (n <= 0) break;
             std::lock_guard<std::mutex> lk(lm);
             std::string& dst = which == 0 ? r.out : r.err;
-            if (dst.size() < (size_t)96 * 1024 * 1024) dst.append(b, (size_t)n);
+            if (dst.size() < keepMax) dst.append(b, (size_t)n);
             if (onLine) {
                 lb[which].append(b, (size_t)n);
                 size_t pos;
@@ -235,6 +236,7 @@ inline CapResult RunCapture(const std::vector<std::wstring>& args, int timeoutMs
                     lb[which].erase(0, pos + 1);
                     if (!ln.empty()) onLine(ln);
                 }
+                if (lb[which].size() > 65536) lb[which].clear();   // linha sem fim: nao cresce para sempre
             }
         }
         ++eofs;

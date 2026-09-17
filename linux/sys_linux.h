@@ -292,7 +292,7 @@ inline size_t CurlWrite(char* ptr, size_t sz, size_t nm, void* ud) {
     return n;
 }
 inline bool HttpAvailable() { return Curl().ok; }
-inline std::string HttpGet(const std::string& url, std::string* contentType = nullptr, long* status = nullptr) {
+inline std::string HttpGet(const std::string& url, std::string* contentType = nullptr, long* status = nullptr, bool follow = true) {
     auto& c = Curl();
     std::string out;
     if (!c.ok) return out;
@@ -305,7 +305,7 @@ inline std::string HttpGet(const std::string& url, std::string* contentType = nu
     c.setopt(h, OPT_WRITEFUNCTION, &CurlWrite);
     c.setopt(h, OPT_WRITEDATA, &out);
     c.setopt(h, OPT_USERAGENT, "Mozilla/5.0 (Windows NT 10.0; Win64; x64) RemixPlayer/1.2");
-    c.setopt(h, OPT_FOLLOWLOCATION, 1L);
+    c.setopt(h, OPT_FOLLOWLOCATION, follow ? 1L : 0L);   // follow=false: o Host busca capas a pedido do celular e nao segue para outro lugar
     c.setopt(h, OPT_MAXREDIRS, 8L);
     c.setopt(h, OPT_TIMEOUT, 25L);
     c.setopt(h, OPT_CONNECTTIMEOUT, 15L);

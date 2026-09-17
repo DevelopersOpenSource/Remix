@@ -184,7 +184,9 @@ void PlatformPickImageAsync(int evType,int ctx){ sys::PickAsync(sys::DLG_IMAGE,L
 void PlatformPickFolderFor(int evType,int ctx){ sys::PickAsync(sys::DLG_FOLDER,L"Escolha a pasta",evType,ctx); }
 void PlatformPickAudioFilesAsync(int evType,int ctx){ sys::PickAsync(sys::DLG_AUDIO_MULTI,L"Escolha as músicas",evType,ctx); }
 std::wstring PlatformClipboardText(){ const char* c=GetClipboardText(); return c?Utf8ToWide(c):L""; }
+bool PlatformSetClipboardText(const std::wstring& t){ SetClipboardText(WideToUtf8(t).c_str()); return true; }
 bool PlatformHttpGet(const std::string& url,std::string& body){ long st=0; body=sys::HttpGet(url,nullptr,&st); return !body.empty()&&(st==0||(st>=200&&st<400)); }
+bool PlatformHttpGetNoRedirect(const std::string& url,std::string& body){ long st=0; body=sys::HttpGet(url,nullptr,&st,false); if(st<200||st>=300) body.clear(); return !body.empty(); }
 void PlatformRedraw(){}
 void PlatformLoadCover(const std::wstring& path){
     if(g_coverImg){ gfx::FreeImg(g_coverImg); g_coverImg=nullptr; }

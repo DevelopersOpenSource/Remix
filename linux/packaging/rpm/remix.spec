@@ -9,7 +9,7 @@
 %global __brp_check_rpaths %{nil}
 
 Name:           remix
-Version:        %{?remix_version}%{!?remix_version:1.4.0}
+Version:        %{?remix_version}%{!?remix_version:1.5.0}
 Release:        %{?remix_release}%{!?remix_release:1}%{?dist}
 Summary:        Remix Player — player de música MP3/WAV com visual neon
 License:        Apache-2.0 AND zlib AND MIT AND Bitstream-Vera
@@ -54,6 +54,9 @@ cp -a usr %{buildroot}/
 %doc %{_docdir}/%{name}/
 
 %changelog
+* Tue Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.0-1
+- Host: corrige o conflito de botoes com o estilo, QR code para vincular, cada aparelho so ve o que o PC liberar, online no celular, link do tunel testado antes de aparecer e botao de copiar
+
 * Tue Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.4.0-1
 - Host: o Remix vira servidor para o celular (PIN + aceite no PC, tunel Cloudflare, rede local, playlists por aparelho)
 

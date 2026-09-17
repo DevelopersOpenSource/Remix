@@ -9,12 +9,13 @@ English version: [README.md](README.md). Programa pronto para baixar: [Releases]
 
 <p align="center">
   <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: autor do Remix, ideia original e versão Windows" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming e versão Linux" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming, versão Linux e Host para iOS" width="48%"></a>
 </p>
 
 **[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows.
 **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) entrou depois como co-desenvolvedor: participou da versão Windows,
-sugeriu e desenvolveu as playlists e a música online (streaming e downloads) e levou o Remix para o Linux.
+sugeriu e desenvolveu as playlists e a música online (streaming e downloads), levou o Remix para o Linux e teve a ideia
+do **Host** — o PC vira servidor para o celular — para o Remix chegar ao **iPhone (iOS)** enquanto o Nero faz a versão Android.
 
 ## Pastas
 
@@ -142,8 +143,12 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
   pular ou quando a musica acaba, a proxima sai **na hora** e o canal continua de onde parou. Na lista
   aparece TOCANDO / FILA: PRONTA / FILA: CARREGANDO com a barra do quanto ja carregou. Memoria: ~12 MB
   por musica da fila. Uma musica que falhou na fila e pulada sem esperar de novo.
-- **Download**: fila em segundo plano (pilula no canto inferior direito; clique = abrir a pasta ou
-  cancelar). O arquivo e montado numa pasta temporaria do cache e so vai para a pasta final
+- **Começo rápido**: a extração do yt-dlp (~3 s, o que mais atrasava) fica guardada por 25 min e é
+  usada pelo player, pelo celular (Host) e pelo download; os 3 primeiros resultados de uma busca já são
+  extraídos em segundo plano. Tocar um deles começa em ~0,5 s em vez de ~3 s.
+- **Download**: fila em segundo plano com **várias músicas ao mesmo tempo** (metade dos núcleos do
+  processador, de 2 a 6), reaproveitando a extração que o streaming ou a busca já fizeram
+  (`--load-info-json`). Pilula no canto inferior direito (clique = abrir a pasta ou cancelar). O arquivo e montado numa pasta temporaria do cache e so vai para a pasta final
   (`<Musicas>/Remix Online/<playlist>/`, configuravel) quando termina. MP3, M4A ou formato original,
   com titulo/artista/capa. Terminou: a entrada da playlist passa a apontar para o arquivo.
 - **Streaming ou download**: Configuracoes > ONLINE ("AO TOCAR: STREAMING / BAIXAR") vale para tudo;
@@ -277,9 +282,34 @@ da biblioteca ou mexia em escala/LED/modo (IDs de clique repetidos); PASTA com u
 aberta trocava a biblioteca inteira; aviso de lista vazia por cima da barra; trocar de pasta
 durante uma varredura podia deixar a lista vazia; `--home` abre instancia separada.
 
-## Host: ouvir as músicas do PC no celular
+## Host: ouvir as músicas do PC no celular (iPhone e Android)
 
-Desde a 1.4.0 o Remix vira um servidor para o celular (Configurações > HOST ou o botão HOST no cabeçalho): defina um **PIN**, ligue, mande o link (ou o `Remix-conectar.html` pelo WhatsApp) e aceite o aparelho quando ele pedir. Funciona na **rede local** (mesmo roteador) e pela **internet** por um túnel Cloudflare (HTTPS, sem abrir porta, sem entregar IP; atravessa CGNAT). O celular ouve a biblioteca, as playlists que você hosteou e tem playlists próprias. Porta padrão **49875**. Detalhes, segurança e API em [docs/HOST.md](docs/HOST.md).
+Ideia do Sodre para o Remix funcionar no **iPhone (iOS)** — e em qualquer celular — sem app de loja, enquanto a versão
+Android nativa é feita: o Remix do PC vira um **servidor** e o celular usa pelo navegador (dá para "adicionar à tela inicial").
+
+- **Vincular:** Configurações > HOST (ou o botão **HOST** no cabeçalho) > **LIGAR**. No celular, **escaneie o QR code** do
+  painel e digite só um nome — pronto. Sem o QR, abra o link, digite o **PIN** e aceite o aparelho no PC. O QR vale 10 min e
+  uma vez só (opção **QR PEDE ACEITE** para exigir confirmação no PC também).
+- **Você decide o que cada aparelho ouve:** por padrão um aparelho vinculado **não vê nada**. Libere a **BIBLIOTECA** por
+  aparelho, hosteie playlists (botão direito > "Hostear no celular"; todos ou alguns aparelhos) e libere, se quiser, as
+  playlists que um celular pediu para compartilhar. Cada celular tem as **playlists dele**, isoladas dos outros.
+- **Interface de app de música no celular:** Início, Buscar, Sua Biblioteca, tela da playlist com voltar, **Tocando agora**
+  em tela cheia e controles na tela de bloqueio. Ajustada para o **Safari do iPhone**: todo botão reage ao toque, a barra
+  de posição funciona tocando ou arrastando em qualquer ponto, as folhas abrem o teclado e ficam acima dele, o play volta a
+  funcionar depois de um erro e a página do WhatsApp mostra os links até na pré-visualização do iPhone (sem JavaScript).
+- **Online no celular:** buscar e ouvir YouTube Music, YouTube e SoundCloud pelo celular — o **PC** roda o yt-dlp e o
+  ffmpeg e manda só o áudio; playlists do PC com músicas online também tocam. O celular nunca fala com esses sites.
+- **Rede local e internet:** pelo mesmo roteador (Wi-Fi ou cabo) ou por um **túnel Cloudflare** (HTTPS, sem abrir porta,
+  atravessa CGNAT, sem entregar seu IP). O link do túnel **só aparece depois de testado** (evita o erro de DNS
+  `DNS_PROBE_POSSIBLE`) e tem botão **COPIAR LINK**; **NOVO LINK** gera outro. **HTML P/ WHATSAPP** gera uma página com os links.
+- **Segurança:** só aceita conexões locais ou do túnel (mesmo com IP público), autorização por aparelho e por música
+  (tirar a permissão corta na hora o que está tocando), aparelho sem "Lembrar" é temporário, trava contra adivinhar PIN/QR
+  (por origem e geral), CSRF/XSS e DNS rebinding bloqueados, limites contra DoS e pedidos lentos, IPv6 opcional e só na rede local.
+  Porta padrão **49875**. Detalhes, segurança e API em [docs/HOST.md](docs/HOST.md).
+
+## Segurança de arquivos (planejado)
+
+Plano para proteger contra músicas com malware ou arquivos corrompidos — tocar só o que é reproduzível e a capa, higienizando o resto num processo isolado, sem quebrar o app — em [docs/SEGURANCA-DE-ARQUIVOS.md](docs/SEGURANCA-DE-ARQUIVOS.md). Ainda não implementado.
 
 ## Android (em andamento)
 

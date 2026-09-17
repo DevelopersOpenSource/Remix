@@ -13,6 +13,12 @@
 #include "app_playlists.h"
 #include "app_proc.h"
 #include <memory>
+#include <map>
+#include <set>
+#include <chrono>
+#include <mutex>
+#include <condition_variable>
+#include <atomic>
 #include <cstring>
 #include <climits>
 #ifndef _WIN32
@@ -447,7 +453,7 @@ inline OResolved ResolveLink(const std::wstring& url0, const std::atomic<bool>* 
     }
     EnsureTools();
     if (!YtdlpOk()) { r.err = L"Instale o yt-dlp para ler links do YouTube/SoundCloud."; return r; }
-    auto a = YtdlpArgs(); a.push_back(L"-J"); a.push_back(L"--flat-playlist"); a.push_back(url);
+    auto a = YtdlpArgs(); a.push_back(L"-J"); a.push_back(L"--flat-playlist"); a.push_back(L"--"); a.push_back(url);   // "--": link nunca vira opcao
     CapResult cr = RunCapture(a, 300000, cancel);
     JVal root;
     if (!OParse(cr.out, root) || root.t != JVal::OBJ) { r.err = OErr(cr, L"Não consegui ler esse link."); return r; }
@@ -464,11 +470,11 @@ inline OResolved ResolveLink(const std::wstring& url0, const std::atomic<bool>* 
 }
 
 // ---- URL do audio para o streaming --------------------------------------------------
-struct MediaInfo { std::string url; std::vector<std::string> headers; int dur = 0; std::wstring title, artist, album, thumb; };
-inline bool GetMediaInfo(const std::wstring& play, MediaInfo& mi, std::wstring& err, const std::atomic<bool>* cancel) {
+struct MediaInfo { std::string url; std::vector<std::string> headers; int dur = 0; std::wstring title, artist, album, thumb; std::string raw; };   // raw = JSON do yt-dlp (download reaproveita)
+inline bool GetMediaInfoFresh(const std::wstring& play, MediaInfo& mi, std::wstring& err, const std::atomic<bool>* cancel) {
     auto a = YtdlpArgs();
     for (const wchar_t* x : { L"-J", L"--no-playlist", L"-f", L"bestaudio/best" }) a.push_back(x);
-    a.push_back(play);
+    a.push_back(L"--"); a.push_back(play);   // o link pode vir de terceiros (playlist, celular): "--" impede virar opcao do yt-dlp
     CapResult r = RunCapture(a, 120000, cancel);
     JVal root;
     if (!OParse(r.out, root) || root.t != JVal::OBJ) { err = OErr(r, L"Não consegui abrir essa música."); return false; }
@@ -479,27 +485,140 @@ inline bool GetMediaInfo(const std::wstring& play, MediaInfo& mi, std::wstring& 
     if (hdr && hdr->t == JVal::OBJ) for (auto& kv : hdr->o) if (kv.second.t == JVal::STR) mi.headers.push_back(kv.first + ": " + kv.second.s);
     OTrack t; InfoToTrack(root, t, DetectSource(play));
     mi.dur = t.dur; mi.title = t.title; mi.artist = t.artist; mi.album = t.album; mi.thumb = t.thumb;
+    if (r.out.size() < (size_t)4 * 1024 * 1024) mi.raw = r.out;
     return true;   // url vazia = usa o modo pipe (yt-dlp -o - | ffmpeg)
 }
+// ---- Cache da extracao ----------------------------------------------------------------
+// A extracao do yt-dlp e o que mais atrasa o comeco (~3 s). O resultado vale ~25 min e e usado
+// por todo mundo: o player do PC, o celular (Host) e o download (--load-info-json). Dois pedidos
+// da mesma musica ao mesmo tempo esperam um so yt-dlp.
+struct MediaCacheT { std::mutex m; std::condition_variable cv; std::map<std::wstring, std::pair<MediaInfo, long long>> done; std::map<std::wstring, int> busy; };
+inline MediaCacheT& MCache() { static MediaCacheT* c = new MediaCacheT(); return *c; }
+inline long long MonoSec() { return (long long)std::chrono::duration_cast<std::chrono::seconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+static const long long MEDIA_CACHE_SEC = 25 * 60;
+inline bool GetMediaInfoCached(const std::wstring& play, MediaInfo& mi) {
+    std::lock_guard<std::mutex> lk(MCache().m);
+    auto it = MCache().done.find(play);
+    if (it == MCache().done.end() || MonoSec() - it->second.second >= MEDIA_CACHE_SEC) return false;
+    mi = it->second.first; return true;
+}
+inline void ForgetMediaInfo(const std::wstring& play) { std::lock_guard<std::mutex> lk(MCache().m); MCache().done.erase(play); }   // o link direto falhou: a proxima vez extrai de novo
+inline bool GetMediaInfo(const std::wstring& play, MediaInfo& mi, std::wstring& err, const std::atomic<bool>* cancel) {
+    {
+        std::unique_lock<std::mutex> lk(MCache().m);
+        for (;;) {
+            auto it = MCache().done.find(play);
+            if (it != MCache().done.end() && MonoSec() - it->second.second < MEDIA_CACHE_SEC) { mi = it->second.first; return true; }
+            if (!MCache().busy.count(play)) break;
+            MCache().cv.wait_for(lk, std::chrono::milliseconds(150));   // outro pedido ja esta extraindo esta musica
+            if (cancel && cancel->load()) return false;
+        }
+        MCache().busy[play] = 1;
+    }
+    bool ok = false;
+    try { ok = GetMediaInfoFresh(play, mi, err, cancel); } catch (...) { ok = false; }
+    {
+        std::lock_guard<std::mutex> lk(MCache().m);
+        MCache().busy.erase(play);
+        if (ok) {
+            if (MCache().done.size() >= 40) {   // o JSON do YouTube pode ter centenas de KB: guarda so as mais recentes
+                auto old = MCache().done.begin();
+                for (auto i = MCache().done.begin(); i != MCache().done.end(); ++i) if (i->second.second < old->second.second) old = i;
+                MCache().done.erase(old);
+            }
+            MCache().done[play] = { mi, MonoSec() };
+        }
+    }
+    MCache().cv.notify_all();
+    return ok;
+}
+// Pre-extrai em segundo plano (primeiros resultados de uma busca): tocar depois comeca na hora.
+// Uma busca nova cancela a anterior; no maximo 2 yt-dlp ao mesmo tempo por lote.
+struct PreResolveT { std::mutex m; std::shared_ptr<std::atomic<bool>> cur; };
+inline PreResolveT& PreRes() { static PreResolveT* p = new PreResolveT(); return *p; }
+inline void PreResolve(const std::vector<std::wstring>& plays) {
+    auto list = std::make_shared<std::vector<std::wstring>>();
+    for (auto& p : plays) if (!p.empty() && !NeedsMatch(DetectSource(p)) && (p.rfind(L"https://", 0) == 0 || p.rfind(L"http://", 0) == 0)) list->push_back(p);
+    if (list->empty()) return;
+    auto cancel = std::make_shared<std::atomic<bool>>(false);
+    { std::lock_guard<std::mutex> lk(PreRes().m); if (PreRes().cur) *PreRes().cur = true; PreRes().cur = cancel; }
+    auto next = std::make_shared<std::atomic<size_t>>(0);
+    for (int w = 0; w < 2; ++w) std::thread([list, next, cancel] {
+        for (;;) {
+            if (cancel->load()) return;
+            size_t i = (*next)++;
+            if (i >= list->size()) return;
+            MediaInfo mi; if (GetMediaInfoCached((*list)[i], mi)) continue;
+            std::wstring e;
+            try { GetMediaInfo((*list)[i], mi, e, cancel.get()); } catch (...) {}
+        }
+    }).detach();
+}
+// ---- Miniaturas ------------------------------------------------------------------------
+// Forma do link: http(s), sem usuario/senha ("https://ytimg.com@outro/"), sem barra invertida,
+// sem IP literal e sem porta estranha. strictHttps = so https e porta 443.
+inline bool ThumbUrlShapeOk(const std::string& u, bool strictHttps, std::string* hostOut = nullptr) {
+    if (u.size() > 2048) return false;
+    size_t sch = u.rfind("https://", 0) == 0 ? 8 : (!strictHttps && u.rfind("http://", 0) == 0 ? 7 : 0);
+    if (!sch) return false;
+    for (unsigned char c : u) if (c < 0x21 || c == 0x7F || c == '\\') return false;
+    size_t e = u.find_first_of("/?#", sch); std::string auth = u.substr(sch, e == std::string::npos ? std::string::npos : e - sch);
+    if (auth.empty() || auth.find_first_of("@%[]") != std::string::npos) return false;
+    size_t c = auth.find(':');
+    if (c != std::string::npos) { std::string port = auth.substr(c + 1); if (port != (sch == 8 ? "443" : "80")) return false; auth = auth.substr(0, c); }
+    bool num = true; for (auto& ch : auth) { ch = (char)tolower((unsigned char)ch); if (!(isalnum((unsigned char)ch) || ch == '-' || ch == '.')) return false; if (!(isdigit((unsigned char)ch) || ch == '.')) num = false; }
+    if (auth.empty() || num || auth.front() == '.' || auth.back() == '.' || auth.find('.') == std::string::npos) return false;
+    if (hostOut) *hostOut = auth;
+    return true;
+}
+// Miniaturas que o Host busca a pedido do celular: so https e so CDNs conhecidos.
+inline bool ThumbUrlAllowed(const std::wstring& w) {
+    std::string host; if (!ThumbUrlShapeOk(WideToUtf8(w), true, &host)) return false;
+    static const char* ok[] = { "ytimg.com", "googleusercontent.com", "ggpht.com", "sndcdn.com", "scdn.co", "spotifycdn.com", "dzcdn.net", "mzstatic.com" };
+    for (const char* d : ok) { std::string dd = d; if (host == dd || (host.size() > dd.size() && host.compare(host.size() - dd.size(), dd.size(), dd) == 0 && host[host.size() - dd.size() - 1] == '.')) return true; }
+    return false;
+}
+bool PlatformHttpGetNoRedirect(const std::string& url, std::string& body);   // casca: como PlatformHttpGet, mas sem seguir redirecionamento
 // Miniatura no cache: sempre JPEG quadrado (corte central, ate 512 px). O YouTube entrega
 // WebP (mesmo com ".jpg" no nome), que nem o raylib nem o GDI+ abrem: o ffmpeg converte.
 inline bool LooksWebp(const char* h, size_t n) { return n >= 12 && memcmp(h, "RIFF", 4) == 0 && memcmp(h + 8, "WEBP", 4) == 0; }
 inline bool FileLooksWebp(const std::wstring& p) { std::ifstream f(std::filesystem::path(p), std::ios::binary); char h[12]; f.read(h, 12); return LooksWebp(h, (size_t)f.gcount()); }
-inline std::wstring FetchThumb(const std::wstring& thumbUrl) {
+// So imagem de verdade vai para o ffmpeg, e com o formato fixo (nada de playlist/manifesto).
+inline const wchar_t* ImageDemuxer(const std::string& b) {
+    if (b.size() >= 3 && (unsigned char)b[0] == 0xFF && (unsigned char)b[1] == 0xD8 && (unsigned char)b[2] == 0xFF) return L"jpeg_pipe";
+    if (b.size() >= 8 && memcmp(b.data(), "\x89PNG\r\n\x1a\n", 8) == 0) return L"png_pipe";
+    if (LooksWebp(b.data(), b.size())) return L"webp_pipe";
+    if (b.size() >= 6 && (memcmp(b.data(), "GIF87a", 6) == 0 || memcmp(b.data(), "GIF89a", 6) == 0)) return L"gif";
+    return nullptr;
+}
+struct ThumbFlights { std::mutex m; std::condition_variable cv; std::map<std::wstring, int> busy; std::atomic<unsigned> seq{ 0 }; };
+inline ThumbFlights& TFl() { static ThumbFlights* t = new ThumbFlights(); return *t; }
+// strict = pedido vindo do celular (Host): so CDNs conhecidos e sem seguir redirecionamento.
+inline std::wstring FetchThumb(const std::wstring& thumbUrl, bool strict = false) {
     if (thumbUrl.empty()) return L"";
+    if (strict ? !ThumbUrlAllowed(thumbUrl) : !ThumbUrlShapeOk(WideToUtf8(thumbUrl), false)) return L"";
     std::wstring fin = OnlineThumbFile(thumbUrl);
+    {   // a mesma capa pedida por duas threads (celular + tela do PC): a segunda espera a primeira
+        std::unique_lock<std::mutex> lk(TFl().m);
+        if (!TFl().cv.wait_for(lk, std::chrono::seconds(45), [&] { return !TFl().busy.count(fin); })) return L"";
+        TFl().busy[fin] = 1;
+    }
+    struct Release { std::wstring f; ~Release() { { std::lock_guard<std::mutex> lk(TFl().m); TFl().busy.erase(f); } TFl().cv.notify_all(); } } release{ fin };
     std::error_code ec;
     if (std::filesystem::exists(std::filesystem::path(fin), ec) && !FileLooksWebp(fin)) return fin;
     std::string body;
-    if (!PlatformHttpGet(WideToUtf8(thumbUrl), body) || body.size() < 200) return L"";
+    if (!(strict ? PlatformHttpGetNoRedirect(WideToUtf8(thumbUrl), body) : PlatformHttpGet(WideToUtf8(thumbUrl), body)) || body.size() < 200) return L"";
+    const wchar_t* demux = ImageDemuxer(body);
+    if (!demux) return L"";   // nao e imagem: descarta
     std::filesystem::path fp(fin);
     std::filesystem::create_directories(fp.parent_path(), ec);
-    std::wstring tmp = fin + L".tmp";
+    std::wstring uniq = L"." + std::to_wstring(++TFl().seq);
+    std::wstring tmp = fin + uniq + L".tmp";
     { std::ofstream o(std::filesystem::path(tmp), std::ios::binary | std::ios::trunc); o.write(body.data(), (std::streamsize)body.size()); }
     EnsureTools();
     if (FfmpegOk()) {
-        std::wstring part = fin + L".part.jpg";
-        CapResult r = RunCapture({ FfmpegTool(), L"-nostdin", L"-loglevel", L"error", L"-y", L"-i", tmp,
+        std::wstring part = fin + uniq + L".part.jpg";
+        CapResult r = RunCapture({ FfmpegTool(), L"-nostdin", L"-loglevel", L"error", L"-y", L"-protocol_whitelist", L"file", L"-f", demux, L"-i", tmp,
                                    L"-vf", L"crop='min(iw,ih)':'min(iw,ih)',scale='trunc(min(512,iw)/2)*2':-2", L"-frames:v", L"1", L"-q:v", L"3", part }, 30000);
         std::filesystem::remove(std::filesystem::path(tmp), ec);
         if (r.code == 0 && std::filesystem::exists(std::filesystem::path(part), ec)) {

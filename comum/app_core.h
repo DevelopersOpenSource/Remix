@@ -51,6 +51,7 @@ bool PlatformScreenshot(const std::wstring& pngPath);           // testes
 void PlatformPickFolderFor(int evType, int ctx);                // pasta para outra finalidade (s = pasta, n = ctx)
 void PlatformPickAudioFilesAsync(int evType, int ctx);          // varios arquivos de audio (s = caminhos separados por \n)
 std::wstring PlatformClipboardText();                           // colar (Ctrl+V)
+bool PlatformSetClipboardText(const std::wstring& text);         // copiar (link do Host)
 bool PlatformHttpGet(const std::string& url, std::string& body);
 // busca de capa na web (HTTP + decodificacao de imagem sao por plataforma)
 static void WebSearchAsync(std::wstring q);
@@ -182,9 +183,14 @@ enum : int {
     Z_TAB_ONLINE=787, Z_PL_ADD=788, Z_PICK_DONE=789, Z_PICK_CANCEL=790, Z_ACTIVITY=791, Z_SET_ON_MODE=792, Z_SET_ON_FMT=793, Z_SET_ON_SRC=794,
     Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810,
     Z_SETTINGS_STYLE_BASE=820,   // +0 classico, +1 limpo, +2 spotify
-    Z_HOST_BTN=821, Z_SET_HOST_ON=822, Z_SET_HOST_PORT=823, Z_SET_HOST_PIN=824, Z_SET_HOST_NAME=825, Z_SET_HOST_TUNNEL=826, Z_SET_HOST_LAN=827, Z_SET_HOST_PANEL=828,
-    Z_HOST_CLOSE=830, Z_HOST_TOGGLE=831, Z_HOST_TUNNEL=832, Z_HOST_HTML=833, Z_HOST_PASTA=834, Z_HOST_PORT=835, Z_HOST_PIN=836, Z_HOST_NAME=837, Z_HOST_LAN=838,
-    Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo
+    // Host: faixa 22000+ (na 1.4.0 ficaram em 821..838 e colidiam com Z_SETTINGS_STYLE_BASE+1/+2:
+    // o botao HOST virava "Limpo" e LIGAR O HOST virava "Spotify + LED"). Os static_assert abaixo travam isso.
+    Z_HOST_BTN=22000, Z_SET_HOST_ON, Z_SET_HOST_PORT, Z_SET_HOST_PIN, Z_SET_HOST_NAME, Z_SET_HOST_TUNNEL, Z_SET_HOST_LAN, Z_SET_HOST_PANEL,
+    Z_SET_HOST_COPYTUN, Z_SET_HOST_COPYLAN, Z_SET_HOST_ONLINE, Z_SET_HOST_QRCONF, Z_SET_HOST_IPV6,
+    Z_HOST_CLOSE=22050, Z_HOST_TOGGLE, Z_HOST_TUNNEL, Z_HOST_HTML, Z_HOST_PASTA, Z_HOST_PORT, Z_HOST_PIN, Z_HOST_NAME, Z_HOST_LAN,
+    Z_HOST_NEWLINK, Z_HOST_COPYTUN, Z_HOST_COPYLAN, Z_HOST_QRMODE, Z_HOST_QRNEW, Z_HOST_ONLINE, Z_HOST_QRCONF, Z_HOST_IPV6,
+    Z_HOST_DEVLIB_BASE=22100, Z_HOST_DPLOK_BASE=22200,   // +100 aparelhos, +500 playlists de aparelhos
+    Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo (ate 21500)
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
     Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
@@ -201,6 +207,7 @@ static std::vector<RECT> R_cardSeekRects;
 static RECT R_settingsPanel, R_settingsDefault, R_settingsCustom, R_settingsClose;
 static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
 static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spotify
+static RECT R_setHostCopyTun, R_setHostCopyLan, R_setHostOnline, R_setHostQrConf, R_setHostIpv6;
 static RECT R_setHostOn, R_setHostPort, R_setHostPin, R_setHostName, R_setHostTunnel, R_setHostLan, R_setHostPanel, R_hostBtn;   // HOST (docs/HOST.md)
 static RECT R_verticalCoverButton;
 static RECT R_playerPanel;
@@ -230,6 +237,9 @@ static std::vector<std::pair<RECT,std::wstring>> g_setSections;
 static RECT R_wavePanel, R_waveDragRect, R_shapeTgl, R_listBtn;
 static int g_gridCols = 0, g_contentH = 0;
 static int g_headerH = 0, g_sideW = 0;   // faixas solidas do cabecalho e da lateral (estilos novos)
+// Zonas que nao podem se sobrepor (a 1.4.0 teve HOST dentro da faixa do ESTILO).
+static_assert(Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT<=Z_ON_SRC_BASE+100 && Z_HOST_BTN>Z_HOST_PLDEV_BASE+4000, "zonas do host/estilo sobrepostas");
+static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
 static std::vector<RECT> R_rowUp, R_rowDown;
@@ -1124,10 +1134,30 @@ static void RemoveTrackFromOpenPlaylist(int track){
 static std::wstring g_hostReq;   // pedido de pareamento em confirmacao na tela
 static std::string AccentHex(){ char b[16]; snprintf(b,sizeof b,"#%02x%02x%02x",GetRValue(g_theme.accent),GetGValue(g_theme.accent),GetBValue(g_theme.accent)); return b; }
 static bool HostRunningNow(){ return host::Running(); }
-static void HostPublishNow(){ if(g_view!=0&&!g_libCached) return; host::Publish((g_view!=0&&g_libCached)?g_libTracks:g_tracks,g_playlists); }
-static unsigned long long HostFingerprint(){ unsigned long long f=g_tracks.size()*1315423911ULL+g_libTracks.size()*2654435761ULL+g_playlists.size()*97ULL; for(auto& p:g_playlists) f=f*31+p.entries.size(); return f; }
+// Biblioteca que o Host publica: com uma playlist aberta (g_view 2) e sem a biblioteca guardada, g_tracks e a
+// playlist; nesse caso usa a ultima biblioteca conhecida (as playlists sao publicadas do mesmo jeito).
+static std::vector<Track> g_hostLib; static bool g_hostLibOk=false;
+static const std::vector<Track>* HostLibNow(){ if(g_libCached) return &g_libTracks; if(g_view!=2) return &g_tracks; return g_hostLibOk?&g_hostLib:nullptr; }
+static void HostPublishNow(){
+    const std::vector<Track>* lib=HostLibNow();
+    if(lib&&lib!=&g_hostLib){ g_hostLib=*lib; g_hostLibOk=true; }
+    static const std::vector<Track> vazio; host::Publish(lib?*lib:vazio,g_playlists);
+}
+// Impressao digital do que o Host mostra: caminho, titulo, artista, capa e duracao de cada faixa e de cada
+// entrada das playlists. Renomear, editar ou trocar faixa (mesmo sem mudar a quantidade) republica.
+static unsigned long long HostFingerprint(){
+    unsigned long long h=1469598103934665603ULL;
+    auto mix=[&](const std::wstring& w){ for(wchar_t c:w){ h^=(unsigned long long)c; h*=1099511628211ULL; } h^=0xFF; h*=1099511628211ULL; };
+    auto num=[&](long long v){ h^=(unsigned long long)v; h*=1099511628211ULL; };
+    const std::vector<Track>* lib=HostLibNow(); num(lib?(long long)lib->size():-1);
+    if(lib) for(auto& t:*lib){ mix(t.path); mix(t.title); mix(t.artist); mix(t.coverPath); num(t.durSec); }
+    num((long long)g_playlists.size());
+    for(auto& p:g_playlists){ mix(p.slug); mix(p.name); num((long long)p.entries.size()); for(auto& e:p.entries){ mix(e.path); mix(e.url); mix(e.play); mix(e.title); mix(e.artist); mix(e.thumb); num(e.dur); } }
+    return h;
+}
+static host::Options HostOptsFromCfg(){ host::Options o; o.port=g_cfg.hostPort; o.lanOk=g_cfg.hostLan; o.lan6=g_cfg.hostIPv6; o.pin=WideToUtf8(g_cfg.hostPin); o.name=g_cfg.hostName; o.accent=AccentHex(); o.onlineOk=g_cfg.hostOnline; o.qrConfirm=g_cfg.hostQrConfirm; return o; }
 static bool HostStartFromCfg(){
-    std::string err=host::Start(g_cfg.hostPort,g_cfg.hostLan,WideToUtf8(g_cfg.hostPin),g_cfg.hostName,AccentHex());
+    std::string err=host::Start(HostOptsFromCfg());
     if(!err.empty()){ SetStatus(L"Host: "+Utf8ToWide(err),4500); return false; }
     HostPublishNow(); if(g_cfg.hostTunnel) host::TunnelStart(g_cfg.hostPort);
     SetStatus(L"Host ligado na porta "+std::to_wstring(g_cfg.hostPort)+L".",3000); return true;
@@ -1138,14 +1168,44 @@ static void HostToggle(){
     if(g_cfg.hostPin.empty()){ SetStatus(L"Defina um PIN (4 a 12 números) antes de ligar o Host.",3500); return; }
     g_cfg.hostOn=HostStartFromCfg(); g_cfg.Save();
 }
-static void HostTick(){ static unsigned long long last=0; static ULONGLONG lastMs=0; if(!host::Running()) return; ULONGLONG now=GetTickCount64(); if(now-lastMs<2000) return; lastMs=now; unsigned long long f=HostFingerprint(); if(f!=last){ last=f; HostPublishNow(); } }
+static void HostAskPair(const std::wstring& reqId);
+// Proximo pedido de vinculo esperando (o mais antigo), se nao tiver outro dialogo aberto.
+static void HostNextPending(){
+    if(g_confirmOpen) return;
+    host::View v=host::GetView(); const host::PairReq* best=nullptr;
+    for(auto& q:v.pending) if(!best||q.created<best->created) best=&q;
+    if(best) HostAskPair(Utf8ToWide(best->id));
+}
+static void HostTick(){
+    static unsigned long long last=0; static ULONGLONG lastMs=0;
+    if(!host::Running()) return;
+    ULONGLONG now=GetTickCount64(); if(now-lastMs<2000) return; lastMs=now;
+    unsigned long long f=HostFingerprint(); if(f!=last){ last=f; HostPublishNow(); }
+    if(g_confirmOpen&&g_confirmKind==2){   // pedido na tela expirou ou ja foi respondido pelo painel: fecha e mostra o proximo
+        host::PairReq q=host::FindReq(WideToUtf8(g_hostReq));
+        if(q.id.empty()||q.estado!=0){ g_confirmOpen=false; g_confirmKind=0; g_hostReq.clear(); SetStatus(L"O pedido de vínculo expirou.",2500); }
+    }
+    HostNextPending();
+}
 static void HostAskPair(const std::wstring& reqId){
     host::PairReq q=host::FindReq(WideToUtf8(reqId)); if(q.id.empty()||q.estado!=0) return;
-    if(g_confirmOpen&&g_confirmKind==2) return;   // ja tem um pedido na tela; o outro espera (o celular fica sondando)
+    if(g_confirmOpen) return;   // ja tem um dialogo na tela; o HostTick mostra este quando ele fechar
     g_hostReq=reqId; g_confirmOpen=true; g_confirmKind=2; g_confirmTrack=-1;
-    g_confirmText=L"\""+Utf8ToWide(q.name)+L"\" ("+Utf8ToWide(q.ip)+(q.viaTunnel?L", pela internet":L", rede local")+L") quer se conectar ao seu Remix.";
+    g_confirmText=L"\""+Utf8ToWide(q.name)+L"\" ("+Utf8ToWide(q.ip)+(q.viaTunnel?L", pela internet":L", rede local")+(q.viaQr?L", pelo QR":L"")+L") quer se conectar. Aceitando, ele não vê nada até você liberar a biblioteca ou hostear playlists.";
 }
-static void HostConfirm(bool ok){ if(!g_hostReq.empty()) host::Approve(WideToUtf8(g_hostReq),ok); g_hostReq.clear(); SetStatus(ok?L"Dispositivo aceito: ele já pode ouvir as músicas.":L"Pedido recusado.",3000); }
+static void HostCopy(bool tunnel){
+    std::string u=tunnel?host::TunnelUrl():host::LanUrl();
+    if(u.empty()){ SetStatus(tunnel?(host::Running()?L"O link do túnel ainda não está pronto (ele é testado antes de aparecer).":L"Ligue o Host primeiro."):(host::Running()?L"Sem link de rede local (ligue REDE LOCAL).":L"Ligue o Host primeiro."),3500); return; }
+    if(PlatformSetClipboardText(Utf8ToWide(u))) SetStatus(L"Link copiado: "+Utf8ToWide(u),3500); else SetStatus(L"Não consegui copiar. Link: "+Utf8ToWide(u),6000);
+}
+static void HostSetOnline(bool on){ g_cfg.hostOnline=on; g_cfg.Save(); host::SetOptions(g_cfg.hostOnline,g_cfg.hostQrConfirm); SetStatus(on?L"O celular pode buscar e ouvir online (o PC faz o trabalho).":L"Online no celular desligado.",2800); }
+static void HostSetQrConfirm(bool on){ g_cfg.hostQrConfirm=on; g_cfg.Save(); host::SetOptions(g_cfg.hostOnline,g_cfg.hostQrConfirm); SetStatus(on?L"Vincular pelo QR agora também pede ACEITAR aqui no PC.":L"Vincular pelo QR não pede confirmação no PC (o QR só aparece na sua tela e vale uma vez).",3500); }
+static void HostSetIpv6(bool on){ g_cfg.hostIPv6=on; g_cfg.Save(); if(host::Running()){ HostStopNow(); HostStartFromCfg(); } SetStatus(on?L"IPv6 ligado (só rede local: link-local, ULA ou o mesmo /64).":L"IPv6 desligado: só IPv4 e túnel.",3200); }
+static void HostConfirm(bool ok){
+    bool valeu=!g_hostReq.empty()&&host::Approve(WideToUtf8(g_hostReq),ok); g_hostReq.clear();
+    if(!valeu) SetStatus(L"Esse pedido expirou: peça para o celular tentar de novo.",3500);
+    else SetStatus(ok?L"Dispositivo aceito. Libere no painel HOST o que ele pode ouvir.":L"Pedido recusado.",3000);
+}
 static void HostMakeHtml(){ std::wstring p=host::WriteConnectHtml(); if(p.empty()){ SetStatus(L"Não consegui gravar o arquivo.",3000); return; } SetStatus(L"Remix-conectar.html gravado na pasta do Remix: mande pelo WhatsApp.",4500); PlatformOpenFolder(Config::BaseDir()); }
 static std::wstring HostPlLabel(const std::wstring& slug){ return host::Targets(slug).empty()?L"Hostear no celular":L"Parar de hostear no celular"; }
 static void HostTogglePlaylist(int pl){ if(pl<0||pl>=(int)g_playlists.size()) return; const std::wstring& slug=g_playlists[(size_t)pl].slug; bool on=host::Targets(slug).empty(); host::SetTargets(slug,on?"ALL":""); HostPublishNow(); SetStatus(on?L"Playlist hosteada para todos os dispositivos (ajuste no painel HOST).":L"Playlist não aparece mais nos celulares.",3200); }
@@ -1153,10 +1213,11 @@ static void ConfirmYes(){
     int t=g_confirmTrack; int kind=g_confirmKind; g_confirmOpen=false; g_confirmKind=0;
     if(kind==2){ HostConfirm(true); return; }
     if(kind==1){
+        if(t>=0&&t<(int)g_playlists.size()) host::SetTargets(g_playlists[(size_t)t].slug,"");   // playlist nova com o mesmo nome nao herda o "hostear"
         bool wasOpen=(g_openPl==t); DeletePlaylistDir(t);
         if(wasOpen){ g_openPl=-1; EnterLibraryView(); } else if(g_openPl>t) g_openPl--;
         if(g_openPl>=0&&g_openPl<(int)g_playlists.size()) g_cfg.openPlaylist=g_playlists[(size_t)g_openPl].slug;
-        SetStatus(L"Playlist excluída.",2000);
+        SetStatus(L"Playlist excluída.",2000); if(host::Running()) HostPublishNow();
     } else DeleteTrack(t);
     BuildLayout();
 }

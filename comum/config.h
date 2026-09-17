@@ -106,6 +106,9 @@ struct Config {
     bool hostTunnel = true;               // sobe o tunel Cloudflare (cloudflared) junto
     bool hostLan = true;                  // aceita a rede local (false = so 127.0.0.1, so pelo tunel)
     std::wstring hostName;                // nome mostrado no celular (vazio = nome do PC)
+    bool hostOnline = true;               // o celular pode buscar/ouvir online (o PC roda yt-dlp + ffmpeg)
+    bool hostQrConfirm = false;           // vinculo pelo QR tambem pede ACEITAR no PC
+    bool hostIPv6 = false;                // aceita IPv6 da rede local (link-local, ULA ou o mesmo /64)
     std::wstring displayMode = L"normal"; // normal | vertical  (layout)
     std::wstring artShape = L"square";    // square | cd       (aparencia da capa)
     int cdSpeed = 33;                     // velocidade de giro do CD, % da antiga (100 = original; padrao ~3x mais lento)
@@ -413,6 +416,9 @@ struct Config {
             else if (k == L"HostTunnel") hostTunnel = (v != L"0");
             else if (k == L"HostLan") hostLan = (v != L"0");
             else if (k == L"HostName") hostName = v;
+            else if (k == L"HostOnline") hostOnline = (v != L"0");
+            else if (k == L"HostQrConfirm") hostQrConfirm = (v == L"1");
+            else if (k == L"HostIPv6") hostIPv6 = (v == L"1");
             else if (k == L"ArtShape") artShape = v;
             else if (k == L"CdSpeed") cdSpeed = _wtoi(v.c_str());
             else if (k == L"ListMode") listMode = _wtoi(v.c_str());
@@ -524,6 +530,9 @@ struct Config {
         swprintf(b, 64, L"HostTunnel=%d", hostTunnel ? 1 : 0); ls.push_back(b);
         swprintf(b, 64, L"HostLan=%d", hostLan ? 1 : 0); ls.push_back(b);
         ls.push_back(L"HostName=" + hostName);
+        swprintf(b, 64, L"HostOnline=%d", hostOnline ? 1 : 0); ls.push_back(b);
+        swprintf(b, 64, L"HostQrConfirm=%d", hostQrConfirm ? 1 : 0); ls.push_back(b);
+        swprintf(b, 64, L"HostIPv6=%d", hostIPv6 ? 1 : 0); ls.push_back(b);
         ls.push_back(L"ArtShape=" + artShape);
         swprintf(b, 64, L"CdSpeed=%d", cdSpeed); ls.push_back(b);
         swprintf(b, 64, L"ListMode=%d", listMode ? 1 : 0); ls.push_back(b);

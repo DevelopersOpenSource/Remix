@@ -1,126 +1,186 @@
 # Host — ouvir as músicas do PC no celular
 
-Desde a 1.4.0 o Remix do PC pode virar um **servidor** para o celular: o telefone
-abre um site, digita um PIN, o PC aceita o aparelho na tela e pronto — dá para ouvir
-a biblioteca do PC, as playlists que o PC "hosteou" e ter playlists próprias no
-celular. Funciona pela **rede local** (mesmo roteador, Wi-Fi ou cabo) e pela
-**internet** através de um túnel Cloudflare, sem abrir porta no roteador e sem
-entregar o IP ou a localização de ninguém.
+O Remix do PC pode virar um **servidor para o celular**. O telefone abre um site (pela
+rede local ou por um túnel Cloudflare), se vincula ao PC — escaneando um **QR code** ou
+com o **PIN** — e passa a ouvir **só o que o PC liberar para aquele aparelho**: playlists
+hosteadas, a biblioteca inteira (se você ligar) e músicas **online** (o PC busca e
+converte; o celular só recebe o áudio). Cada celular tem as **playlists dele**, separadas
+dos outros aparelhos.
+
+Mudanças da **1.5.0** em relação à 1.4.0 no fim deste documento.
 
 ## Como usar (PC)
 
-1. **Configurações > HOST** (ou o botão **HOST** no cabeçalho, que abre o painel):
-   - **PIN**: de 4 a 12 números. Obrigatório. É o que o celular digita na primeira vez.
-   - **Porta**: padrão **49875** (portas TCP vão só até 65535; essa fica fora do que os
-     serviços comuns usam). Troque se quiser.
-   - **Nome**: como o PC aparece no celular (padrão: nome do computador).
-   - **Túnel Cloudflare**: ligado por padrão. Precisa do `cloudflared` (o instalador de
-     dependências baixa em `assets/tools`, como o yt-dlp).
-   - **Rede local**: ligado por padrão. Desligue para aceitar só pelo túnel.
-2. **LIGAR**. O painel mostra o link da rede local (`http://192.168.x.y:49875`) e, quando o
-   túnel sobe, o link `https://….trycloudflare.com`.
-3. Mande o link para o celular — ou clique **HTML P/ WHATSAPP**: o Remix grava
-   `Remix-conectar.html` na pasta do app; mande esse arquivo pelo WhatsApp. Abrindo no
-   celular, ele procura o PC na rede local sozinho e, se não achar, oferece o link do túnel.
-   O arquivo só tem links: **nenhum PIN, nenhum IP público**.
-4. No celular: abra o link, digite um nome para o aparelho e o PIN. No PC aparece
-   **"Novo dispositivo quer se conectar"** — ACEITAR ou RECUSAR. Aceitou, o celular entra.
-5. **Playlists**: no PC, clique com o botão direito numa playlist > **Hostear no celular**
-   (ou no painel HOST, HOST: NÃO/TODOS/ALGUNS). O padrão ao hostear é **todos** os
-   aparelhos; no painel dá para escolher quais. A biblioteca inteira do PC sempre aparece
-   para quem está pareado.
-6. O celular cria as playlists dele na aba **MINHAS**. Elas ficam guardadas no PC
-   (`host.ini`, e o painel HOST lista, só leitura), mas não entram nas playlists do PC.
-7. **Remover** um aparelho no painel revoga o acesso na hora (ele precisa parear de novo).
+1. **Configurações > HOST** ou o botão **HOST** no cabeçalho (abre o painel).
+   - **PIN**: 4 a 12 números. Obrigatório para ligar (é o caminho de quem não tem o QR).
+   - **Porta**: padrão **49875** (TCP vai só até 65535). Troque se quiser.
+   - **Nome**: como o PC aparece no celular.
+   - **Túnel Cloudflare**: acesso pela internet (precisa do `cloudflared`; os instaladores de
+     dependências baixam em `assets/tools`).
+   - **Rede local**: acesso direto pelo mesmo roteador (Wi-Fi ou cabo).
+   - **Online no celular**: deixa o celular buscar e ouvir online usando o yt-dlp/ffmpeg do PC.
+   - **QR pede aceite**: por padrão o QR vincula direto; ligado, pede ACEITAR no PC também.
+   - **IPv6**: desligado por padrão. Ligado, aceita IPv6 **só da rede local** (link-local,
+     ULA ou o mesmo /64 do PC).
+2. **LIGAR**. O painel mostra o **QR code**, os links e os botões **COPIAR LINK DO TÚNEL** e
+   **COPIAR LINK LOCAL** (também nas configurações).
+3. No celular, **escaneie o QR com a câmera**. A página pede **só um nome** e a opção
+   "Lembrar este aparelho neste navegador". Pronto: o aparelho fica vinculado.
+   - Sem o QR: abra o link, digite nome + **PIN** e aceite o pedido que aparece no PC.
+   - O QR vale **10 minutos e uma vez só**; **NOVO QR** invalida o anterior. O código vai no
+     fragmento da URL (`#q=...`), que o navegador nunca envia a servidor nenhum, e a página
+     apaga o fragmento da barra de endereço assim que lê.
+4. **Libere o que o aparelho pode ouvir** (por padrão ele não vê nada):
+   - **BIBLIOTECA: SIM/NÃO** em cada aparelho do painel → a biblioteca inteira do PC.
+   - Playlists do PC: botão direito na playlist > **Hostear no celular** (padrão: todos os
+     aparelhos, inclusive os que forem vinculados depois), ou no painel escolha **quais**
+     aparelhos (lista fixa: aparelho novo não entra sozinho).
+   - Playlists dos celulares são **só do dono**. Se o dono tocar em "compartilhar com outros
+     aparelhos", o painel mostra **LIBERAR** — só depois disso os outros aparelhos veem. Se o
+     dono renomear ou adicionar faixa depois de liberada, ela sai dos outros até você liberar de
+     novo. E a compartilhada só mostra o que o **dono** ainda pode ouvir: tirou a biblioteca
+     dele, as faixas somem da compartilhada também.
+5. **REMOVER** um aparelho revoga o acesso na hora: downloads e streams em andamento são
+   cortados (o mesmo vale para BIBLIOTECA: NÃO, parar de hostear, ONLINE NO CELULAR desligado
+   e desligar o Host). As playlists dele são apagadas.
+   - Aparelho vinculado **sem "Lembrar"** aparece como *(temporário)*: fica só na memória
+     (não vai para o `host.ini`), some ao fechar o Remix ou depois de 12 h sem uso. Os
+     outros saem sozinhos depois de **180 dias** sem uso.
+   - Vários pedidos de vínculo ao mesmo tempo entram em fila: o próximo aparece quando você
+     responde o atual. Pedido com mais de 3 minutos expira (o PC avisa em vez de "aceito").
+6. **HTML P/ WHATSAPP** grava `Remix-conectar.html` (só links; sem PIN, sem QR, sem IP
+   público): abrindo no celular, ele acha o PC na rede local sozinho ou usa o túnel. Os links
+   já vêm escritos no HTML, então aparecem até na pré-visualização do WhatsApp/Arquivos do
+   iPhone, que não roda JavaScript.
 
-Para "instalar" no celular como app: no Chrome/Safari, menu > **Adicionar à tela inicial**
-(a página é uma PWA). Um app Android que é só um *wrapper* desse site também serve —
-ver `docs/ANDROID.md`.
+Para "instalar" no celular: menu do navegador > **Adicionar à tela inicial** (a página é PWA).
 
-## O que o celular vê e faz
+## O celular (a página)
 
-- Biblioteca do PC (nome, artista, duração, capa) e as playlists hosteadas para ele.
-- Toca as músicas **no próprio celular** (o PC só serve o arquivo; áudio do PC não muda).
-  Formatos que o navegador toca: mp3, m4a/aac, ogg/opus, flac, wav. Músicas *online*
-  (streaming do YouTube etc.) não são servidas — só arquivos locais.
-- Playlists próprias (criar, renomear, apagar, adicionar/remover faixas).
-- Controles na tela de bloqueio (Media Session): tocar/pausar/próxima.
+Interface no estilo dos apps de música: **Início** (atalhos das playlists liberadas e da
+biblioteca, se liberada), **Buscar** (no PC ou online: YouTube Music, YouTube, SoundCloud),
+**Sua Biblioteca** (playlists do PC, suas e compartilhadas), tela da **playlist** com voltar,
+tocar e aleatório, e **Tocando agora** em tela cheia (capa, seek, aleatório/repetir,
+adicionar a playlist). O botão Voltar do celular fecha as telas antes de sair.
+Controles na tela de bloqueio (Media Session).
 
-## Segurança — o que foi feito
+**iPhone (Safari e apps que usam o WebKit):** todos os botões dão retorno ao toque (o iOS só
+aplica `:active` com um ouvinte de toque na página); a barra de posição aceita tocar ou arrastar
+em qualquer ponto (o controle nativo só arrasta começando em cima do polegar); linhas de música
+são dois botões lado a lado (nada de botão dentro de botão); folhas abrem o teclado no mesmo toque,
+sobem acima dele e travam a rolagem de trás; toque duplo não aciona o que acabou de abrir; depois
+de um erro o play recarrega a música (o WebKit deixa o áudio "sem pausa" e ignorava o play); a
+tela bloqueada mostra anterior/próxima (e não ±10 s); campos sem autocorreção e sem zoom; se o
+`app.js` não carregar, aparece "Toque aqui para recarregar" em vez da rodinha eterna; cookies
+bloqueados geram uma explicação em vez de voltar ao PIN. A URL do `app.js`/`app.css` leva a versão
+e um resumo do código (`?v=1.5.0-xxxxxxxx`), então o celular nunca fica com o arquivo velho do cache.
+
+- Arquivos locais tocam direto do PC (com avanço/retrocesso por `Range`).
+- Online: o PC resolve com o yt-dlp e converte ao vivo com o ffmpeg para MP3 192 kbps (ou
+  AAC se o ffmpeg não tiver MP3). Avançar reabre o áudio do ponto escolhido. Playlists do PC
+  que têm músicas online também tocam assim no celular. As capas online passam pelo PC:
+  **o celular nunca fala com YouTube/SoundCloud**.
+- Começo rápido: a extração do yt-dlp (~3 s) fica em cache por 25 min, compartilhada com o
+  player e os downloads do PC, e os 3 primeiros resultados de cada busca já são extraídos em
+  segundo plano. Medido: o primeiro áudio chega em ~0,3–0,5 s (antes ~3 s).
+
+## Segurança e privacidade
 
 | Risco | Como é tratado |
 |---|---|
-| Alguém adivinhar o PIN | 5 erros seguidos travam o IP por 60 s, dobrando a cada erro (até 16 min). PIN comparado em tempo constante. E mesmo com o PIN certo **o PC tem que aceitar** o aparelho. |
-| Token roubado | Token aleatório de 256 bits (CSPRNG do sistema) em cookie `HttpOnly; SameSite=Strict` (`Secure` pelo túnel). Revogável no painel. Fica em `host.ini` no PC (não compartilhe o arquivo). |
-| CSRF | Todo POST exige o cabeçalho `X-Remix: 1` (um site de fora não consegue mandá-lo) + cookie SameSite=Strict. |
-| XSS | A página nunca usa `innerHTML` com dados; tudo entra por `textContent`. `Content-Security-Policy: script-src 'self'` (sem script inline), `X-Frame-Options: DENY`, `nosniff`. O JSON ainda escapa `< > &`. |
-| SQL injection | Não existe SQL: os dados ficam em `host.ini` (texto) e os campos são escapados. Nomes vindos do celular são limpos (sem caracteres de controle, tamanho máximo). |
-| Path traversal / vazamento de caminhos | O celular só recebe **ids opacos** (hash do caminho). Nenhum caminho de arquivo sai do PC nem entra vindo do celular; `..` na URL é rejeitado; só arquivos que estão no mapa da biblioteca são servidos. |
-| DoS / DDoS | Limite de 60 pedidos por 10 s por IP (429), no máximo 24 conexões simultâneas (503), cabeçalho até 16 KB, corpo até 64 KB (413), timeouts de leitura/escrita, sem keep-alive. Pelo túnel, a Cloudflare absorve ataque volumétrico e o PC só recebe conexão de saída. |
-| Privacidade | Túnel: o celular fala com `*.trycloudflare.com`; o PC abre uma conexão de saída para a Cloudflare — nada de IP público, porta aberta, IPv6 ou localização. O HTML de conectar só carrega links. Só IPv4. |
-| CGNAT | O túnel é conexão de saída do PC, então funciona atrás de CGNAT/roteador sem redirecionar porta. |
+| Alguém na internet acessar a porta direto | O servidor só conversa com **loopback** (o túnel chega por 127.0.0.1) e com a **rede local** (IPv4 privado; IPv6 só se ligado e só local). Qualquer outra origem é derrubada antes de ler o pedido — vale mesmo se o PC tiver IP público. |
+| Aparelho vinculado ver o que não devia | Autorização **por aparelho e por item**: biblioteca só com BIBLIOTECA ligado; playlists do PC só se hosteadas para ele; playlists de outro aparelho só se o dono compartilhar **e** o PC liberar; online só o que ele buscou ou está em playlist que ele vê. Vale para listar, tocar, baixar capa e adicionar em playlist. Item não autorizado responde 404 (nem confirma que existe). |
+| Adivinhar PIN / QR | 5 erros travam a origem por 60 s, dobrando até 16 min; **30 erros em 10 min de qualquer origem travam o PIN para todos por 10 min** (trocar de IP não ajuda; o QR continua funcionando). Comparação em tempo constante. QR: 128 bits, uso único, 10 min. PIN ainda exige ACEITAR no PC. |
+| Token roubado | 256 bits (CSPRNG do sistema) em cookie `HttpOnly; SameSite=Strict` (`Secure` no túnel). "Lembrar" desligado = cookie de sessão **e** aparelho temporário no servidor (só na memória, 12 h sem uso). Os outros expiram com 180 dias sem uso. `host.ini` com permissão 600 no Linux. REMOVER revoga e corta o que estiver tocando. |
+| Site de fora usando o navegador do celular/PC ("DNS rebinding") | O servidor só aceita `Host` com IP, `localhost`, nome da máquina na rede (`.local`, `.lan`, sem domínio) e o link do túnel; qualquer outro nome recebe 421. `/api/ping` para outra origem responde só `{"app":"remix"}` (sem nome do PC nem versão). |
+| CSRF | Todo POST exige `X-Remix: 1` + cookie SameSite=Strict. |
+| XSS | CSP `script-src 'self'` sem inline, nada de `innerHTML` com dados, JSON escapa `< > &`, `X-Frame-Options: DENY`, `nosniff`. |
+| Injeção (SQL/comando) | Não há SQL. Processos (yt-dlp/ffmpeg) sem shell, argumentos em vetor; todo link vai depois de `--` (nunca vira opção do yt-dlp) e só link `http(s)` toca; a busca vai depois de `ytsearch:`/URL codificada; o celular nunca manda URL — só ids que o PC gerou. ffmpeg com `-protocol_whitelist` (nada de arquivo local). Miniaturas: só https, sem usuário/senha/porta/IP no link, só CDNs conhecidos, **sem seguir redirecionamento**, e só imagem de verdade (JPEG/PNG/WebP/GIF pelos bytes) chega ao ffmpeg, com o formato fixo. |
+| Cabeçalho malicioso | Nome de cabeçalho fora do padrão (ex.: `Transfer-Encoding :`), `Content-Length`/`Host` repetidos e linhas sem `:` são recusados (400); `Transfer-Encoding` é recusado. O IP do túnel (`CF-Connecting-IP`) só é aceito com o túnel ligado, em conexão local e se for um IP válido. |
+| Path traversal | Só ids opacos (hash); `..`, `%`, `\` e caracteres de controle na URL são recusados. |
+| DoS | 90 pedidos/10 s por origem e 600 só para aparelho com token **válido** (IPv6 contado por /64); 64 conexões, no máximo 12 por origem da rede local; o pedido inteiro tem 15 s para chegar (quem manda um byte por vez é derrubado); cabeçalho 16 KB, corpo 64 KB; 1 busca online por aparelho (3 no total, cancelada se o celular desistir); 1 stream por aparelho (4 no total; trocar de faixa não conta a antiga). As respostas são montadas com a trava e enviadas sem ela (celular lento não congela o PC). |
+| Privacidade | Nada de rastreamento: o celular só guarda um código aleatório (e só se "lembrar" estiver ligado); nenhum dado do aparelho é lido. Pelo túnel: HTTPS, sem porta aberta, sem IP do PC. |
 
-**Criptografia:** pelo túnel a conexão é HTTPS de ponta a ponta (certificado válido da
-Cloudflare; o trecho `cloudflared → 127.0.0.1` fica dentro do próprio PC). Na rede local
-o acesso é HTTP direto — quem está no **mesmo roteador** consegue ver o tráfego. Se isso
-importar, desligue "Rede local" e use só o túnel, mesmo em casa. (Um certificado
-auto-assinado local dispararia aviso no celular; ficou de fora por isso.)
+**Rede local = HTTP.** Quem está no mesmo roteador pode ver o tráfego. Para cifrar mesmo em
+casa, desligue REDE LOCAL e use só o túnel.
 
-**O que ainda NÃO é:** controle remoto do player do PC (o celular toca localmente), e
-músicas online (yt-dlp) pelo celular. Ambos são possíveis por cima desta base.
+## Túnel Cloudflare e o erro de DNS
 
-## Como funciona por dentro
+O `cloudflared` mostra o link `https://…trycloudflare.com` **antes** de o nome existir no
+DNS (medido: 1 a 2 s de NXDOMAIN). Quem abre nessa janela faz o roteador guardar "esse site
+não existe" por até **30 minutos** (SOA mínimo do trycloudflare.com) — era o
+`DNS_PROBE_POSSIBLE` no Wi-Fi que funcionava nos dados móveis.
 
-- `comum/host_net.h` — sockets IPv4 (Winsock2 no Windows, POSIX no Linux), IPs da LAN
-  (só cabo/Wi-Fi; docker/VM/VPN são pulados), nome do PC.
-- `comum/host_server.h` — servidor HTTP/1.1 próprio (uma thread por conexão), rotas da
-  API, pareamento, limites, `host.ini`, túnel (`cloudflared tunnel --url http://127.0.0.1:PORTA`,
-  a URL é lida do log), página `Remix-conectar.html`, e o estado do painel (`host::PU()`).
-  As threads do servidor só leem uma **cópia** da biblioteca (`host::Publish`, refeita
-  pela UI quando algo muda); nunca tocam `g_tracks`/`g_playlists`.
-- `comum/host_web.h` — a página do celular (HTML/CSS/JS embutidos), manifesto PWA,
-  service worker e o modelo do HTML de conectar. Cor do tema entra em `@ACCENT@`.
-- Núcleo: `Config` ganha `[Host]` (`HostOn`, `HostPort`, `HostPin`, `HostTunnel`,
-  `HostLan`, `HostName`), eventos `EV_HOST_PEDIDO`/`EV_HOST_STATUS`, diálogo de
-  confirmação `g_confirmKind==2`, editor de texto modos 6/7/8 (porta/PIN/nome),
-  seção HOST nas configurações, pílula HOST no cabeçalho, painel HOST (layout em
-  `LayoutHostPanel`, desenho em `DrawHostPanel` nas duas cascas), item "Hostear no
-  celular" no menu da playlist.
+Desde a 1.5.0 o Remix espera o túnel registrar a conexão, espera mais 8 s, **testa o link
+de verdade** e só então mostra, copia e põe no QR ("TESTANDO O LINK..." enquanto isso).
+Se um roteador já tiver guardado o erro, **NOVO LINK** gera outro nome na hora.
 
-### API (JSON)
+O link do quick tunnel muda cada vez que o túnel sobe; o cookie de um aparelho vale para o
+endereço em que ele se vinculou (rede local é estável). Para um endereço fixo pela internet,
+use um túnel nomeado na conta Cloudflare apontando para `http://127.0.0.1:<porta>`.
+
+## API (JSON)
+
+Todo POST: `X-Remix: 1`, corpo JSON. 401 = não vinculado; 429 = calma; erros `{"erro":"…"}`.
+Faixa: `{id, t, a, d, c (tem capa), o (1 = online)}`.
 
 | Rota | Auth | O que faz |
 |---|---|---|
-| `GET /api/ping` | não | `{app, v, nome}` — usado pelo HTML de conectar para achar o PC na LAN (CORS só aqui, só GET) |
-| `POST /api/parear` `{pin, nome}` | não | cria um pedido; o PC recebe `EV_HOST_PEDIDO` |
-| `GET /api/parear/estado?req=` | não | `pendente` / `aceito` (manda o cookie) / `recusado` / `expirado` (3 min) |
-| `GET /api/estado` | cookie | nome do PC, do aparelho, versão, nº de faixas |
-| `GET /api/biblioteca` | cookie | `{faixas:[{id,t,a,d,c}]}` |
-| `GET /api/playlists` | cookie | `{pc:[…hosteadas para este aparelho], minhas:[…]}` |
-| `POST /api/minhas` `{acao: criar\|renomear\|apagar\|add\|remover, slug, nome, id}` | cookie + `X-Remix` | playlists do aparelho (máx. 50, 5000 faixas cada) |
-| `GET /api/faixa/<id>` | cookie | o arquivo, com `Range` (206) para o `<audio>` avançar/voltar |
-| `GET /api/capa/<id>` | cookie | a capa (jpg/png) |
-| `POST /api/sair` | cookie + `X-Remix` | o aparelho se desconecta (token revogado) |
+| `GET /api/ping` | não | `{app, v, nome}`; de outra origem (CORS) só `{app}` |
+| `POST /api/parear {pin, nome, lembrar}` | não | pedido; o PC recebe ACEITAR/RECUSAR |
+| `GET /api/parear/estado?req=` | não | `pendente` / `aceito` (entrega o cookie uma vez) / `recusado` / `expirado` |
+| `POST /api/parear/qr {token, nome, lembrar}` | não | `aceito` (cookie) ou `pendente` + `req` se QR pede aceite |
+| `GET /api/estado` | cookie | `{host, dispositivo, id, v, biblioteca, online, faixas, temporario}` |
+| `GET /api/biblioteca` | cookie | faixas da biblioteca (vazio sem liberação) |
+| `GET /api/playlists` | cookie | `{pc, minhas (compartilhar, liberada), compartilhadas (dono)}` com `itens` já filtrados |
+| `POST /api/minhas {acao, slug, nome, id, valor}` | cookie | `criar`, `renomear`, `apagar`, `add`, `remover`, `compartilhar` |
+| `GET /api/faixa/<id>` | cookie | arquivo local com `Range` |
+| `GET /api/capa/<id>` | cookie | capa local ou miniatura online (via PC) |
+| `GET /api/online/buscar?q=&fonte=0\|1\|2` | cookie | busca pelo yt-dlp do PC |
+| `GET /api/online/ouvir/<id>?t=<s>` | cookie | stream MP3/AAC convertido ao vivo |
+| `POST /api/sair` | cookie | desvincula este aparelho |
 
-### Testes que rodam sem celular
+### Testes sem celular
 
 ```bash
-# Linux (Xephyr): liga o host com PIN 2468 e aceita o pedido sozinho 7 s depois
-build/remix --home <pasta> --no-splash --after 500:hostpin:2468 --after 800:host:on --after 7000:hostok --exit-after 30000 &
+build/remix --home <pasta> --no-splash --after 500:hostpin:2468 --after 800:host:on --after 1500:hostqr --exit-after 60000 &
 curl -s http://127.0.0.1:49875/api/ping
-curl -s -X POST http://127.0.0.1:49875/api/parear -H 'X-Remix: 1' -H 'Content-Type: application/json' -d '{"pin":"2468","nome":"teste"}'
+curl -s -c ck -X POST http://127.0.0.1:49875/api/parear/qr -H 'X-Remix: 1' -d '{"token":"<do log: qr: ...#q=>","nome":"teste"}'
+curl -s -b ck http://127.0.0.1:49875/api/estado
 ```
 
-Ações de teste: `hostpin:<pin>`, `hostport:<n>`, `host:on`, `host:off`, `hostok`, `hostno`,
-`hostpanel`, `hosthtml`, `tunnel:on`, `tunnel:off`.
+Ações de teste: `hostpin:`, `hostport:`, `host:on|off`, `hostok`, `hostno`, `hostpanel`,
+`hosthtml`, `hostqr` (imprime o link do QR), `hostlib:<aparelho>:<0|1>`,
+`hostplall:<playlist>`, `hostdplok:<i>`, `hostonline:<0|1>`, `tunnel:on|off`; `dump` mostra
+o estado do host.
 
-## Túnel Cloudflare
+## Por dentro
 
-O Remix usa o **quick tunnel** do `cloudflared` (`tunnel --url …`): não precisa de conta,
-domínio nem configuração; a URL `https://<palavras>.trycloudflare.com` muda a cada vez
-que o túnel sobe (por isso o HTML de conectar é gerado de novo quando você quiser mandar
-o link atual). Quem quiser um endereço fixo pode criar um túnel nomeado na conta
-Cloudflare e apontar para `http://127.0.0.1:<porta>`; o app continua igual.
+- `comum/host_net.h` — sockets IPv4/IPv6 (Winsock2/POSIX), `PeerAllowed` (filtro de origem),
+  `WaitAccept` (poll nos dois sockets), endereços locais (cabo/Wi-Fi; docker/VM/VPN fora).
+- `comum/host_server.h` — rotas, vínculo (PIN/QR), autorização (`CanSee`), registro de
+  músicas online, streaming (`ServeOnlineStream`), `host.ini`, túnel (`VerifyTunnel`),
+  estado do painel.
+- `comum/host_web.h` — a página do celular (HTML/CSS/JS embutidos) e o `Remix-conectar.html`.
+- `comum/qrcode.h` — gerador de QR code sem dependências (verificado com zxing-cpp).
+- Núcleo/UI: `[Host]` no config.ini (`HostOn, HostPort, HostPin, HostTunnel, HostLan,
+  HostName, HostOnline, HostQrConfirm, HostIPv6`), seção HOST das configurações, painel
+  (`LayoutHostPanel`/`DrawHostPanel` nas duas cascas), copiar link
+  (`PlatformSetClipboardText`).
 
-Onde o `cloudflared` fica: `assets/tools/cloudflared(.exe)` ao lado do app (é o que os
-instaladores de dependências baixam), ou no PATH / `~/.local/bin`.
+## O que mudou na 1.5.0
+
+- **Corrigido:** os botões do Host usavam os mesmos códigos internos do seletor de estilo
+  (clicar em LIGAR O HOST trocava para "Spotify + LED"; o botão HOST do cabeçalho trocava para
+  "Limpo"). As zonas do Host mudaram de faixa e o build agora falha se duas faixas se sobrepuserem.
+- **Corrigido:** link do túnel com erro de DNS (ver acima) e sem como copiar.
+- **Novo:** QR code para vincular sem PIN; autorização por aparelho (nada liberado por padrão);
+  playlists isoladas por aparelho com compartilhamento liberado pelo PC; busca e streaming
+  online no celular; nova interface do celular; filtro de origem (só loopback e rede local);
+  IPv6 opcional só na rede local; opções ONLINE NO CELULAR e QR PEDE ACEITE.
+- **Segurança (revisão da 1.5.0):** aparelho sem "Lembrar" vira temporário e ninguém fica
+  vinculado para sempre; revogar/desligar corta downloads e streams na hora; playlist
+  compartilhada não vira porta dos fundos; renomear/editar faixa republica para o celular;
+  "Hostear no celular" com o Host desligado não apaga mais os aparelhos do `host.ini`; links do
+  yt-dlp com `--`; capas sem SSRF; defesa contra DNS rebinding, slowloris e cabeçalhos
+  ambíguos; trava geral de PIN; pedidos de vínculo em fila.

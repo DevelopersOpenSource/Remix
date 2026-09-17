@@ -155,7 +155,7 @@ inline void StreamThread(std::shared_ptr<StreamJob> j) {
         if (pipeMode) {
             auto ya = YtdlpArgs();
             for (const wchar_t* x : { L"--no-playlist", L"-q", L"-f", L"bestaudio/best", L"-o", L"-" }) ya.push_back(x);
-            ya.push_back(t.play);
+            ya.push_back(L"--"); ya.push_back(t.play);
             if (!src.Start(ya, true, false, false)) { dec.Kill(); dec.Wait(); fail(L"Não consegui abrir o yt-dlp."); return; }
             pump = std::thread([&] { char b[65536]; for (;;) { long n = src.ReadOut(b, sizeof b); if (n <= 0) break; if (!dec.WriteIn(b, (size_t)n)) break; } dec.CloseIn(); });
         }
@@ -222,6 +222,7 @@ inline void StreamThread(std::shared_ptr<StreamJob> j) {
             continue;
         }
         if (!gotAny && !pipeMode && attempt < 2) {   // a URL direta nao abriu: tenta pelo pipe do yt-dlp
+            ForgetMediaInfo(t.play);
             pipeMode = true;
             { std::lock_guard<std::mutex> lk(st->m); st->canRestart = false; st->pcm.clear(); st->baseFrame = 0; j->endFrame = 0; }
             { std::lock_guard<std::mutex> lk(j->im); j->via = L"yt-dlp | ffmpeg (pipe) -> PCM na memória"; }
@@ -258,7 +259,10 @@ struct DlJob {
     std::atomic<bool> cancel{ false };
     std::mutex m; std::wstring tmp, finalPath, err;
 };
-struct DlQueue { std::mutex m; std::deque<std::shared_ptr<DlJob>> q; std::vector<std::shared_ptr<DlJob>> all; bool worker = false; int nextId = 1; };
+struct DlQueue { std::mutex m; std::deque<std::shared_ptr<DlJob>> q; std::vector<std::shared_ptr<DlJob>> all; int workers = 0; int nextId = 1; };
+// Varias musicas ao mesmo tempo: o que pesa em cada uma e a extracao (rede) e a conversao (1 nucleo
+// de CPU), entao metade dos nucleos, entre 2 e 6. Uma playlist de 100 musicas cai de ~13 para ~2 min.
+inline int DlWorkerMax() { unsigned c = std::thread::hardware_concurrency(); int n = c ? (int)c / 2 : 2; return n < 2 ? 2 : (n > 6 ? 6 : n); }
 inline DlQueue& DQ() { static DlQueue* q = new DlQueue(); return *q; }
 inline std::wstring SafeFileName(std::wstring s) {
     for (auto& c : s) if (c < 32 || wcschr(L"\\/:*?\"<>|", c)) c = L'-';
@@ -277,17 +281,40 @@ inline void RunDownload(DlJob& j) {
     std::filesystem::create_directories(std::filesystem::path(j.tmp), ec);
     OTrack t = j.t; std::wstring err;
     if (t.play.empty() || NeedsMatch(DetectSource(t.play))) { if (!MatchOnYouTube(t, err, &j.cancel)) { if (j.cancel) finish(4, L"Cancelado."); else finish(3, err); return; } }
-    auto a = YtdlpArgs();
-    for (const wchar_t* x : { L"--no-playlist", L"--newline", L"--progress", L"--progress-template", L"download:REMIXPCT %(progress._percent_str)s", L"-f", L"bestaudio/best", L"-x", L"--embed-metadata" }) a.push_back(x);
-    if (j.fmt == L"mp3") for (const wchar_t* x : { L"--audio-format", L"mp3", L"--audio-quality", L"0", L"--embed-thumbnail" }) a.push_back(x);
-    else if (j.fmt == L"m4a") for (const wchar_t* x : { L"--audio-format", L"m4a", L"--embed-thumbnail" }) a.push_back(x);
-    a.push_back(L"-o"); a.push_back(Config::Join(j.tmp, L"audio.%(ext)s")); a.push_back(t.play);
-    CapResult r = RunCapture(a, 0, &j.cancel, [&](const std::string& ln) { size_t p = ln.find("REMIXPCT"); if (p != std::string::npos) { float v = (float)atof(ln.c_str() + p + 8); if (v >= 0 && v <= 100) j.pct = v * 0.9f; } });
+    // Extracao: a mesma do streaming (se a musica ja tocou ou apareceu na busca, sai do cache na hora).
+    // O yt-dlp baixa a partir desse JSON (--load-info-json) sem extrair de novo; se falhar, faz do jeito normal.
+    std::wstring infoFile;
+    { MediaInfo mi; std::wstring e; if (GetMediaInfo(t.play, mi, e, &j.cancel) && !mi.raw.empty()) {
+        infoFile = Config::Join(j.tmp, L"info.json");
+        std::ofstream o(std::filesystem::path(infoFile), std::ios::binary | std::ios::trunc); o.write(mi.raw.data(), (std::streamsize)mi.raw.size());
+        if (!o) infoFile.clear();
+    } }
     if (j.cancel) { finish(4, L"Cancelado."); return; }
+    auto runYt = [&](bool fromInfo) {
+        auto a = YtdlpArgs();
+        for (const wchar_t* x : { L"--no-playlist", L"--newline", L"--progress", L"--progress-template", L"download:REMIXPCT %(progress._percent_str)s", L"-f", L"bestaudio/best", L"-x", L"--embed-metadata" }) a.push_back(x);
+        if (j.fmt == L"mp3") for (const wchar_t* x : { L"--audio-format", L"mp3", L"--audio-quality", L"0", L"--embed-thumbnail" }) a.push_back(x);
+        else if (j.fmt == L"m4a") for (const wchar_t* x : { L"--audio-format", L"m4a", L"--embed-thumbnail" }) a.push_back(x);
+        a.push_back(L"-o"); a.push_back(Config::Join(j.tmp, L"audio.%(ext)s"));
+        if (fromInfo) { a.push_back(L"--load-info-json"); a.push_back(infoFile); }
+        else { a.push_back(L"--"); a.push_back(t.play); }
+        return RunCapture(a, 0, &j.cancel, [&](const std::string& ln) { size_t p = ln.find("REMIXPCT"); if (p != std::string::npos) { float v = (float)atof(ln.c_str() + p + 8); if (v >= 0 && v <= 100) j.pct = v * 0.9f; } });
+    };
+    auto findProduced = [&]() {
+        std::wstring f;
+        for (std::filesystem::directory_iterator it(std::filesystem::path(j.tmp), ec), end; !ec && it != end; it.increment(ec)) {
+            std::error_code e2;
+            if (it->is_regular_file(e2) && LooseAudioExt(LowerExt(it->path()))) f = it->path().wstring();
+        }
+        ec.clear(); return f;
+    };
+    CapResult r;
     std::wstring produced;
-    for (std::filesystem::directory_iterator it(std::filesystem::path(j.tmp), ec), end; !ec && it != end; it.increment(ec)) {
-        std::error_code e2;
-        if (it->is_regular_file(e2) && LooseAudioExt(LowerExt(it->path()))) produced = it->path().wstring();
+    if (!infoFile.empty()) { r = runYt(true); if (j.cancel) { finish(4, L"Cancelado."); return; } produced = findProduced(); if (produced.empty()) ForgetMediaInfo(t.play); }
+    if (produced.empty()) {
+        r = runYt(false);
+        if (j.cancel) { finish(4, L"Cancelado."); return; }
+        produced = findProduced();
     }
     if (produced.empty()) { finish(3, OErr(r, L"O download falhou.")); return; }
     j.pct = 93;
@@ -315,10 +342,11 @@ inline void RunDownload(DlJob& j) {
     j.pct = 100;
     finish(2, L"");
 }
-inline void DownloadWorker() {
+inline void DownloadWorker(std::shared_ptr<DlJob>& cur) {
     for (;;) {
         std::shared_ptr<DlJob> j;
-        { std::lock_guard<std::mutex> lk(DQ().m); if (DQ().q.empty()) { DQ().worker = false; return; } j = DQ().q.front(); DQ().q.pop_front(); }
+        { std::lock_guard<std::mutex> lk(DQ().m); if (DQ().q.empty()) { DQ().workers--; cur = nullptr; return; } j = DQ().q.front(); DQ().q.pop_front(); }
+        cur = j;
         if (j->cancel) { j->status = 4; continue; }
         j->status = 1;
         AppPost(EV_ONLINE_JOB, L"", j->id);
@@ -333,15 +361,15 @@ inline int QueueDownload(const OTrack& t, const std::wstring& plName, const std:
     j->id = DQ().nextId++; j->t = t; j->plName = plName; j->fmt = fmt;
     j->dest = plName.empty() ? destBase : Config::Join(destBase, SafeFileName(plName));
     DQ().q.push_back(j); DQ().all.push_back(j);
-    if (!DQ().worker) {
-        DQ().worker = true;
+    if (DQ().workers < DlWorkerMax()) {   // mais um trabalhador (cada um pega musicas da fila ate ela esvaziar)
+        DQ().workers++;
         std::thread([] {
-            bool crashed = true;
-            RemixSafe("fila de downloads", [&] { DownloadWorker(); crashed = false; });
+            bool crashed = true; std::shared_ptr<DlJob> cur;
+            RemixSafe("fila de downloads", [&] { DownloadWorker(cur); crashed = false; });
             if (!crashed) return;
             std::lock_guard<std::mutex> lk(DQ().m);
-            for (auto& d : DQ().all) if (d->status == 1) d->status = 3;
-            DQ().worker = false;
+            if (cur && cur->status == 1) cur->status = 3;
+            DQ().workers--;
         }).detach();
     }
     return j->id;
@@ -354,9 +382,10 @@ inline int CancelAllDownloads() {
     return n;
 }
 inline bool DownloadActivity(int& waiting, float& pct, std::wstring& title) {
-    std::lock_guard<std::mutex> lk(DQ().m); waiting = 0; bool running = false;
-    for (auto& j : DQ().all) { if (j->status == 0) ++waiting; else if (j->status == 1) { running = true; pct = j->pct; title = j->t.title; } }
-    return running || waiting > 0;
+    std::lock_guard<std::mutex> lk(DQ().m); waiting = 0; int running = 0; float sum = 0;
+    for (auto& j : DQ().all) { if (j->status == 0) ++waiting; else if (j->status == 1) { if (!running) title = j->t.title; ++running; sum += j->pct; } }
+    if (running) { pct = sum / running; if (running > 1) title = std::to_wstring(running) + L" ao mesmo tempo · " + title; }
+    return running > 0 || waiting > 0;
 }
 
 // ---- diario: o que esta tocando/baixando, gravado no maximo 1x por segundo ----------------
@@ -491,6 +520,11 @@ inline void OnlineSearchAsync() {
         }
         u.busy = false;
         AppPost(EV_ONLINE_SEARCH, L"", gen);
+        if (!link) {   // os primeiros resultados ja ficam prontos para tocar na hora
+            std::vector<std::wstring> pre;
+            for (size_t i = 0; i < out.size() && pre.size() < 3; ++i) pre.push_back(out[i].play.empty() ? out[i].url : out[i].play);
+            PreResolve(pre);
+        }
     }).detach();
 }
 // links resolvidos para adicionar numa playlist (ou criar uma nova)

@@ -16,12 +16,13 @@ Spotify, Deezer and Apple Music** links.
 
 <p align="center">
   <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: author of Remix, original idea and Windows version" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): co-developer, playlists, streaming and Linux version" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): co-developer, playlists, streaming, Linux version and Host for iOS" width="48%"></a>
 </p>
 
 **[Nero-2077](https://github.com/Nero-2077)** created Remix: the original idea and the Windows version.
 **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) joined later as co-developer: worked on the Windows version,
-proposed and built playlists and online music (streaming and downloads), and brought Remix to Linux.
+proposed and built playlists and online music (streaming and downloads), brought Remix to Linux, and came up with **Host** —
+the PC acting as a server for the phone — so Remix reaches the **iPhone (iOS)** while Nero builds the Android version.
 
 ## Download
 
@@ -81,7 +82,8 @@ inside the `.zip`) and that your antivirus did not quarantine it.
 - Spotify, Deezer and Apple Music links provide title, artist and duration (Spotify through its public embed page: no account or API key), and each song is matched on YouTube Music. No DRM is circumvented: audio always comes from YouTube or SoundCloud.
 - **In-memory streaming:** yt-dlp finds the audio URL and ffmpeg decodes straight to RAM. Nothing is written to disk and seeking works.
 - **Streaming queue:** the current song and the next two each get their own channel and preload in the background, so skipping (or reaching the end of a song) starts the next one instantly.
-- **Downloads** (MP3, M4A or the original format, with tags and cover) run in a background queue; files are assembled in the cache and moved to `Music/Remix Online/<playlist>` only when complete.
+- **Fast start:** yt-dlp's audio lookup (~3 s) is cached for 25 minutes and shared by the player, the phone (Host) and downloads, and the first search results are looked up in the background — playing one of them starts in about half a second.
+- **Downloads** (MP3, M4A or the original format, with tags and cover) run **several at once** (half your CPU cores, 2 to 6) and reuse the lookup already done by streaming or search; files are assembled in the cache and moved to `Music/Remix Online/<playlist>` only when complete. In download mode a song starts playing by streaming right away while it downloads.
 - Streaming or download can be chosen globally or per playlist. A small journal in the cache lets the app clean up interrupted downloads on the next start.
 
 **Look and feel**
@@ -118,9 +120,35 @@ bash linux/build-windows.sh              # cross-compiles windows/Remix.exe with
 Double-click `windows\COMPILAR.bat`. It uses MinGW-w64 GCC (MSYS2 UCRT64, WinLibs, Scoop or Chocolatey)
 and explains how to install it when missing. Manual commands: [windows/LEIA-ME.txt](windows/LEIA-ME.txt).
 
-## Host: listen to the PC library on your phone
+## Host: your PC library on the phone (iPhone and Android)
 
-Since 1.4.0 Remix can act as a server for your phone (Settings > HOST, or the HOST button in the header): set a **PIN**, turn it on, send the link (or the generated `Remix-conectar.html` over WhatsApp) and accept the device when it asks. Works on the **LAN** (same router) and over the **internet** through a Cloudflare tunnel (HTTPS, no port forwarding, no IP exposed, CGNAT-friendly). The phone plays the library, the playlists you host to it, and keeps its own playlists. Default port **49875**. Details, security model and API in [docs/HOST.md](docs/HOST.md) (Portuguese).
+Sodre's idea to bring Remix to the **iPhone (iOS)** — and any phone — with no app store, while the native Android version
+is in progress: the PC app becomes a **server** and the phone uses it from the browser ("Add to Home Screen" works).
+
+- **Link a phone:** Settings > HOST (or the **HOST** button in the header) > turn it on. On the phone, **scan the QR code**
+  and type a name — done. Without the QR, open the link, enter the **PIN** and accept the device on the PC. QR codes are
+  single-use and expire in 10 minutes (optionally also require approval on the PC).
+- **You decide what each device gets:** a newly linked device sees **nothing**. Share the whole **library** per device,
+  host playlists to all or some devices, and approve playlists a phone asks to share. Each phone keeps its **own playlists**,
+  isolated from other devices.
+- **A real music-app UI on the phone:** Home, Search, Your Library, playlist pages with back navigation, full-screen
+  **Now Playing** and lock-screen controls. Tuned for **iPhone Safari**: every button gives touch feedback, the seek bar
+  works by tapping or dragging anywhere on it, sheets open the keyboard and stay above it, playback recovers after an
+  error, and the WhatsApp connect page works even in the iPhone preview (no JavaScript needed).
+- **Online on the phone:** search and play YouTube Music, YouTube and SoundCloud from the phone — the **PC** runs yt-dlp and
+  ffmpeg and sends only the audio; hosted playlists with online tracks stream too. The phone never talks to those sites.
+- **LAN and internet:** same router (Wi-Fi or cable) or a **Cloudflare tunnel** (HTTPS, no port forwarding, CGNAT-friendly,
+  your IP stays hidden). The tunnel link is **shown only after it is verified** (avoids DNS `NXDOMAIN` caching) and has a
+  **COPY LINK** button.
+- **Security:** only local or tunnel connections are accepted (even on a public IP), per-device/per-track authorization
+  (revoking cuts playback immediately), devices linked without "Remember" are temporary, PIN/QR brute-force lockout (per
+  address and global), CSRF/XSS and DNS-rebinding protection, slow-request and DoS limits, optional LAN-only IPv6.
+  Default port **49875**.
+  Details, security model and API in [docs/HOST.md](docs/HOST.md) (Portuguese).
+
+## File safety (planned)
+
+A plan to protect users from malicious or corrupted music files — play only the decodable audio and the cover, sanitized in an isolated process, without breaking the app — is in [docs/SEGURANCA-DE-ARQUIVOS.md](docs/SEGURANCA-DE-ARQUIVOS.md) (Portuguese). Not implemented yet.
 
 ## Android (work in progress)
 
@@ -151,9 +179,10 @@ remix --home <folder>        use another folder for settings and library (portab
 ## License
 
 Remix Player is released under the [Apache License 2.0](LICENSE). Bundled third-party code keeps its own
-license: raylib and GLFW (zlib), miniaudio and stb (public domain / MIT), DejaVu fonts (Bitstream Vera) and
+license: raylib and GLFW (zlib), miniaudio and stb (public domain / MIT), the QR encoder derived from Project Nayuki's
+QR Code generator (MIT), DejaVu fonts (Bitstream Vera) and
 Droid Sans Japanese (Apache 2.0). See [linux/packaging/copyright](linux/packaging/copyright). yt-dlp and ffmpeg
-are separate programs and are not distributed with Remix.
+are separate programs and are not distributed with Remix, and neither is cloudflared (Apache 2.0, used by Host).
 
 Please respect each platform's terms of service and the copyright law of your country: download only what
 you have the right to.

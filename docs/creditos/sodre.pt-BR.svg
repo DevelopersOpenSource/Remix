@@ -39,12 +39,14 @@
 <text x="184" y="48" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing="2.6" fill="#6FA8FF">CO-DESENVOLVEDOR</text>
 <text x="184" y="80" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="24" font-weight="700" fill="#EBECF2">Sodre.exe/.rpm/.deb</text>
 <text x="184" y="102" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="13" fill="#8A93AD">github.com/NinjaZinS2</text>
-<rect x="184.0" y="118" width="84.6" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
-<text x="226.3" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="65.8" lengthAdjust="spacingAndGlyphs">PLAYLISTS</text>
-<rect x="276.6" y="118" width="84.6" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
-<text x="318.9" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="65.8" lengthAdjust="spacingAndGlyphs">STREAMING</text>
-<rect x="369.2" y="118" width="55.0" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
-<text x="396.7" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".8" fill="#2896FF" textLength="36.2" lengthAdjust="spacingAndGlyphs">LINUX</text>
+<rect x="184.0" y="118" width="72.6" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
+<text x="220.3" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".6" fill="#2896FF" textLength="55.6" lengthAdjust="spacingAndGlyphs">PLAYLISTS</text>
+<rect x="262.6" y="118" width="72.6" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
+<text x="298.9" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".6" fill="#2896FF" textLength="55.6" lengthAdjust="spacingAndGlyphs">STREAMING</text>
+<rect x="341.2" y="118" width="40.3" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
+<text x="361.3" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".6" fill="#2896FF" textLength="23.3" lengthAdjust="spacingAndGlyphs">LINUX</text>
+<rect x="387.5" y="118" width="64.5" height="26" rx="13" fill="#0C2545" stroke="#2896FF" stroke-width="1.2"/>
+<text x="419.7" y="135.2" text-anchor="middle" font-family="'Segoe UI', Inter, system-ui, -apple-system, 'Helvetica Neue', Arial, sans-serif" font-size="10.5" font-weight="700" letter-spacing=".6" fill="#2896FF" textLength="47.5" lengthAdjust="spacingAndGlyphs">HOST · iOS</text>
 <rect x="184" y="166.5" width="264" height="3" rx="1.5" fill="#1A2140"/>
 <rect x="184" y="166.5" width="100.3" height="3" rx="1.5" fill="url(#acc)"/>
 <circle cx="284.3" cy="168" r="5" fill="#2896FF"/>

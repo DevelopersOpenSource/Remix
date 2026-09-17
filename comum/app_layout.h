@@ -35,12 +35,15 @@ static void LayoutSettings(int w,int h){
     auto sect=[&](int x,int y,int cw,int hh,const wchar_t*t){ g_setSections.push_back({{x,y,x+cw,y+hh},t}); };
     // HOST (acesso pelo celular): ligar / painel, porta / PIN / nome, tunel / rede local, linha de estado
     auto sectHost=[&](int x,int& y,int cw){
-        sect(x,y,cw,214,L"HOST (ACESSO PELO CELULAR)");
+        // ligar/painel; porta/PIN/nome; tunel/rede local; copiar links; online/QR com aceite/IPv6; linha de estado
+        sect(x,y,cw,318,L"HOST (ACESSO PELO CELULAR)");
         int hw=(cw-50)/2, tw=(cw-60)/3;
         R_setHostOn={x+20,y+52,x+20+hw,y+86}; R_setHostPanel={x+30+hw,y+52,x+cw-20,y+86};
         R_setHostPort={x+20,y+96,x+20+tw,y+130}; R_setHostPin={x+30+tw,y+96,x+30+tw*2,y+130}; R_setHostName={x+40+tw*2,y+96,x+cw-20,y+130};
         R_setHostTunnel={x+20,y+140,x+20+hw,y+174}; R_setHostLan={x+30+hw,y+140,x+cw-20,y+174};
-        y+=234;
+        R_setHostCopyTun={x+20,y+184,x+20+hw,y+218}; R_setHostCopyLan={x+30+hw,y+184,x+cw-20,y+218};
+        R_setHostOnline={x+20,y+228,x+20+tw,y+262}; R_setHostQrConf={x+30+tw,y+228,x+30+tw*2,y+262}; R_setHostIpv6={x+40+tw*2,y+228,x+cw-20,y+262};
+        y+=338;
     };
     // ESTILO: classico / limpo / spotify+LED (3 botoes iguais + uma linha de explicacao)
     auto sectStyle=[&](int x,int& y,int cw){
@@ -438,37 +441,49 @@ static RECT R_onList;
 static void LayoutHostPanel(int w,int h){
     host::PanelUI& p=host::PU();
     if(p.v.version!=host::St().version.load()) p.v=host::GetView();
-    int bw=std::min((int)S(820),w-24), bh=std::min((int)S(640),h-24), bx=(w-bw)/2, by=(h-bh)/2;
+    int bw=std::min((int)S(860),w-24), bh=std::min((int)S(700),h-24), bx=(w-bw)/2, by=(h-bh)/2;
     p.box={bx,by,bx+bw,by+bh};
     p.btnClose={bx+bw-SI(46),by+SI(12),bx+bw-SI(12),by+SI(46)};
-    int x=bx+SI(18), cw=bw-SI(36), y=by+SI(56);
-    int bwid=(cw-SI(24))/4, bhgt=SI(36);
-    p.btnToggle={x,y,x+bwid,y+bhgt}; p.btnTunnel={x+bwid+SI(8),y,x+bwid*2+SI(8),y+bhgt}; p.btnHtml={x+bwid*2+SI(16),y,x+bwid*3+SI(16),y+bhgt}; p.btnPasta={x+bwid*3+SI(24),y,x+cw,y+bhgt};
-    y+=bhgt+SI(8);
-    p.btnPort={x,y,x+bwid,y+bhgt}; p.btnPin={x+bwid+SI(8),y,x+bwid*2+SI(8),y+bhgt}; p.btnName={x+bwid*2+SI(16),y,x+bwid*3+SI(16),y+bhgt}; p.btnLan={x+bwid*3+SI(24),y,x+cw,y+bhgt};
-    y+=bhgt+SI(6);
-    int infoH=SI(54);   // linhas de estado (porta, LAN, tunel)
-    p.list={bx+SI(8),y+infoH,bx+bw-SI(8),by+bh-SI(12)};
+    int x=bx+SI(18), cw=bw-SI(36), y=by+SI(52), g=SI(8), bhgt=SI(34);
+    int b5=(cw-g*4)/5;
+    auto five=[&](RECT* r[5]){ for(int k=0;k<5;k++){ int xx=x+k*(b5+g); *r[k]={xx,y,k==4?x+cw:xx+b5,y+bhgt}; } y+=bhgt+g; };
+    { RECT* a[5]={&p.btnToggle,&p.btnTunnel,&p.btnNewLink,&p.btnHtml,&p.btnPasta}; five(a); }
+    { RECT* a[5]={&p.btnPort,&p.btnPin,&p.btnName,&p.btnLan,&p.btnIpv6}; five(a); }
+    // faixa do QR: quadrado a esquerda; a direita, estado + copiar + opcoes do QR
+    int band=SI(206), qs=std::min(band,SI(206));
+    p.qrBox={x,y,x+qs,y+qs};
+    int rx=x+qs+SI(16), rw=x+cw-rx, h2=(rw-g)/2;
+    p.info={rx,y,x+cw,y+SI(62)};
+    int ry=y+SI(66);
+    p.btnCopyTun={rx,ry,rx+h2,ry+bhgt}; p.btnCopyLan={rx+h2+g,ry,x+cw,ry+bhgt}; ry+=bhgt+g;
+    p.btnQrMode={rx,ry,rx+h2,ry+bhgt}; p.btnQrNew={rx+h2+g,ry,x+cw,ry+bhgt}; ry+=bhgt+g;
+    p.btnOnline={rx,ry,rx+h2,ry+bhgt}; p.btnQrConfirm={rx+h2+g,ry,x+cw,ry+bhgt};
+    y+=band+SI(10);
+    p.list={bx+SI(8),y,bx+bw-SI(8),by+bh-SI(12)};
     int listTop=p.list.top, ly=listTop-p.scroll, rowH=SI(34);
     auto row=[&](){ RECT r={x,ly,x+cw,ly+rowH-SI(6)}; ly+=rowH; return r; };
-    p.accept.clear(); p.deny.clear(); p.revoke.clear(); p.plHost.clear(); p.plDev.clear();
+    p.accept.clear(); p.deny.clear(); p.revoke.clear(); p.devLib.clear(); p.plHost.clear(); p.plDev.clear(); p.dplOk.clear();
     ly+=SI(26);                                                        // titulo "pedidos"
     for(size_t i=0;i<p.v.pending.size();i++){ RECT r=row(); p.deny.push_back({r.right-SI(90),r.top,r.right,r.bottom}); p.accept.push_back({r.right-SI(190),r.top,r.right-SI(98),r.bottom}); }
-    ly+=SI(26);                                                        // titulo "dispositivos"
+    ly+=SI(26);                                                        // titulo "aparelhos"
     if(p.v.devs.empty()) ly+=rowH;
-    for(size_t i=0;i<p.v.devs.size();i++){ RECT r=row(); p.revoke.push_back({r.right-SI(100),r.top,r.right,r.bottom}); }
-    ly+=SI(26);                                                        // titulo "playlists"
+    for(size_t i=0;i<p.v.devs.size()&&i<100;i++){ RECT r=row(); p.revoke.push_back({r.right-SI(96),r.top,r.right,r.bottom}); p.devLib.push_back({r.right-SI(96)-SI(8)-SI(150),r.top,r.right-SI(104),r.bottom}); }
+    ly+=SI(26);                                                        // titulo "playlists do PC"
     if(g_playlists.empty()) ly+=rowH;
     for(size_t i=0;i<g_playlists.size()&&i<200;i++){
-        RECT r=row(); p.plHost.push_back({r.right-SI(120),r.top,r.right,r.bottom});
+        RECT r=row(); p.plHost.push_back({r.right-SI(130),r.top,r.right,r.bottom});
         std::vector<RECT> chips; std::string t=host::Targets(g_playlists[i].slug);
-        if(!t.empty()&&!p.v.devs.empty()){ int cx=x+SI(16); for(size_t j=0;j<p.v.devs.size()&&j<20;j++){ int cwid=SI(110); chips.push_back({cx,ly,cx+cwid,ly+rowH-SI(8)}); cx+=cwid+SI(6); if(cx+cwid>x+cw){ cx=x+SI(16); ly+=rowH; } } ly+=rowH; }
+        if(!t.empty()&&!p.v.devs.empty()){ int cx=x+SI(16); for(size_t j=0;j<p.v.devs.size()&&j<20;j++){ int cwid=SI(120); if(cx+cwid>x+cw){ cx=x+SI(16); ly+=rowH; } chips.push_back({cx,ly,cx+cwid,ly+rowH-SI(8)}); cx+=cwid+SI(6); } ly+=rowH; }
         p.plDev.push_back(chips);
     }
-    ly+=SI(26);                                                        // titulo "playlists dos celulares"
-    if(p.v.dpls.empty()) ly+=rowH; else ly+=rowH*(int)p.v.dpls.size();
+    ly+=SI(26);                                                        // titulo "playlists dos aparelhos"
+    if(p.v.dpls.empty()) ly+=rowH;
+    for(size_t i=0;i<p.v.dpls.size()&&i<500;i++){ RECT r=row(); p.dplOk.push_back(p.v.dpls[i].share?RECT{r.right-SI(120),r.top,r.right,r.bottom}:RECT{0,0,0,0}); }
     p.contentH=ly+p.scroll-listTop;
     int maxSc=std::max(0,p.contentH-(int)(p.list.bottom-p.list.top)); if(p.scroll>maxSc) p.scroll=maxSc; if(p.scroll<0) p.scroll=0;
+    // QR: texto atual (tunel testado ou rede local) -> so recodifica quando muda
+    bool isTun=false; std::string txt=p.v.running?host::QrUrl(p.qrTunnel,isTun):std::string();
+    if(txt!=p.qrText){ p.qrText=txt; p.qr=qr::Code(); if(!txt.empty()&&!qr::Encode(txt,p.qr,1,1,20)){ p.qr=qr::Code(); } }
 }
 static void LayoutOnline(int w,int h){
     OnlineUI& u=OU();
