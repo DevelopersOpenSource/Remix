@@ -22,7 +22,7 @@ Spotify, Deezer and Apple Music** links.
 **[Nero-2077](https://github.com/Nero-2077)** created Remix: the original idea and the Windows version.
 **Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) joined later as co-developer: worked on the Windows version,
 proposed and built playlists and online music (streaming and downloads), brought Remix to Linux, and came up with **Host** —
-the PC acting as a server for the phone — so Remix reaches the **iPhone (iOS)** while Nero builds the Android version.
+the PC acting as a server for the phone — so Remix reaches the **iPhone (iOS) and other mobile devices** while Nero builds the Android version.
 
 ## Download
 
