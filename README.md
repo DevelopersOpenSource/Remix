@@ -56,6 +56,10 @@ include an installer:
 Then just open Remix: it finds the tools by itself, no restart needed. *Settings › ONLINE* shows what was found.
 Run the installer again from time to time: YouTube changes often and yt-dlp must stay up to date.
 
+**Optional — stem separation:** the installers also offer the **STEMS** option (`/stems` on Windows, `--stems` on
+Linux, about 1 GB): an isolated Python with CPU PyTorch and [Demucs](https://github.com/facebookresearch/demucs)
+(Meta, open source), only for Remix (`assets\tools\stems` on Windows, `~/.local/share/remix/stems` on Linux).
+
 ### If Remix closes by itself (Windows)
 
 Remix writes `remix-log.txt` next to `Remix.exe` (or in `%LOCALAPPDATA%\Remix`) with every startup step, the
@@ -85,6 +89,19 @@ inside the `.zip`) and that your antivirus did not quarantine it.
 - **Fast start:** yt-dlp's audio lookup (~3 s) is cached for 25 minutes and shared by the player, the phone (Host) and downloads, and the first search results are looked up in the background — playing one of them starts in about half a second.
 - **Downloads** (MP3, M4A or the original format, with tags and cover) run **several at once** (half your CPU cores, 2 to 6) and reuse the lookup already done by streaming or search; files are assembled in the cache and moved to `Music/Remix Online/<playlist>` only when complete. In download mode a song starts playing by streaming right away while it downloads.
 - Streaming or download can be chosen globally or per playlist. A small journal in the cache lets the app clean up interrupted downloads on the next start.
+
+**Sound: safe volume, effects, stems and a wave that follows the beat**
+- **Safe volume:** perceptual (cubic) volume curve, a master stage that rises at most 40 dB per second and a limiter at
+  −0.3 dBFS. Before, the slider was linear (3% was already −30 dB) and jumping to 100% could blast your headphones;
+  bass boost or the equalizer could also clip.
+- **Effects (header › EFFECTS):** Slow, Speed, Reverb, Bass and 8D, each with 3 levels (click cycles 1 → 2 → 3 → off).
+  Slow/Speed change tempo and pitch together ("slowed"/"sped up").
+- **Stems:** Full, Vocals only, Music only, Drums, Bass and Other, separated in the background with Demucs (optional,
+  see above). On a CPU the first separation takes about half of the song's length; the full song keeps playing, Remix
+  switches to the chosen stem at the same position when it is ready, and the stems are cached (switching is instant
+  afterwards). With a stem mode on, the next songs in the queue are separated ahead.
+- **Rhythm wave:** the wave follows the real audio — fine 25 ms energy, beats detected from the spectrum and the output
+  latency compensated (before it read 50 ms ahead and drifted up to 4% over a song).
 
 **Look and feel**
 - Three interface styles (Settings > INTERFACE STYLE): **Classic** (the original look: theme-colored outlines, LED glow, transport on every card), **Clean** (neutral grays, flat surfaces, theme color only on what is playing, no LED) and **Spotify + LED** (Clean with the LED glow and light runner on). The choice is saved as `Style=` in config.ini.
@@ -132,7 +149,8 @@ is in progress: the PC app becomes a **server** and the phone uses it from the b
   host playlists to all or some devices, and approve playlists a phone asks to share. Each phone keeps its **own playlists**,
   isolated from other devices.
 - **A real music-app UI on the phone:** Home, Search, Your Library, playlist pages with back navigation, full-screen
-  **Now Playing** and lock-screen controls. Tuned for **iPhone Safari**: every button gives touch feedback, the seek bar
+  **Now Playing** and lock-screen controls, **effects and stems** applied by the PC (the phone just plays the result, so
+  the iPhone lock screen keeps working) and a **wave that follows the beat** computed by the PC. Tuned for **iPhone Safari**: every button gives touch feedback, the seek bar
   works by tapping or dragging anywhere on it, sheets open the keyboard and stay above it, playback recovers after an
   error, and the WhatsApp connect page works even in the iPhone preview (no JavaScript needed).
 - **Online on the phone:** search and play YouTube Music, YouTube and SoundCloud from the phone — the **PC** runs yt-dlp and

@@ -125,6 +125,7 @@ static void OnStreamReady(int id,int durSec){
     auto j=FindStreamId(id); if(!j) return;
     if(g_player.OpenStream(j->st,(unsigned)std::max(0,durSec))){
         g_curStreamOpen=true; g_converting=false; g_onlineFailRow=0; ApplyVolume();
+        if(g_resumeMs){ g_player.SeekMs(g_resumeMs); g_resumeMs=0; }   // voltou de um stem para a completa
         if(g_pendingAutoplay) g_player.Play();
     } else {
         g_converting=false; DropStream(j); g_curStreamId=0;

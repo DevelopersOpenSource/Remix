@@ -117,6 +117,10 @@ struct Config {
     int ledSpeed = 75;
     std::wstring ledEffect = L"respiracao";
     int volume = 80;
+    // Efeitos de audio (0 = desligado, 1..3 = intensidade) e modo dos stems ("" = musica completa;
+    // vocal, instrumental, bateria, baixo, outros). Slow e speed nao valem juntos.
+    int fxSlow = 0, fxSpeed = 0, fxReverb = 0, fxBass = 0, fx8d = 0;
+    std::wstring stemMode;
     bool shuffle = false;
     bool repeat = false;
 
@@ -426,6 +430,12 @@ struct Config {
             else if (k == L"Speed") ledSpeed = _wtoi(v.c_str());
             else if (k == L"Effect") ledEffect = v;
             else if (k == L"Volume") volume = _wtoi(v.c_str());
+            else if (k == L"FxSlow") fxSlow = _wtoi(v.c_str());
+            else if (k == L"FxSpeed") fxSpeed = _wtoi(v.c_str());
+            else if (k == L"FxReverb") fxReverb = _wtoi(v.c_str());
+            else if (k == L"FxBass") fxBass = _wtoi(v.c_str());
+            else if (k == L"Fx8D") fx8d = _wtoi(v.c_str());
+            else if (k == L"StemMode") stemMode = (v == L"vocal" || v == L"instrumental" || v == L"bateria" || v == L"baixo" || v == L"outros") ? v : L"";
             else if (k == L"Shuffle") shuffle = (v == L"1");
             else if (k == L"Repeat") repeat = (v == L"1");
             else if (k == L"UIScale") uiScale = _wtoi(v.c_str());
@@ -509,6 +519,8 @@ struct Config {
         ledBrightness = std::max(0, std::min(100, ledBrightness));
         ledSpeed = std::max(0, std::min(100, ledSpeed));
         volume = std::max(0, std::min(100, volume));
+        for (int* f : { &fxSlow, &fxSpeed, &fxReverb, &fxBass, &fx8d }) *f = std::max(0, std::min(3, *f));
+        if (fxSlow && fxSpeed) fxSpeed = 0;
         for (int& g : eq) g = std::max(-12, std::min(12, g));
         if (winW < 0) winW = 0;
         if (winH < 0) winH = 0;
@@ -537,6 +549,12 @@ struct Config {
         swprintf(b, 64, L"CdSpeed=%d", cdSpeed); ls.push_back(b);
         swprintf(b, 64, L"ListMode=%d", listMode ? 1 : 0); ls.push_back(b);
         swprintf(b, 64, L"Volume=%d", volume); ls.push_back(b);
+        swprintf(b, 64, L"FxSlow=%d", fxSlow); ls.push_back(b);
+        swprintf(b, 64, L"FxSpeed=%d", fxSpeed); ls.push_back(b);
+        swprintf(b, 64, L"FxReverb=%d", fxReverb); ls.push_back(b);
+        swprintf(b, 64, L"FxBass=%d", fxBass); ls.push_back(b);
+        swprintf(b, 64, L"Fx8D=%d", fx8d); ls.push_back(b);
+        ls.push_back(L"StemMode=" + stemMode);
         ls.push_back(L"Shuffle="); ls.back() += shuffle ? L"1" : L"0";
         ls.push_back(L"Repeat=");  ls.back() += repeat ? L"1" : L"0";
         swprintf(b, 64, L"UIScale=%d", uiScale); ls.push_back(b);

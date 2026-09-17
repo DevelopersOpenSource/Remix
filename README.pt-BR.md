@@ -80,6 +80,20 @@ Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na 
   Teclas de midia do teclado funcionam. Tudo ajustavel em Configuracoes > REPRODUCAO
   (vem ligado; pode desligar).
 
+## Volume, efeitos, stems e onda no ritmo
+
+- **Volume seguro:** curva perceptiva (cúbica, a mesma do PipeWire/Pulse), subida de no máximo 40 dB por segundo e
+  limitador em −0,3 dBFS. Antes o controle era linear (3% já era −30 dB): subir para 100% de uma vez dava +30 dB e
+  podia estourar o fone; grave ou equalizador também podiam distorcer.
+- **Efeitos (cabeçalho › EFEITOS):** Slow, Speed, Reverb, Grave e 8D, cada um com 3 níveis (cada clique sobe:
+  1 → 2 → 3 → desliga). Slow e speed mudam velocidade e tom juntos (estilo "slowed"/"sped up") e não somam.
+- **Stems (mesmo painel):** Completa, Só vocal, Só música, Bateria, Baixo e Outros, separados em segundo plano pelo
+  Demucs (opcional, veja o instalador de dependências). Na CPU a primeira separação leva cerca de metade da duração
+  da música; enquanto isso toca a completa, e quando termina o Remix troca para o stem no mesmo ponto. Fica guardado
+  (até 3 GB): da segunda vez é na hora. Com um modo ligado, as próximas da fila já vão sendo separadas.
+- **Onda no ritmo:** a altura vem da energia fina do áudio (25 ms), o "pulo" das batidas detectadas no espectro e o
+  atraso da saída de som é descontado (antes lia 50 ms à frente e ainda adiantava até 4% ao longo da música).
+
 ## Seek e onda
 
 - A onda usa a analise real do audio (decodificacao com miniaudio em thread, nos dois sistemas).
@@ -164,7 +178,9 @@ Ctrl+V com um link em qualquer lugar do app tambem abre a busca.
   selecionada e o streaming recomeca do inicio ao apertar play.
 
 Precisa de **yt-dlp**, **ffmpeg** e de um "JavaScript runtime" que o YouTube passou a exigir (**Deno 2.3+**
-ou **Node.js 22+**). As versoes portateis trazem um instalador:
+ou **Node.js 22+**). As versoes portateis trazem um instalador (que também oferece a opção **STEMS**: `/stems` no
+Windows, `--stems` no Linux, ~1 GB — um Python isolado só para o Remix com PyTorch de CPU e o
+[Demucs](https://github.com/facebookresearch/demucs), da Meta, código aberto):
 
 - **Windows:** clique 2x em `INSTALAR-DEPENDENCIAS.bat` (na pasta do Remix). Ele baixa os arquivos oficiais do
   yt-dlp, do FFmpeg e do Deno direto para a pasta `assets\tools` **dentro do Remix**, com o `curl` e o `tar` que ja
@@ -294,7 +310,8 @@ Android nativa é feita: o Remix do PC vira um **servidor** e o celular usa pelo
   aparelho, hosteie playlists (botão direito > "Hostear no celular"; todos ou alguns aparelhos) e libere, se quiser, as
   playlists que um celular pediu para compartilhar. Cada celular tem as **playlists dele**, isoladas dos outros.
 - **Interface de app de música no celular:** Início, Buscar, Sua Biblioteca, tela da playlist com voltar, **Tocando agora**
-  em tela cheia e controles na tela de bloqueio. Ajustada para o **Safari do iPhone**: todo botão reage ao toque, a barra
+  em tela cheia e controles na tela de bloqueio, **efeitos e stems** aplicados pelo PC (o celular só toca o resultado,
+  então a tela bloqueada do iPhone continua funcionando) e **onda no ritmo** calculada pelo PC. Ajustada para o **Safari do iPhone**: todo botão reage ao toque, a barra
   de posição funciona tocando ou arrastando em qualquer ponto, as folhas abrem o teclado e ficam acima dele, o play volta a
   funcionar depois de um erro e a página do WhatsApp mostra os links até na pré-visualização do iPhone (sem JavaScript).
 - **Online no celular:** buscar e ouvir YouTube Music, YouTube e SoundCloud pelo celular — o **PC** roda o yt-dlp e o

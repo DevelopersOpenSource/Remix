@@ -195,6 +195,7 @@ static void DrawNormal(int w,int h){
     DrawPill(R_sortBtn,SortLabel(),g_cfg.sortMode==L"manual",S(11));
     DrawPill(R_folderBtn,g_view==2?L"PASTA DA PLAYLIST ▾":L"PASTA ▾",g_folderMenuOpen,S(11));
     if(R_hostBtn.right>R_hostBtn.left) DrawPill(R_hostBtn,host::Running()?L"HOST ●":L"HOST",host::Running(),S(11));
+    if(R_fxBtn.right>R_fxBtn.left) DrawPill(R_fxBtn,AnyFxOn()?L"EFEITOS ●":L"EFEITOS",AnyFxOn(),S(11));
     DrawChromeButtons(white,gray);
     if(R_listBtn.right>R_listBtn.left){
         bool lm=g_cfg.listMode!=0;

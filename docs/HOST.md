@@ -80,6 +80,12 @@ e um resumo do código (`?v=1.5.0-xxxxxxxx`), então o celular nunca fica com o 
   AAC se o ffmpeg não tiver MP3). Avançar reabre o áudio do ponto escolhido. Playlists do PC
   que têm músicas online também tocam assim no celular. As capas online passam pelo PC:
   **o celular nunca fala com YouTube/SoundCloud**.
+- **Efeitos e stems no celular** (botão **Efeitos e stems** no Tocando agora): os mesmos Slow, Speed, Reverb, Grave e
+  8D do PC (3 níveis) e os modos de stem. Quem aplica é o PC com o ffmpeg (reverb por convolução, `bass`, `apulsator`,
+  limitador), e o celular recebe um MP3 comum: a tela bloqueada do iPhone continua funcionando. Com efeito ou stem a
+  música vem como stream (avançar recomeça com `?t=`), e o tempo mostrado considera a velocidade.
+- **Onda no ritmo no celular:** o PC calcula energia e batidas a cada 25 ms (`/api/ritmo`) e a página desenha a onda
+  do Tocando agora e faz os ícones de "tocando" pularem na batida — sem Web Audio (que pararia com a tela bloqueada).
 - Começo rápido: a extração do yt-dlp (~3 s) fica em cache por 25 min, compartilhada com o
   player e os downloads do PC, e os 3 primeiros resultados de cada busca já são extraídos em
   segundo plano. Medido: o primeiro áudio chega em ~0,3–0,5 s (antes ~3 s).
@@ -134,10 +140,12 @@ Faixa: `{id, t, a, d, c (tem capa), o (1 = online)}`.
 | `GET /api/biblioteca` | cookie | faixas da biblioteca (vazio sem liberação) |
 | `GET /api/playlists` | cookie | `{pc, minhas (compartilhar, liberada), compartilhadas (dono)}` com `itens` já filtrados |
 | `POST /api/minhas {acao, slug, nome, id, valor}` | cookie | `criar`, `renomear`, `apagar`, `add`, `remover`, `compartilhar` |
-| `GET /api/faixa/<id>` | cookie | arquivo local com `Range` |
+| `GET /api/faixa/<id>` | cookie | arquivo local com `Range`; com `?fx=slow:2,reverb:1&stem=vocal&t=<s>` vem convertido (stream) |
 | `GET /api/capa/<id>` | cookie | capa local ou miniatura online (via PC) |
 | `GET /api/online/buscar?q=&fonte=0\|1\|2` | cookie | busca pelo yt-dlp do PC |
-| `GET /api/online/ouvir/<id>?t=<s>` | cookie | stream MP3/AAC convertido ao vivo |
+| `GET /api/online/ouvir/<id>?t=<s>` | cookie | stream MP3/AAC convertido ao vivo (aceita `fx` e `stem`) |
+| `GET/POST /api/stems/<id>` | cookie | estado da separação (`pronto`, `fila`, `baixando`, `separando`, `falhou`); POST começa (no máximo 4 na fila) |
+| `GET /api/ritmo/<id>?stem=` | cookie | `{hop:25, e:[energia 0..255], b:[batida 0..255]}` (2 análises por vez) |
 | `POST /api/sair` | cookie | desvincula este aparelho |
 
 ### Testes sem celular
@@ -167,6 +175,11 @@ o estado do host.
   HostName, HostOnline, HostQrConfirm, HostIPv6`), seção HOST das configurações, painel
   (`LayoutHostPanel`/`DrawHostPanel` nas duas cascas), copiar link
   (`PlatformSetClipboardText`).
+
+## O que mudou na 1.5.2
+
+- Efeitos (Slow, Speed, Reverb, Grave, 8D) e stems (Demucs) também no celular, aplicados pelo PC; onda no ritmo real
+  calculada pelo PC; rotas `/api/stems` e `/api/ritmo`.
 
 ## O que mudou na 1.5.1
 

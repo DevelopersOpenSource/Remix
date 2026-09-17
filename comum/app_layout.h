@@ -199,7 +199,7 @@ static void LayoutSettings(int w,int h){
 static void BuildLayout(){
     int w=g_winW,h=g_winH;
     R_titlebar={0,0,w,44}; R_close={0,0,0,0}; R_min={0,0,0,0};
-    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_hostBtn={0,0,0,0}; R_volIcon={0,0,0,0};
+    R_wavePanel={0,0,0,0}; R_shapeTgl={0,0,0,0}; R_listBtn={0,0,0,0}; R_autoTgl={0,0,0,0}; R_sortBtn={0,0,0,0}; R_folderBtn={0,0,0,0}; R_hostBtn={0,0,0,0}; R_fxBtn={0,0,0,0}; R_volIcon={0,0,0,0};
     R_cardRects.clear(); R_cardCoverButtons.clear(); R_cardSeekRects.clear(); R_cardPlayBtns.clear(); R_themeCircles.clear();
     g_headerH=0; g_sideW=0;
     R_rowUp.clear(); R_rowDown.clear();
@@ -259,6 +259,10 @@ static void BuildLayout(){
         {   // HOST: pilula depois da PASTA (some se nao couber; fica nas configuracoes)
             int hx=(R_folderBtn.right>R_folderBtn.left?R_folderBtn.right:(R_sortBtn.right>R_sortBtn.left?R_sortBtn.right:R_autoTgl.right))+SI(10);
             R_hostBtn={hx,SI(8),hx+(int)S(78),SI(52)}; if(R_hostBtn.right>limit) R_hostBtn={0,0,0,0};
+        }
+        {   // EFEITOS: pilula depois do HOST (some se nao couber)
+            int fx=(R_hostBtn.right>R_hostBtn.left?R_hostBtn.right:(R_folderBtn.right>R_folderBtn.left?R_folderBtn.right:(R_sortBtn.right>R_sortBtn.left?R_sortBtn.right:R_autoTgl.right)))+SI(10);
+            R_fxBtn={fx,SI(8),fx+(int)S(96),SI(52)}; if(R_fxBtn.right>limit) R_fxBtn={0,0,0,0};
         }
         R_modeSquare=R_modeCd=R_modeVertical={0,0,0,0}; R_themeCircles.clear();
         float ps=g_cfg.playerScale/100.0f;
@@ -437,6 +441,40 @@ static bool LayoutActivity(int w,int h,int& waiting,float& pct,std::wstring& tit
 }
 // Geometria da tela de busca online: busca, fontes e resultados em linhas com ▶ ⬇ +.
 static RECT R_onList;
+// Painel EFEITOS (sobreposto): 5 efeitos com nivel 0..3, modos de stem e o estado da separacao.
+static bool StemJobActive(){ auto j=stems::Find(StemKeyCurrent()); int st=j?j->state.load():-1; return st==stems::S_QUEUED||st==stems::S_DOWNLOADING||st==stems::S_SEPARATING; }
+static void LayoutFxPanel(int w,int h){
+    FxPanelUI& p=g_fxp;
+    int bw=std::min((int)S(740),w-24), bh=std::min((int)S(400),h-24), bx=(w-bw)/2, by=(h-bh)/2;
+    p.box={bx,by,bx+bw,by+bh};
+    p.btnClose={bx+bw-SI(46),by+SI(8),bx+bw-SI(10),by+SI(44)};
+    int pad=SI(18), gap=SI(10), y=by+SI(76);
+    int cw=(bw-2*pad-4*gap)/5;
+    for(int i=0;i<5;i++){ int x=bx+pad+i*(cw+gap); p.fx[i]={x,y,x+cw,y+SI(52)}; }
+    y+=SI(52)+SI(12);
+    p.btnClear={bx+pad,y,bx+pad+(int)S(190),y+SI(34)};
+    y+=SI(34)+SI(44);
+    int sw=(bw-2*pad-5*gap)/6;
+    for(int i=0;i<6;i++){ int x=bx+pad+i*(sw+gap); p.stem[i]={x,y,x+sw,y+SI(44)}; }
+    y+=SI(44)+SI(14);
+    p.btnCancel={bx+bw-pad-(int)S(120),y,bx+bw-pad,y+SI(34)};
+    p.info={bx+pad,y,p.btnCancel.left-SI(12),by+bh-SI(12)};
+}
+// Texto do estado dos stems da faixa atual (duas linhas).
+static void FxStemStatus(std::wstring& l1,std::wstring& l2){
+    l1.clear(); l2.clear();
+    if(!stems::InstalledCached()){ l1=L"Separador não instalado: rode o instalador de dependências e escolha STEMS"; l2=L"(Demucs, código aberto, ~1 GB). Os efeitos funcionam sem ele."; return; }
+    if(g_current<0||g_current>=(int)g_tracks.size()){ l1=L"Toque uma música para separar."; return; }
+    std::wstring key=StemKeyCurrent();
+    if(stems::Complete(key)){ l1=L"Stems desta música prontos (ficam guardados): trocar de modo é na hora."; return; }
+    auto j=stems::Find(key); int st=j?j->state.load():-1;
+    if(st==stems::S_QUEUED) l1=L"Na fila para separar...";
+    else if(st==stems::S_DOWNLOADING) l1=L"Baixando o áudio para separar...";
+    else if(st==stems::S_SEPARATING){ l1=L"Separando: "+std::to_wstring(j->pct.load())+L"%"; l2=L"Na primeira vez leva cerca de metade da duração da música; enquanto isso toca a completa."; }
+    else if(st==stems::S_FAILED){ std::lock_guard<std::mutex> lk(j->m); l1=L"Falhou: "+j->err; }
+    else if(st==stems::S_CANCELED) l1=L"Separação cancelada.";
+    else l1=StemModeNow()==stems::M_FULL?L"Escolha um modo para separar esta música.":L"Vai separar quando a música tocar.";
+}
 // Painel HOST (sobreposto): estado, botoes, pedidos pendentes, dispositivos, playlists hosteadas.
 static void LayoutHostPanel(int w,int h){
     host::PanelUI& p=host::PU();

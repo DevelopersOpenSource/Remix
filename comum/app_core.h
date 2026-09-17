@@ -124,7 +124,8 @@ enum : int {
     EV_PICK_PL_FOLDER, EV_PICK_PL_FILES, EV_PICK_PL_ADDFOLDER, EV_PICK_NEWPL_FOLDER, EV_PICK_DLFOLDER, EV_TOOLS_READY,
     EV_PICK_DLONCE,  // pasta escolhida na hora de baixar (s = pasta ou vazio se cancelou)
     EV_HOST_PEDIDO,  // host: celular pediu para parear (s = id do pedido)
-    EV_HOST_STATUS   // host: aviso do servidor/tunel (s = texto, n = 1 quando e a URL do tunel)
+    EV_HOST_STATUS,  // host: aviso do servidor/tunel (s = texto, n = 1 quando e a URL do tunel)
+    EV_STEMS         // stems: mudou o estado de uma separacao (s = chave, n = estado)
 };
 // Analise incremental do streaming (online_play.h entrega o PCM; esta converte em
 // onda/espectro e a UI publica em WS() para a musica online mostrar como a local).
@@ -132,6 +133,7 @@ enum : int {
 struct StreamJob;
 void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
 #include "online_play.h"
+#include "stems.h"
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
 // Teclas (mapeadas por cada plataforma).
@@ -150,6 +152,8 @@ struct WaveState {
     int specHopMs = 50;
     float bands[48] = {0};
     bool hasSpec = false;
+    float pulse = 0, onsetMax = 0.05f, energyMax = 0.02f;   // batida atual (0..1) e normalizacoes que se adaptam a musica
+    double specHopF = 50.0;    // passo exato do espectro em ms (1102 amostras a 44,1 kHz = 24,99 ms; em inteiro a onda adiantava 4%)
 };
 static WaveState& WS(){ static WaveState* s = new WaveState(); return *s; }
 struct ScanState {
@@ -190,6 +194,7 @@ enum : int {
     Z_HOST_CLOSE=22050, Z_HOST_TOGGLE, Z_HOST_TUNNEL, Z_HOST_HTML, Z_HOST_PASTA, Z_HOST_PORT, Z_HOST_PIN, Z_HOST_NAME, Z_HOST_LAN,
     Z_HOST_NEWLINK, Z_HOST_COPYTUN, Z_HOST_COPYLAN, Z_HOST_QRMODE, Z_HOST_QRNEW, Z_HOST_ONLINE, Z_HOST_QRCONF, Z_HOST_IPV6,
     Z_HOST_DEVLIB_BASE=22100, Z_HOST_DPLOK_BASE=22200,   // +100 aparelhos, +500 playlists de aparelhos
+    Z_FX_BTN=23000, Z_FX_CLOSE, Z_FX_CLEAR, Z_FX_CANCEL, Z_FX_BASE=23010, Z_STEM_BASE=23020,   // efeitos (+5) e stems (+6)
     Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo (ate 21500)
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
@@ -209,6 +214,9 @@ static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
 static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spotify
 static RECT R_setHostCopyTun, R_setHostCopyLan, R_setHostOnline, R_setHostQrConf, R_setHostIpv6;
 static RECT R_setHostOn, R_setHostPort, R_setHostPin, R_setHostName, R_setHostTunnel, R_setHostLan, R_setHostPanel, R_hostBtn;   // HOST (docs/HOST.md)
+static RECT R_fxBtn;   // EFEITOS (cabecalho)
+struct FxPanelUI { bool open=false; RECT box{0,0,0,0}, btnClose{0,0,0,0}, btnClear{0,0,0,0}, btnCancel{0,0,0,0}, info{0,0,0,0}; RECT fx[5]{}; RECT stem[6]{}; };
+static FxPanelUI g_fxp;
 static RECT R_verticalCoverButton;
 static RECT R_playerPanel;
 static int g_panelArt = 300;
@@ -239,6 +247,7 @@ static int g_gridCols = 0, g_contentH = 0;
 static int g_headerH = 0, g_sideW = 0;   // faixas solidas do cabecalho e da lateral (estilos novos)
 // Zonas que nao podem se sobrepor (a 1.4.0 teve HOST dentro da faixa do ESTILO).
 static_assert(Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT<=Z_ON_SRC_BASE+100 && Z_HOST_BTN>Z_HOST_PLDEV_BASE+4000, "zonas do host/estilo sobrepostas");
+static_assert(Z_HOST_DPLOK_BASE+500<=Z_FX_BTN && Z_FX_CANCEL<Z_FX_BASE && Z_FX_BASE+5<=Z_STEM_BASE && Z_STEM_BASE+10<Z_COVER_BASE, "faixa dos efeitos invade outra");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
@@ -276,6 +285,7 @@ static RECT R_confirmBox, R_confirmYes, R_confirmNo;
 static bool g_converting = false;
 static unsigned g_openGen = 0;
 static bool g_pendingAutoplay = false;
+static DWORD g_resumeMs = 0;   // troca de fonte (stem <-> completa): a faixa reabre nesse ponto
 static std::wstring g_currentSource;          // arquivo realmente aberto (pode ser o WAV convertido)
 // seletor de imagem da web (imagens sao void* por plataforma)
 struct WebRes { std::wstring murl; std::wstring turl; void* img=nullptr; void* cpu=nullptr; };
@@ -357,26 +367,35 @@ static float AudioWaveBar(int i,int count,DWORD posMs,DWORD lenMs,float t){
         look=(DWORD)std::min<double>((double)look,std::max(300.0,avail));
     }
     double center=(double)posMs-back+(double)look*p;
-    float norm=(float)(center/std::max<double>(1,(double)lenMs));
-    norm=std::max(0.f,std::min(1.f,norm));
-    size_t n=WS().data.size();
-    size_t idx=(size_t)(norm*(float)(n-1));
-    size_t span=std::max<size_t>(1,n/110);
-    size_t a=idx>span?idx-span:0,b=std::min(n-1,idx+span);
-    float v=0; for(size_t j=a;j<=b;j++) v=std::max(v,WS().data[j]);
-    v=powf(v,.82f);
-    float micro=1.f+.18f*sinf(t*2.3f+p*9.f)+.09f*sinf(t*4.1f-p*17.f);
-    float out=v*micro;
-    float band=1.f;
+    float v=-1.f, band=1.f, pulse=0.f;
     {
+        // Onda no ritmo: a altura vem da energia do espectro naquele instante (quadros de 25-50 ms) e o
+        // "pulo" vem da batida detectada agora (UpdateSpecBands), mais forte perto do ponto que esta tocando.
         std::lock_guard<std::mutex> lk(WS().fm);
+        int frames=(int)(WS().spec.size()/48); double hop=std::max(1.0,WS().specHopF);
+        if(frames>0&&center>=0){
+            int fi=(int)(center/hop);
+            if(fi<frames){ const float* f=&WS().spec[(size_t)fi*48]; float e=0; for(int k=0;k<48;k++) e+=f[k]; e/=48.f; v=std::min(1.f,sqrtf(e/std::max(0.0005f,WS().energyMax))); }
+        }
         if(WS().hasSpec){
             float q=powf(p,.7f);
             int bi=(int)(q*47.99f); if(bi<0)bi=0; if(bi>47)bi=47;
             band=.30f+1.15f*WS().bands[bi];
         }
+        pulse=WS().pulse;
     }
-    out*=band;
+    if(v<0){   // sem espectro ainda: os 320 pontos da musica inteira
+        float norm=(float)(center/std::max<double>(1,(double)lenMs));
+        norm=std::max(0.f,std::min(1.f,norm));
+        size_t n=WS().data.size();
+        size_t idx=(size_t)(norm*(float)(n-1));
+        size_t span=std::max<size_t>(1,n/110);
+        size_t a=idx>span?idx-span:0,b=std::min(n-1,idx+span);
+        v=0; for(size_t j=a;j<=b;j++) v=std::max(v,WS().data[j]);
+    }
+    v=powf(std::max(0.f,v),.82f);
+    float perto=1.f-std::min(1.f,(float)fabs(center-(double)posMs)/1800.f);   // ("near" e macro no Windows)
+    float out=v*(1.f+.60f*pulse*perto)*band;
     float idle=(.07f+.13f*WaveIdleAt(i,count,t*.7f))*band;
     return std::max(.06f,std::min(1.f,std::max(out,idle)));
 }
@@ -468,12 +487,12 @@ static void AnalyzeCurrentWave(){
             auto publishSpec=[&](){
                 if(specLocal.empty()) return;
                 std::lock_guard<std::mutex> lk(WS().fm);
-                if(job==WS().job.load()){ WS().spec.insert(WS().spec.end(),specLocal.begin(),specLocal.end()); WS().specHopMs=(int)(hop*1000/std::max(1,sr)); }
+                if(job==WS().job.load()){ WS().spec.insert(WS().spec.end(),specLocal.begin(),specLocal.end()); WS().specHopMs=(int)(hop*1000/std::max(1,sr)); WS().specHopF=hop*1000.0/std::max(1,sr); }
                 specLocal.clear();
             };
             bool ok=Player::DecodeMono(path,[&](const float* f,size_t n,unsigned srr)->bool{
                 if(job!=WS().job.load()) return false;
-                if(first){ sr=(int)srr; framesPerBucket=std::max<size_t>(256,(size_t)sr/20); hop=framesPerBucket; first=false; }
+                if(first){ sr=(int)srr; framesPerBucket=std::max<size_t>(256,(size_t)sr/20); hop=std::max<size_t>(256,(size_t)sr/40); first=false; }   // espectro a cada 25 ms (ritmo)
                 for(size_t i=0;i<n;i++){
                     float v=f[i];
                     bucket.push_back(fabsf(v));
@@ -503,7 +522,7 @@ static void AnalyzeCurrentWave(){
         } catch(...){}
     });
 }
-static void ClearWave(){ ++WS().job; { std::lock_guard<std::mutex> lk(WS().m); WS().data.clear(); WS().path.clear(); } { std::lock_guard<std::mutex> lk(WS().fm); WS().spec.clear(); WS().hasSpec=false; } }
+static void ClearWave(){ ++WS().job; { std::lock_guard<std::mutex> lk(WS().m); WS().data.clear(); WS().path.clear(); } { std::lock_guard<std::mutex> lk(WS().fm); WS().spec.clear(); WS().hasSpec=false; WS().pulse=0; WS().onsetMax=0.05f; WS().energyMax=0.02f; } }
 static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
     WaveState&W=WS();
     std::lock_guard<std::mutex> lk(W.fm);
@@ -512,11 +531,28 @@ static void UpdateSpecBands(bool playingNow,DWORD posMs,float dt){
     if(!playingNow||frames==0){
         bool any=false; float decay=powf(.80f,tick);
         for(float&b:W.bands){b*=decay;if(b>.004f)any=true;}
-        if(!any){for(float&b:W.bands)b=0;W.hasSpec=false;}
+        W.pulse*=decay;
+        if(!any){for(float&b:W.bands)b=0;W.hasSpec=false;W.pulse=0;}
         return;
     }
-    int idx=(int)((posMs+50)/std::max(1,W.specHopMs)); if(idx>=frames)idx=frames-1; if(idx<0)idx=0;
+    // O que se ouve agora esta atrasado em relacao ao cursor (buffer da saida de som): antes a onda lia
+    // 50 ms A FRENTE e ficava adiantada. Agora le o instante que esta saindo nos fones.
+    static unsigned lat=0; static ULONGLONG latAt=0; ULONGLONG nowT=GetTickCount64();
+    if(nowT-latAt>2000){ lat=Player::OutputLatencyMs(); latAt=nowT; }
+    long long tms=(long long)posMs-(long long)lat; if(tms<0) tms=0;
+    double hop=std::max(1.0,W.specHopF);
+    int idx=(int)((double)tms/hop); if(idx>=frames)idx=frames-1; if(idx<0)idx=0;
     const float* v=&W.spec[(size_t)idx*48];
+    // batida: quanto cada banda subiu desde o quadro anterior (graves pesam mais: bumbo/caixa)
+    float flux=0, energy=0;
+    for(int k=0;k<48;k++) energy+=v[k];
+    energy/=48.f;
+    if(idx>0){ const float* pv=&W.spec[(size_t)(idx-1)*48]; for(int k=0;k<48;k++){ float d=v[k]-pv[k]; if(d>0) flux+=d*(k<12?1.6f:(k<30?1.0f:0.5f)); } }
+    W.onsetMax=std::max(W.onsetMax*powf(.995f,tick),flux);
+    W.energyMax=std::max(W.energyMax*powf(.998f,tick),energy);
+    float on=W.onsetMax>0.0001f?std::min(1.f,flux/W.onsetMax):0.f;
+    on=on>0.35f?(on-0.35f)/0.65f:0.f;              // so subida forte conta como batida
+    if(on>W.pulse) W.pulse=on; else W.pulse*=powf(.80f,tick);   // sobe na hora e cai em ~150 ms
     float rise=1.f-powf(1.f-.55f,tick), fall=1.f-powf(.86f,tick);
     for(int k=0;k<48;k++){float o=W.bands[k],t=v[k];W.bands[k]=(t>o)?o+(t-o)*rise:o+(t-o)*fall;}
     W.hasSpec=true;
@@ -580,7 +616,7 @@ static void PublishStreamWave(){
         size_t gridStart=(size_t)((w.firstAbs*1000ULL/rate)/50);
         std::vector<float> whole(gridStart+w.spec.size());
         memcpy(&whole[gridStart],w.spec.data(),w.spec.size()*sizeof(float));
-        { std::lock_guard<std::mutex> lkf(WS().fm); if(j->id==g_pubStreamId&&w.gen==g_pubGen){ WS().spec.swap(whole); WS().specHopMs=50; } }
+        { std::lock_guard<std::mutex> lkf(WS().fm); if(j->id==g_pubStreamId&&w.gen==g_pubGen){ WS().spec.swap(whole); WS().specHopMs=50; WS().specHopF=50.0; } }
         g_pubSpecN=w.spec.size();
     }
     // onda: 320 buckets do que ja chegou (com janela equivalente por fração)
@@ -723,6 +759,7 @@ static void SwitchFolder(const std::wstring& f){   // "" = padrao (pastas do usu
 static void OpenAndStart(const std::wstring& src,bool autoplay){
     if(g_player.Open(src)){
         g_currentSource=src;
+        if(g_resumeMs){ g_player.SeekMs(g_resumeMs); g_resumeMs=0; }
         ApplyVolume();
         AnalyzeCurrentWave();
         if(autoplay) g_player.Play();
@@ -741,6 +778,7 @@ static void RebuildShuffleQueue(int startIdx){
     if(startIdx>=0&&startIdx<n){ g_shufQueue.insert(g_shufQueue.begin(),startIdx); g_shufPos=0; }
 }
 static void PlayOnlineIndex(int idx,bool autoplay,unsigned gen);
+static std::wstring StemSourceFor(const Track& t); static int StemModeNow(); static void RequestStemsFor(int idx,bool front); static void StemsAhead();
 static void PlayIndex(int idx,bool autoplay=true){
     if(g_tracks.empty()) return; if(idx<0)idx=(int)g_tracks.size()-1; if(idx>=(int)g_tracks.size())idx=0;
     // aleatorio: se a faixa nao e a proxima da fila (clique do usuario), recomeca a fila a partir dela
@@ -751,6 +789,11 @@ static void PlayIndex(int idx,bool autoplay=true){
     unsigned gen=++g_openGen;
     g_currentSource.clear();
     g_player.Close(); g_curStreamOpen=false; g_curStreamId=0; g_queueTick=0;   // o canal antigo sai na proxima UpdateStreamQueue (se nao for uma das proximas)
+    {   // modo de stem ligado e ja separado: toca o stem (senao pede a separacao e toca a completa enquanto isso)
+        std::wstring ss=StemSourceFor(g_tracks[(size_t)idx]);
+        if(!ss.empty()){ ClearWave(); g_converting=false; OpenAndStart(ss,autoplay); StemsAhead(); return; }
+        if(StemModeNow()!=stems::M_FULL){ RequestStemsFor(idx,true); StemsAhead(); }
+    }
     if(IsOnlineTrack(g_tracks[(size_t)idx])){ PlayOnlineIndex(idx,autoplay,gen); return; }
     if(!Player::ProbeNative(path)){
         g_player.Close();
@@ -777,6 +820,78 @@ static void OnTranscoded(const std::wstring& dst,unsigned gen){
     OpenAndStart(dst,g_pendingAutoplay);
 }
 #include "app_online_a.h"
+// ---- efeitos de audio e stems (PC) ------------------------------------------------------------
+static void ApplyFxNow(){ Player::SetFx(g_cfg.fxSlow,g_cfg.fxSpeed,g_cfg.fxReverb,g_cfg.fxBass,g_cfg.fx8d); g_player.ApplyFx(); }
+static const wchar_t* FxName(int i){ static const wchar_t* n[5]={L"SLOW",L"SPEED",L"REVERB",L"GRAVE",L"8D"}; return n[std::max(0,std::min(4,i))]; }
+static int& FxLevel(int i){ switch(i){ case 0: return g_cfg.fxSlow; case 1: return g_cfg.fxSpeed; case 2: return g_cfg.fxReverb; case 3: return g_cfg.fxBass; default: return g_cfg.fx8d; } }
+static bool AnyFxOn(){ return g_cfg.fxSlow||g_cfg.fxSpeed||g_cfg.fxReverb||g_cfg.fxBass||g_cfg.fx8d||!g_cfg.stemMode.empty(); }
+static void CycleFx(int i){   // cada clique sobe um nivel (1, 2, 3) e o proximo desliga
+    int& v=FxLevel(i); v=(v+1)%4;
+    if(i==0&&v) g_cfg.fxSpeed=0;
+    if(i==1&&v) g_cfg.fxSlow=0;
+    g_cfg.Save(); ApplyFxNow();
+    SetStatus(std::wstring(FxName(i))+(v?L": nível "+std::to_wstring(v):std::wstring(L": desligado")),1600);
+}
+static void ClearFx(){ g_cfg.fxSlow=g_cfg.fxSpeed=g_cfg.fxReverb=g_cfg.fxBass=g_cfg.fx8d=0; g_cfg.Save(); ApplyFxNow(); SetStatus(L"Efeitos desligados.",1600); }
+static std::wstring StemIdOf(const Track& t){ return IsOnlineTrack(t)?t.url:t.path; }
+static std::wstring StemKeyOf(const Track& t){ return stems::KeyFor(StemIdOf(t),IsOnlineTrack(t)); }
+static std::wstring StemKeyCurrent(){   // para desenhar: guarda a chave da faixa atual (a de arquivo le tamanho/data)
+    static std::wstring id,key;
+    if(g_current<0||g_current>=(int)g_tracks.size()) return L"";
+    const Track& t=g_tracks[(size_t)g_current];
+    if(StemIdOf(t)!=id){ id=StemIdOf(t); key=StemKeyOf(t); }
+    return key;
+}
+static int StemModeNow(){ return stems::ModeFromKey(g_cfg.stemMode); }
+static std::wstring StemSourceFor(const Track& t){
+    int m=StemModeNow(); if(m==stems::M_FULL) return L"";
+    std::wstring f=stems::FileFor(StemKeyOf(t),m); std::error_code ec;
+    return (!f.empty()&&std::filesystem::exists(std::filesystem::path(f),ec))?f:L"";
+}
+static bool IsStemFile(const std::wstring& p){ return !p.empty()&&Config::StartsI(Config::NormSep(p),Config::NormSep(stems::Root())+REMIX_SEP_STR); }
+static void StemsNotify(const std::wstring& key,int st){ AppPost(EV_STEMS,key,st); }
+static void RequestStemsFor(int idx,bool front){
+    if(idx<0||idx>=(int)g_tracks.size()||!stems::Installed()) return;
+    const Track& t=g_tracks[(size_t)idx];
+    if(IsOnlineTrack(t)){ OTrack o=OTrackFor(t); stems::Request(t.url,true,o.play,o.title,o.artist,o.dur,front,StemsNotify); }
+    else stems::Request(t.path,false,L"",t.title,t.artist,t.durSec,front,StemsNotify);
+}
+static void StemsAhead(){   // modo de stem ligado: as proximas 2 da fila ja vao separando
+    if(StemModeNow()==stems::M_FULL||!stems::Installed()) return;
+    for(int i:UpcomingIndices(2)) RequestStemsFor(i,false);
+}
+// Troca o que esta tocando para o modo escolhido, no mesmo ponto (se o stem ja existe).
+static void SwitchStemSourceNow(){
+    if(g_current<0||g_current>=(int)g_tracks.size()) return;
+    const Track& t=g_tracks[(size_t)g_current];
+    int m=StemModeNow(); bool was=g_player.playing;
+    DWORD pos=g_player.GetPositionMs();
+    if(m==stems::M_FULL){
+        if(!IsStemFile(g_currentSource)) return;   // ja esta na completa
+        g_resumeMs=pos?pos:1; PlayIndex(g_current,was); return;
+    }
+    std::wstring want=StemSourceFor(t);
+    if(want.empty()){
+        if(!stems::Installed()){ SetStatus(L"Para separar em stems instale o Demucs: instalador de dependências, opção STEMS.",5000); return; }
+        RequestStemsFor(g_current,true); StemsAhead();
+        SetStatus(L"Separando esta música (na 1ª vez leva ~metade da duração). Enquanto isso toca a completa.",4500); return;
+    }
+    if(_wcsicmp(g_currentSource.c_str(),want.c_str())==0) return;
+    g_player.Close(); g_curStreamOpen=false; g_curStreamId=0; g_converting=false;
+    if(g_player.Open(want)){ g_currentSource=want; if(pos) g_player.SeekMs(pos); ApplyVolume(); AnalyzeCurrentWave(); if(was) g_player.Play(); }
+    else SetStatus(L"Não consegui abrir o stem.",3000);
+}
+static void SetStemMode(int m){
+    m=std::max(0,std::min((int)stems::M_COUNT-1,m));
+    g_cfg.stemMode=stems::ModeKey(m); g_cfg.Save();
+    if(m==stems::M_FULL) stems::CancelQueued(false);
+    SwitchStemSourceNow();
+}
+static void OnStemsEvent(const std::wstring& key,int st){
+    if(g_current<0||g_current>=(int)g_tracks.size()||StemKeyCurrent()!=key) return;
+    if(st==stems::S_READY&&StemModeNow()!=stems::M_FULL){ SwitchStemSourceNow(); SetStatus(std::wstring(L"Stems prontos: ")+stems::ModeName(StemModeNow()),2500); }
+    else if(st==stems::S_FAILED){ auto j=stems::Find(key); std::wstring e; if(j){ std::lock_guard<std::mutex> lk(j->m); e=j->err; } SetStatus(e.empty()?std::wstring(L"A separação falhou."):e,6000); }
+}
 static bool PlayFileDirect(const std::wstring& path,bool autoplay=true){
     std::error_code ec;
     if(path.empty() || !std::filesystem::exists(std::filesystem::path(path),ec)) return false;
@@ -1318,6 +1433,7 @@ static void HandleEvent(int type,const std::wstring& s,int n){
     case EV_COMMAND: HandleCommand(s); break;
     case EV_HOST_PEDIDO: HostAskPair(s); break;
     case EV_HOST_STATUS: SetStatus(s,n?6000:4000); break;
+    case EV_STEMS: OnStemsEvent(s,n); break;
     case EV_TRANSCODED: OnTranscoded(s,(unsigned)n); break;
     case EV_PICK_FOLDER: if(!s.empty()) SwitchFolder(s); break;
     case EV_PICK_IMAGE: ApplyCoverPick(n,s); break;
@@ -1398,6 +1514,7 @@ static void CoreInit(){
     ExtraFormatsEnabled()=PlatformHaveFfmpeg();
     Player::GlobalInit();
     Player::SetEq(g_cfg.eq,g_cfg.eqOn);
+    ApplyFxNow();
     LoadPlaylists();
     g_shortcutLines={ L"Espaço: tocar / pausar", L"← / →: anterior / próxima", L"↑ / ↓ ou + / -: volume", L"M: mudo   R: reinicia a faixa",
                       L"Del: excluir (lixeira)   F2: renomear arquivo", L"Ctrl+↑ / Ctrl+↓: mover na ordem manual", L"Botão direito numa faixa: menu", L"Esc: fecha painéis",

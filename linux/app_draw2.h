@@ -465,6 +465,29 @@ static void DrawOnline(int w,int h){
     if(hasAll) DrawPill(u.btnAddAll,tpl>=0?L"ADICIONAR TODAS NA PLAYLIST":(fromLink?L"SALVAR COMO PLAYLIST":L"ADICIONAR TODAS..."),true,S(11));
 }
 // ---- painel HOST (acesso pelo celular) --------------------------------------
+static void DrawFxPanel(int w,int h){
+    FxPanelUI& p=g_fxp; LayoutFxPanel(w,h);
+    gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(200,2,4,10),UI().bg,200));
+    RectF box=RF(p.box); Color pb=Cs(Argb(255,10,13,26),UI().surface), apn=Cs(ToGdi(g_theme.accent),UI().borderHi);
+    DrawRoundRect(box,S(14),&pb,&apn,1.8f);
+    Color white=C_WHITE, gray=C_GRAY2, ab=ToGdi(g_theme.accent);
+    gfx::Text(L"EFEITOS  ·  STEMS",box.X+S(18),box.Y+S(14),S(14),UiClassic()?ab:white,true);
+    gfx::TextRect(L"✕",RF(p.btnClose),S(14),white,false,gfx::Center,true);
+    gfx::TextRect(L"Cada clique sobe o nível (● ○ ○ → ● ● ●) e o seguinte desliga. Slow e speed não somam.",RectF(box.X+S(18),box.Y+S(44),box.Width-S(36),S(20)),S(11),gray,false,gfx::Near,true,gfx::EllipsisChar);
+    for(int i=0;i<5;i++){
+        int lv=FxLevel(i); std::wstring dots; for(int k=1;k<=3;k++) dots+=(k<=lv?L"●":L"○");
+        DrawPill(p.fx[i],std::wstring(FxName(i))+L"  "+dots,lv>0,S(11));
+    }
+    DrawPill(p.btnClear,L"DESLIGAR EFEITOS",false,S(10));
+    gfx::Text(L"STEMS: separar a música",box.X+S(18),(float)p.stem[0].top-S(28),S(12),white,true);
+    int cur=StemModeNow();
+    for(int i=0;i<6;i++) DrawPill(p.stem[i],stems::ModeName(i),i==cur,S(10));
+    std::wstring l1,l2; FxStemStatus(l1,l2);
+    RectF inf=RF(p.info);
+    gfx::TextRect(l1,RectF(inf.X,inf.Y,inf.Width,S(20)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+    if(!l2.empty()) gfx::TextRect(l2,RectF(inf.X,inf.Y+S(22),inf.Width,S(20)),S(10.5f),gray,false,gfx::Near,true,gfx::EllipsisChar);
+    if(StemJobActive()) DrawPill(p.btnCancel,L"CANCELAR",false,S(10));
+}
 static void DrawHostPanel(int w,int h){
     host::PanelUI& p=host::PU(); LayoutHostPanel(w,h); const host::View& v=p.v;
     gfx::FillRect(0,0,(float)w,(float)h,Cs(Argb(200,2,4,10),UI().bg,200));

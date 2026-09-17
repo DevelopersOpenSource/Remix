@@ -128,6 +128,7 @@ static void Render(){
     if(g_imgMenuOpen)DrawImgMenu(w,h);
     if(OU().open)DrawOnline(w,h);   // os menus (ex.: escolher playlist) ficam por cima
     if(host::PU().open)DrawHostPanel(w,h);
+    if(g_fxp.open)DrawFxPanel(w,h);
     if(g_folderMenuOpen)DrawFolderMenu(w,h);
     if(g_ctxOpen)DrawCtxMenu(w,h);
     if(g_editArtist)DrawArtistEditor(w,h);

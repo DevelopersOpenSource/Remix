@@ -109,6 +109,7 @@ static const char* INDEX_HTML = R"~~~(<!doctype html>
           </div>
           <button id="npAdd" class="ib" type="button" data-ic="plusC" aria-label="Adicionar a playlist"></button>
         </div>
+        <canvas id="npWave" class="npWave" aria-hidden="true"></canvas>
         <div class="npSeek">
           <input id="npSeek" class="rng" type="range" min="0" max="1000" step="1" value="0" aria-label="Posição da música">
           <div class="npTimes"><span id="npPos">0:00</span><span id="npLen">0:00</span></div>
@@ -120,6 +121,7 @@ static const char* INDEX_HTML = R"~~~(<!doctype html>
           <button id="npNext" class="ib big" type="button" data-ic="next" aria-label="Próxima"></button>
           <button id="npRep" class="ib dot" type="button" data-ic="repeat" aria-label="Repetir: desligado"></button>
         </div>
+        <div class="npFxRow"><button id="npFx" class="npFxBtn" type="button" aria-label="Efeitos e stems"><span data-ic="fx"></span><span id="npFxTxt">Efeitos e stems</span></button></div>
         <div id="npMsg" class="npMsg" role="status" aria-live="polite" hidden></div>
         <div class="npDev"><span data-ic="phone"></span><span id="npDev">Tocando neste celular</span></div>
       </div>
@@ -332,6 +334,9 @@ svg{display:block;width:24px;height:24px;flex:none}
 .eq i:nth-child(2){animation-delay:-.4s}
 .eq i:nth-child(3){animation-delay:-.7s}
 body:not(.isPlaying) .eq i{animation:none}
+body.hasBeat.isPlaying .eq i{animation:none;transform:scaleY(calc(.28 + .72*var(--beat,0)))}   /* no ritmo de verdade (dados do PC) */
+body.hasBeat.isPlaying .eq i:nth-child(2){transform:scaleY(calc(.4 + .6*var(--beat,0)))}
+body.hasBeat.isPlaying .eq i:nth-child(3){transform:scaleY(calc(.22 + .5*var(--beat,0)))}
 @keyframes eq{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
 .scI .eq{margin-right:4px}
 
@@ -411,6 +416,25 @@ body.kbOpen #dock{display:none}
 .npCtl .ib.big svg{width:36px;height:36px}
 .playBig.xl{width:66px;height:66px;background:#fff;color:#121212}
 .playBig.xl svg{width:30px;height:30px}
+.npWave{display:block;width:100%;height:46px;margin-top:14px}
+.npFxRow{display:flex;justify-content:center;margin-top:10px}
+.npFxBtn{display:inline-flex;align-items:center;gap:8px;min-height:40px;max-width:100%;padding:0 16px;border-radius:20px;background:rgba(255,255,255,.1);color:#fff;font-size:13.5px;font-weight:600;transition:transform .1s,background .15s}
+.npFxBtn svg{width:18px;height:18px;flex:none}
+.npFxBtn span:last-child{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.npFxBtn.on{background:var(--accent);color:var(--on-acc)}
+.npFxBtn:active{transform:scale(.96)}
+.fxGrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(96px,1fr));gap:10px;margin:6px 0 14px}
+.fxB{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:74px;border-radius:12px;background:#2e2e2e;color:var(--tx);font-weight:700;font-size:15px;transition:transform .1s,background .15s}
+.fxB:active{transform:scale(.96)}
+.fxB.on{background:rgba(var(--acc-rgb),.28);box-shadow:inset 0 0 0 2px var(--accent)}
+.fxD{display:flex;gap:6px}
+.fxD i{display:block;width:9px;height:9px;border-radius:50%;background:rgba(255,255,255,.22)}
+.fxD i.on{background:var(--acc-txt)}
+.stemChips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 8px}
+.stemChips .chip{height:38px}
+.stemSt{font-size:13.5px;color:var(--tx2);min-height:20px;margin:6px 0 2px}
+.stemBar{height:4px;border-radius:2px;background:rgba(255,255,255,.12);overflow:hidden;margin-top:6px}
+.stemBar i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s}
 .npMsg{margin-top:12px;padding:10px 12px;border-radius:8px;background:rgba(0,0,0,.35);color:#fff;font-size:13.5px;text-align:center}
 .npDev{display:flex;align-items:center;justify-content:center;gap:6px;margin-top:16px;color:var(--acc-txt);font-size:12.5px;font-weight:600;min-width:0}
 .npDev svg{width:16px;height:16px}
@@ -585,7 +609,8 @@ const IC={
   logout:[['p','M14.5 4H18a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-3.5M9.5 16.5 5 12l4.5-4.5M5 12h11']],
   refresh:[['p','M20 11.5A8 8 0 1 0 17.7 17M20 4.5v7h-7']],
   queue:[['p','M4 6h12M4 11h12M4 16h6M15.5 14v6.5l5-3.25z']],
-  goPl:[['p','M4 6h11M4 11h11M4 16h7'],['c',17.5,17.5,2.5],['p','M20 17.5V7.5l2.5-1']]
+  goPl:[['p','M4 6h11M4 11h11M4 16h7'],['c',17.5,17.5,2.5],['p','M20 17.5V7.5l2.5-1']],
+  fx:[['p','M5 20v-6M5 10V4M12 20v-9M12 7V4M19 20v-4M19 12V4M2.5 14h5M9.5 7h5M16.5 16h5']]
 };
 function ic(name){
   const s=document.createElementNS(SVGNS,'svg');
@@ -685,7 +710,9 @@ const S={
   libFilter:'all',
   sq:{mode:'pc',fonte:0,q:'',res:[],busy:false,err:'',done:'',doneF:0,ctl:null},
   // player
-  queue:[],order:[],pos:-1,cur:null,off:0,ctx:{name:'',key:''},shuffle:false,repeat:0,errs:0
+  queue:[],order:[],pos:-1,cur:null,off:0,ctx:{name:'',key:''},shuffle:false,repeat:0,errs:0,rate:1,
+  // efeitos (0..3, aplicados pelo PC) e stems ('' = completa)
+  fx:{slow:0,speed:0,reverb:0,bass:0,d8:0},stem:'',stemsOk:false,stemReady:{}
 };
 
 // -------------------------------------------------------------- toast --
@@ -953,7 +980,7 @@ async function waitAccept(req,gen){
 function arr(v){return Array.isArray(v)?v:[];}
 function applyEst(est){
   S.host=str(est.host,80)||'PC';S.dev=str(est.dispositivo,60)||'Este aparelho';S.ver=str(est.v,30);
-  S.libOk=!!est.biblioteca;S.online=!!est.online;S.nFaixas=Math.max(0,est.faixas|0);
+  S.libOk=!!est.biblioteca;S.online=!!est.online;S.nFaixas=Math.max(0,est.faixas|0);S.stemsOk=!!est.stems;
   if(!S.online&&S.sq.mode==='online')S.sq.mode='pc';   // o PC desligou a busca online
 }
 async function loadData(){
@@ -1432,9 +1459,145 @@ function npMenu(){
   sheet(box=>{
     box.appendChild(shHead(t.t,(t.a||'Artista desconhecido')+(t.o?' · online':''),art(t,'s48')));
     box.appendChild(mi('plusC','Adicionar a playlist',()=>addSheet(t)));
+    box.appendChild(mi('fx','Efeitos e stems',fxSheet));
     const p=findPl(S.ctx.key);
     if(p)box.appendChild(mi('goPl','Ir para a playlist',async()=>{await closeSheet();await closeL('np');openPl(p.key);}));
   });
+}
+
+// --------------------------------------------------- efeitos e stems --
+function saveFx(){LS.set('fx',JSON.stringify(S.fx));LS.set('stem',S.stem);}
+function fxLabel(){
+  const p=[];for(const k of FXK){const v=S.fx[k[0]];if(v)p.push(k[1]+' '+v);}
+  const st=STEMS.find(x=>x[0]===S.stem);if(S.stem&&st)p.push(st[1]);
+  return p.length?p.join(' · '):'Efeitos e stems';
+}
+function updFxBtn(){const b=$('npFx');if(!b)return;const on=fxOn()||!!S.stem;b.classList.toggle('on',on);$('npFxTxt').textContent=fxLabel();}
+// Troca efeito/stem com a musica tocando: recomeca do mesmo ponto com o audio novo (no mesmo toque, iOS ok).
+function reloadCur(){if(!S.cur)return;const at=Math.floor(curTime()),was=!A.paused&&!A.error;loadCur(at,was);}
+function fxDots(v){return h('span',{class:'fxD','aria-hidden':'true'},h('i',{class:v>=1?'on':''}),h('i',{class:v>=2?'on':''}),h('i',{class:v>=3?'on':''}));}
+const STM={t:0,id:''};
+function stemStatusTxt(j){
+  if(!S.stemsOk||(j&&j.instalado===false))return 'O PC não tem o separador de stems (Demucs). Instale pelo instalador de dependências do Remix.';
+  if(!j)return '';
+  const e=str(j.estado,20);
+  if(e==='pronto')return 'Stems desta música prontos.';
+  if(e==='fila')return 'Na fila para separar...';
+  if(e==='baixando')return 'O PC está baixando o áudio para separar...';
+  if(e==='separando')return 'Separando: '+(j.pct|0)+'% (na 1ª vez leva ~metade da música; toca a completa enquanto isso)';
+  if(e==='falhou')return 'A separação falhou'+(j.erro?': '+str(j.erro,160):'.');
+  return '';
+}
+function stemPaint(j){
+  const el=$('stemSt');if(el)el.textContent=stemStatusTxt(j);
+  const bar=$('stemBar');if(bar){const e=j?str(j.estado,20):'';bar.parentNode.hidden=!(e==='separando'||e==='fila'||e==='baixando');bar.style.width=(e==='separando'?(j.pct|0):(e==='pronto'?100:4))+'%';}
+}
+// Pergunta ao PC como esta a separacao da faixa atual; com modo de stem ligado, pede para separar e acompanha.
+function stemCheck(t){
+  clearTimeout(STM.t);
+  if(!t||!S.stem||!S.stemsOk){stemPaint(null);return;}
+  const id=t.id;STM.id=id;
+  const ask=()=>{
+    if(STM.id!==id||!S.stem||!S.cur||S.cur.id!==id)return;
+    raw('/api/stems/'+enc(id),S.stemReady[id]?null:{fila:false}).then(r=>{
+      if(STM.id!==id||!r.ok)return;
+      stemPaint(r.j);
+      if(str(r.j.estado,20)==='pronto'){
+        if(!S.stemReady[id]){S.stemReady[id]=true;if(S.cur&&S.cur.id===id&&S.stem){reloadCur();toast('Tocando: '+((STEMS.find(x=>x[0]===S.stem)||['',''])[1]));}}
+        return;
+      }
+      if(r.j.instalado===false||str(r.j.estado,20)==='falhou')return;
+      STM.t=setTimeout(ask,4000);
+    }).catch(()=>{STM.t=setTimeout(ask,8000);});
+  };
+  ask();
+}
+function fxSheet(){
+  sheet(box=>{
+    box.appendChild(h('h2',{class:'shTitle',text:'Efeitos'}));
+    box.appendChild(h('p',{class:'shNote center',text:'Cada toque sobe o nível (1, 2, 3); o próximo desliga. O PC aplica no áudio.'}));
+    const grid=h('div',{class:'fxGrid'});
+    for(const k of FXK){
+      const b=h('button',{class:'fxB'+(S.fx[k[0]]?' on':''),type:'button','aria-label':k[1]+': nível '+S.fx[k[0]]},h('span',{text:k[1]}),fxDots(S.fx[k[0]]));
+      b.addEventListener('click',()=>{
+        const v=(S.fx[k[0]]+1)%4;S.fx[k[0]]=v;
+        if(k[0]==='slow'&&v)S.fx.speed=0;
+        if(k[0]==='speed'&&v)S.fx.slow=0;
+        saveFx();
+        grid.querySelectorAll('.fxB').forEach((x,i)=>{const kk=FXK[i][0];x.classList.toggle('on',S.fx[kk]>0);x.replaceChild(fxDots(S.fx[kk]),x.lastChild);x.setAttribute('aria-label',FXK[i][1]+': nível '+S.fx[kk]);});
+        updFxBtn();reloadCur();
+      });
+      grid.appendChild(b);
+    }
+    box.appendChild(grid);
+    box.appendChild(h('div',{class:'shCenter'},h('button',{class:'btnS',type:'button',text:'Desligar efeitos',onclick:()=>{for(const k of FXK)S.fx[k[0]]=0;saveFx();updFxBtn();reloadCur();fxSheet();}})));
+    box.appendChild(h('h2',{class:'secT',text:'Stems'}));
+    box.appendChild(h('p',{class:'shNote',text:'Separa a música em partes (vocal, bateria, baixo e o resto) no PC, com o Demucs.'}));
+    const chips=h('div',{class:'stemChips'});
+    for(const m of STEMS){
+      chips.appendChild(h('button',{class:'chip'+(S.stem===m[0]?' on':''),type:'button','aria-pressed':String(S.stem===m[0]),text:m[1],disabled:(!S.stemsOk&&m[0])?true:null,onclick:()=>{
+        if(S.stem===m[0])return;
+        const had=S.cur&&stemFor(S.cur);S.stem=m[0];saveFx();
+        chips.querySelectorAll('.chip').forEach((x,i)=>{const on=STEMS[i][0]===S.stem;x.classList.toggle('on',on);x.setAttribute('aria-pressed',String(on));});
+        updFxBtn();
+        if(S.cur&&(had||stemFor(S.cur)))reloadCur();
+        stemCheck(S.cur);
+      }}));
+    }
+    box.appendChild(chips);
+    box.appendChild(h('p',{id:'stemSt',class:'stemSt',role:'status','aria-live':'polite'}));
+    const bw=h('div',{class:'stemBar'},h('i',{id:'stemBar'}));bw.hidden=true;box.appendChild(bw);
+    stemPaint(null);
+    if(S.cur&&S.stem)stemCheck(S.cur);else if(!S.stemsOk)stemPaint(null);
+  });
+}
+// ------------------------------------------------------ onda no ritmo --
+// Energia e batidas a cada 25 ms calculadas pelo PC (/api/ritmo). Desenha a onda do Tocando agora e faz os
+// icones de "tocando" das listas pularem na batida. Sem Web Audio: a tela bloqueada do iPhone segue tocando.
+const RIT={key:'',data:null};
+function loadRitmo(t,tent){
+  const key=t?t.id+'|'+stemFor(t):'';if(RIT.key===key&&!tent)return;
+  RIT.key=key;RIT.data=null;document.body.classList.remove('hasBeat');
+  if(!t)return;
+  raw('/api/ritmo/'+enc(t.id)+(stemFor(t)?'?stem='+enc(stemFor(t)):'')).then(r=>{
+    if(RIT.key!==key)return;
+    if(r.st===429&&(tent|0)<3){setTimeout(()=>{if(RIT.key===key)loadRitmo(t,(tent|0)+1);},3000);return;}   // o PC ja esta analisando outras
+    if(!r.ok||!Array.isArray(r.j.e)||!r.j.e.length)return;
+    RIT.data={hop:Math.max(5,r.j.hop|0)||25,e:r.j.e,b:Array.isArray(r.j.b)?r.j.b:[]};
+    if(S.cur&&S.cur.id===t.id&&!S.cur.d){S.cur.d=Math.floor(r.j.e.length*RIT.data.hop/1000);updTime();}   // arquivo local: a duracao sai daqui
+    document.body.classList.add('hasBeat');kickWave();
+  }).catch(()=>{});
+}
+let waveRaf=0,beat=0,waveLast=0;
+function kickWave(){if(!waveRaf)waveRaf=requestAnimationFrame(waveLoop);}
+function waveLoop(ts){
+  waveRaf=0;
+  const playing=!!S.cur&&!A.paused&&!A.error,d=RIT.data;
+  const dt=waveLast?Math.min(200,ts-waveLast):16;waveLast=ts;
+  const tMs=S.cur?curTime()*1000:0;
+  let b=0;if(d&&playing){const i=Math.floor(tMs/d.hop);b=(d.b[i]||0)/255;}
+  beat=Math.max(b,beat*Math.pow(.8,dt/30));
+  document.body.style.setProperty('--beat',beat.toFixed(3));
+  const cv=$('npWave');
+  if(NP.open&&cv&&cv.clientWidth){
+    const dpr=Math.min(2,window.devicePixelRatio||1),W0=Math.round(cv.clientWidth*dpr),H0=Math.round(cv.clientHeight*dpr);
+    if(cv.width!==W0||cv.height!==H0){cv.width=W0;cv.height=H0;}
+    const g=cv.getContext('2d');g.clearRect(0,0,W0,H0);
+    const N=Math.max(24,Math.min(64,Math.floor(cv.clientWidth/7))),gap=2*dpr,bw=(W0-gap*(N-1))/N;
+    const back=2000,span=8000,acc=getComputedStyle(document.documentElement).getPropertyValue('--acc-txt').trim()||'#1db954';
+    for(let k=0;k<N;k++){
+      const at=tMs-back+span*k/(N-1);
+      let v=.06;
+      if(d){const i=Math.floor(at/d.hop);if(i>=0&&i<d.e.length){let m=0;for(let q=i;q<i+3&&q<d.e.length;q++)m=Math.max(m,d.e[q]);v=Math.max(.06,Math.sqrt(m/255));}}
+      else v=.12+.1*Math.sin(ts/400+k*.6);
+      const near=1-Math.min(1,Math.abs(at-tMs)/1400);
+      v=Math.min(1,v*(1+.6*beat*near));
+      const bh=Math.max(2*dpr,v*H0),x=k*(bw+gap);
+      g.fillStyle=at<=tMs?acc:'rgba(255,255,255,.34)';
+      g.fillRect(x,(H0-bh)/2,bw,bh);
+    }
+  }
+  if(playing||beat>.01)waveRaf=requestAnimationFrame(waveLoop);
 }
 
 // ------------------------------------------------------------ player --
@@ -1442,9 +1605,11 @@ const A=$('audio');
 const NP={open:false,drag:false,at:0};
 const W={t:0,seekTo:0,retry:0,pos:0,cut:0,cutOff:-1,pausedAt:0};
 function curIdx(){return S.order[S.pos];}
-function curTime(){return S.cur&&S.cur.o?S.off+(A.currentTime||0):(A.currentTime||0);}
+// "modo stream" (sm): online, com efeito ou com stem. O PC converte e manda sem tamanho: o tempo da musica
+// e o deslocamento pedido (?t=) + o que tocou vezes a velocidade (slow/speed mudam o ritmo).
+function curTime(){return S.cur&&S.cur.sm?S.off+(A.currentTime||0)*S.rate:(A.currentTime||0);}
 function curDur(){
-  if(!S.cur)return 0;if(S.cur.o)return S.cur.d||0;
+  if(!S.cur)return 0;if(S.cur.sm)return S.cur.d||0;
   const d=A.duration;return isFinite(d)&&d>0?d:(S.cur.d||0);
 }
 function mkOrder(start){
@@ -1467,12 +1632,26 @@ function playNext(t){
   S.queue.push(t);S.order.splice(S.pos+1,0,S.queue.length-1);
   toast('Vai tocar a seguir');
 }
-function srcOnline(t,at){return '/api/online/ouvir/'+enc(t.id)+'?t='+enc(String(at));}
+const FXK=[['slow','Slow'],['speed','Speed'],['reverb','Reverb'],['bass','Grave'],['d8','8D']];
+const STEMS=[['','Completa'],['vocal','Só vocal'],['instrumental','Só música'],['bateria','Bateria'],['baixo','Baixo'],['outros','Outros']];
+function fxOn(){return FXK.some(k=>S.fx[k[0]]>0);}
+function fxRate(){const sl=[1,.9,.82,.75],sp=[1,1.1,1.2,1.3];return S.fx.slow?sl[S.fx.slow]:sp[S.fx.speed];}
+function fxParam(){const p=[];for(const k of FXK){const v=S.fx[k[0]];if(v)p.push((k[0]==='d8'?'8d':k[0])+':'+v);}return p.join(',');}
+function stemFor(t){return S.stem&&t&&S.stemReady[t.id]?S.stem:'';}
+function streamMode(t){return !!t&&(t.o||fxOn()||!!stemFor(t));}
+function srcFor(t,at){
+  const q=[];if(fxOn())q.push('fx='+enc(fxParam()));const st=stemFor(t);if(st)q.push('stem='+enc(st));
+  if(t.o||q.length){q.unshift('t='+enc(String(at)));return (t.o?'/api/online/ouvir/':'/api/faixa/')+enc(t.id)+'?'+q.join('&');}
+  return '/api/faixa/'+enc(t.id);
+}
+function srcOnline(t,at){return srcFor(t,at);}
 function loadCur(at,play){
   const t=S.queue[curIdx()];if(!t)return;
   S.cur=t;S.off=0;W.retry=0;W.seekTo=0;W.cut=0;W.cutOff=-1;clearTimeout(W.t);npMsg('');
-  if(t.o){S.off=Math.max(0,Math.floor(at||0));A.src=srcOnline(t,S.off);noteReq(1);}
+  t.sm=streamMode(t);S.rate=t.sm?fxRate():1;
+  if(t.sm){S.off=Math.max(0,Math.floor(at||0));A.src=srcFor(t,S.off);noteReq(1);}
   else{A.src='/api/faixa/'+enc(t.id);noteReq(2);if(at>0)W.seekTo=at;}
+  loadRitmo(t);updFxBtn();stemCheck(t);
   if(play)doPlay();else{setBusy(false);}
   updNow();updMeta();updPlayBtns();updTime();
 }
@@ -1493,7 +1672,7 @@ function togglePlay(){
   if(A.paused||A.error){
     // Depois de um erro o play() nao recarrega nada (e o WebKit deixa paused=false): recria o src no mesmo
     // toque. Online pausado por mais de 1 min: o PC ja fechou aquele stream, recomeca de onde estava.
-    const velho=S.cur.o&&W.pausedAt>0&&Date.now()-W.pausedAt>60000;
+    const velho=S.cur.sm&&W.pausedAt>0&&Date.now()-W.pausedAt>60000;
     if(!A.getAttribute('src')||A.error||A.networkState===3||velho)loadCur(Math.floor(curTime()),true);
     else doPlay();
   }else A.pause();
@@ -1527,9 +1706,9 @@ function prev(){
 function seek(s){
   const t=S.cur;if(!t)return;
   const d=curDur();s=Math.max(0,d?Math.min(s,Math.max(0,d-1)):s);
-  if(t.o){
+  if(t.sm){
     const play=!A.paused;
-    S.off=Math.floor(s);A.src=srcOnline(t,S.off);noteReq(1);
+    S.off=Math.floor(s);A.src=srcFor(t,S.off);noteReq(1);
     if(play)doPlay();
   }else if(A.readyState>=1){try{A.currentTime=s;}catch(e){W.seekTo=s;}}
   else W.seekTo=s;
@@ -1602,7 +1781,8 @@ function posState(force){
   const now=Date.now();if(!force&&now-posT<1000)return;posT=now;
   const d=curDur();
   try{
-    if(S.cur&&d>0)navigator.mediaSession.setPositionState({duration:d,position:Math.max(0,Math.min(curTime(),d)),playbackRate:1});
+    const r=S.cur&&S.cur.sm?S.rate:1;
+    if(S.cur&&d>0)navigator.mediaSession.setPositionState({duration:d/r,position:Math.max(0,Math.min(curTime(),d))/r,playbackRate:1});
     else navigator.mediaSession.setPositionState();   // sem duracao: limpa (senao fica a da faixa anterior)
   }catch(e){}
 }
@@ -1615,7 +1795,7 @@ function updMeta(){
 function openNp(){
   if(!S.cur||NP.open)return;
   NP.open=true;NP.at=Date.now();const np=$('np');np.inert=false;np.classList.add('open');np.setAttribute('aria-hidden','false');
-  pushL('np');updLock();updTime();
+  pushL('np');updLock();updTime();kickWave();
 }
 function closeNpNow(){
   NP.open=false;const np=$('np');np.classList.remove('open');np.setAttribute('aria-hidden','true');np.inert=true;updLock();
@@ -1630,22 +1810,22 @@ function armStall(){
     if(W.retry<1){
       W.retry++;toast('Conexão lenta com o PC. Tentando de novo...');
       const at=curTime();
-      if(t.o){S.off=Math.floor(at);A.src=srcOnline(t,S.off);noteReq(1);doPlay();}
+      if(t.sm){S.off=Math.floor(at);A.src=srcFor(t,S.off);noteReq(1);doPlay();}
       else{A.load();W.seekTo=at;noteReq(2);doPlay();}
       armStall();
     }else npMsg(t.o?'A música online não está chegando. O PC pode estar sem internet ou a fonte está lenta.':'A conexão com o PC está lenta.');
-  },t.o?25000:12000);
+  },t.sm?25000:12000);
 }
 function onAudioError(){
   if(!S.cur||!A.getAttribute('src'))return;
   const t=S.cur;setBusy(false);clearTimeout(W.t);
   // religou perto do fim (ver 'ended') e nao veio nada: a musica tinha acabado mesmo
-  if(t.o&&W.cutOff>=0&&W.cutOff===S.off&&S.off>=t.d-30&&!(A.currentTime>1)){W.cutOff=-1;next(true);return;}
-  if(t.o&&t.d>0&&curTime()>=t.d-3){next(true);return;}   // o iOS as vezes da 'error' em vez de 'ended' no fim do stream
+  if(t.sm&&W.cutOff>=0&&W.cutOff===S.off&&S.off>=t.d-30&&!(A.currentTime>1)){W.cutOff=-1;next(true);return;}
+  if(t.sm&&t.d>0&&curTime()>=t.d-3){next(true);return;}   // o iOS as vezes da 'error' em vez de 'ended' no fim do stream
   const at=curTime();
-  if(W.retry<1&&at>2&&(t.o||A.error&&A.error.code===2)){ // caiu no meio: continua de onde estava
+  if(W.retry<1&&at>2&&(t.sm||A.error&&A.error.code===2)){ // caiu no meio: continua de onde estava
     W.retry++;
-    if(t.o){S.off=Math.floor(at);A.src=srcOnline(t,S.off);noteReq(1);}
+    if(t.sm){S.off=Math.floor(at);A.src=srcFor(t,S.off);noteReq(1);}
     else{A.load();W.seekTo=at;noteReq(2);}
     doPlay();return;
   }
@@ -1657,22 +1837,24 @@ function onAudioError(){
   S.errs++;
   if(S.errs<3&&S.pos+1<S.order.length)setTimeout(()=>{if(S.cur===t){S.pos++;loadCur(0,true);}},2000);
 }
-A.addEventListener('loadedmetadata',()=>{if(W.seekTo>0&&S.cur&&!S.cur.o){try{A.currentTime=W.seekTo;}catch(e){}W.seekTo=0;}updTime();});
+A.addEventListener('loadedmetadata',()=>{
+  if(S.cur&&!S.cur.sm&&isFinite(A.duration)&&A.duration>0&&!S.cur.d)S.cur.d=Math.floor(A.duration);   // guarda a duracao (para efeito/stem depois)
+  if(W.seekTo>0&&S.cur&&!S.cur.sm){try{A.currentTime=W.seekTo;}catch(e){}W.seekTo=0;}updTime();});
 A.addEventListener('timeupdate',()=>{updTime();if(A.currentTime>0&&!A.paused){clearTimeout(W.t);}});
 A.addEventListener('durationchange',updTime);
 A.addEventListener('play',()=>{updPlayBtns();if(A.readyState<3){setBusy(true);armStall();}});
 A.addEventListener('pause',()=>{W.pausedAt=Date.now();setBusy(false);clearTimeout(W.t);updPlayBtns();posState(true);});
-A.addEventListener('waiting',()=>{setBusy(true);if(S.cur&&S.cur.o)npMsg('O PC está preparando a música...');armStall();});
+A.addEventListener('waiting',()=>{setBusy(true);if(S.cur&&S.cur.sm)npMsg('O PC está preparando a música...');armStall();});
 A.addEventListener('stalled',()=>{if(!A.paused)armStall();});
-A.addEventListener('playing',()=>{W.pausedAt=0;setBusy(false);npMsg('');clearTimeout(W.t);S.errs=0;updPlayBtns();posState(true);});
+A.addEventListener('playing',()=>{W.pausedAt=0;setBusy(false);npMsg('');clearTimeout(W.t);S.errs=0;updPlayBtns();posState(true);kickWave();});
 A.addEventListener('ended',()=>{
   setBusy(false);
   // O stream online nao tem tamanho: se a conexao cai (rede, tunel, pausa longa e o PC desiste)
   // o navegador so ve "acabou". Antes do fim conhecido, religa de onde parou em vez de pular a faixa.
   const t=S.cur;
-  if(t&&t.o&&t.d>0&&W.cut<3&&A.currentTime>1){
+  if(t&&t.sm&&t.d>0&&W.cut<3&&A.currentTime>1){
     const at=Math.floor(curTime());
-    if(at<t.d-8){W.cut++;W.cutOff=at;S.off=at;A.src=srcOnline(t,at);noteReq(1);doPlay();updTime();return;}
+    if(at<t.d-8){W.cut++;W.cutOff=at;S.off=at;A.src=srcFor(t,at);noteReq(1);doPlay();updTime();return;}
   }
   next(true);
 });
@@ -1720,6 +1902,8 @@ function init(){
   const fo=+LS.get('fonte','0');S.sq.fonte=fo>=0&&fo<=2?fo:0;
   S.shuffle=LS.get('shuffle','0')==='1';
   const rp=+LS.get('repeat','0');S.repeat=rp>=0&&rp<=2?rp:0;
+  try{const f=JSON.parse(LS.get('fx','{}'));for(const k of FXK){const v=+f[k[0]];S.fx[k[0]]=v>=0&&v<=3?v|0:0;}if(S.fx.slow)S.fx.speed=0;}catch(e){}
+  {const st=LS.get('stem','');S.stem=STEMS.some(x=>x[0]===st)?st:'';}
   // pareamento
   $('pairName').value=LS.get('nome','');
   $('pairRemember').checked=LS.get('lembrar','1')!=='0';
@@ -1758,6 +1942,8 @@ function init(){
   $('npPrev').addEventListener('click',prev);
   $('npShuf').addEventListener('click',()=>setShuffle(!S.shuffle));
   $('npRep').addEventListener('click',cycleRepeat);
+  $('npFx').addEventListener('click',fxSheet);
+  updFxBtn();
   // Barra de posicao: no iOS o range so arrasta se o dedo comecar em cima do polegar e tocar na trilha nao
   // faz nada. A area inteira (barra + tempos) vira a pista: tocar pula para o ponto, arrastar acompanha.
   const sk=$('npSeek'),skBox=sk.parentNode;let skId=null;
@@ -1791,7 +1977,7 @@ function init(){
     set('pause',()=>A.pause());
     set('nexttrack',()=>next(false));
     set('previoustrack',prev);
-    set('seekto',d=>{if(d&&typeof d.seekTime==='number')seek(d.seekTime);});
+    set('seekto',d=>{if(d&&typeof d.seekTime==='number')seek(d.seekTime*(S.cur&&S.cur.sm?S.rate:1));});
     // sem seekbackward/seekforward: com eles o iOS troca anterior/proxima por "10 s" na tela bloqueada
     set('stop',()=>A.pause());
   }

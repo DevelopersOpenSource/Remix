@@ -7,13 +7,22 @@
 
 static bool IsEqId(int id){ return id>=Z_EQ_BASE&&id<Z_EQ_BASE+8; }
 static const int Z_TRACK_RANGE=1000000, Z_EMPTY_ACTION=802;
-static bool AnyOverlay(){ return host::PU().open||g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
+static bool AnyOverlay(){ return g_fxp.open||host::PU().open||g_confirmOpen||g_ctxOpen||g_folderMenuOpen||WP().open||g_imgMenuOpen||g_editArtist||OU().open; }
 
 static int HitTest(int x,int y){
     if(g_confirmOpen){ if(PtIn(R_confirmYes,x,y)) return Z_CONFIRM_YES; if(PtIn(R_confirmNo,x,y)) return Z_CONFIRM_NO; return -1; }
     if(g_ctxOpen){ for(size_t i=0;i<R_ctxItems.size();++i) if(PtIn(R_ctxItems[i],x,y)) return Z_CTX_ITEM_BASE+(int)i; return -1; }
     if(g_folderMenuOpen){ for(size_t i=0;i<R_folderItems.size();++i) if(PtIn(R_folderItems[i],x,y)) return Z_FOLDER_ITEM_BASE+(int)i; return -1; }
     if(g_editArtist) return -1;
+    if(g_fxp.open){   // painel EFEITOS
+        FxPanelUI& p=g_fxp; LayoutFxPanel(g_winW,g_winH);
+        if(PtIn(p.btnClose,x,y)) return Z_FX_CLOSE;
+        if(PtIn(p.btnClear,x,y)) return Z_FX_CLEAR;
+        if(StemJobActive()&&PtIn(p.btnCancel,x,y)) return Z_FX_CANCEL;
+        for(int i=0;i<5;i++) if(PtIn(p.fx[i],x,y)) return Z_FX_BASE+i;
+        for(int i=0;i<6;i++) if(PtIn(p.stem[i],x,y)) return Z_STEM_BASE+i;
+        return -1;
+    }
     if(host::PU().open){   // painel HOST
         host::PanelUI& p=host::PU(); LayoutHostPanel(g_winW,g_winH);
         if(PtIn(p.btnClose,x,y)) return Z_HOST_CLOSE;
@@ -135,6 +144,7 @@ static int HitTest(int x,int y){
     if(R_sortBtn.right>R_sortBtn.left&&PtIn(R_sortBtn,x,y))return Z_SORT;
     if(R_folderBtn.right>R_folderBtn.left&&PtIn(R_folderBtn,x,y))return Z_FOLDER_BTN;
     if(R_hostBtn.right>R_hostBtn.left&&PtIn(R_hostBtn,x,y))return Z_HOST_BTN;
+    if(R_fxBtn.right>R_fxBtn.left&&PtIn(R_fxBtn,x,y))return Z_FX_BTN;
     if(PtIn(R_listBtn,x,y))return Z_LISTMODE;
     if(PtIn(R_play,x,y))return Z_PLAYPAUSE;
     if(PtIn(R_prev,x,y))return Z_PREV;
@@ -294,6 +304,15 @@ static void OnLButtonDown(int x,int y){
             return;
         }
     }
+    if(g_fxp.open){   // painel EFEITOS
+        int fid=HitTest(x,y);
+        if(fid==Z_FX_CLOSE||!PtIn(g_fxp.box,x,y)){ g_fxp.open=false; return; }
+        if(fid==Z_FX_CLEAR){ ClearFx(); return; }
+        if(fid==Z_FX_CANCEL){ stems::CancelQueued(true); SetStatus(L"Separação cancelada.",2000); return; }
+        if(fid>=Z_FX_BASE&&fid<Z_FX_BASE+5){ CycleFx(fid-Z_FX_BASE); return; }
+        if(fid>=Z_STEM_BASE&&fid<Z_STEM_BASE+6){ SetStemMode(fid-Z_STEM_BASE); return; }
+        return;
+    }
     if(host::PU().open){   // painel HOST
         host::PanelUI& p=host::PU(); int hid=HitTest(x,y);
         if(hid==Z_HOST_CLOSE||!PtIn(p.box,x,y)){ p.open=false; return; }
@@ -371,6 +390,7 @@ static void OnLButtonDown(int x,int y){
     if(id>=Z_SETTINGS_STYLE_BASE&&id<Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT){
         g_cfg.uiStyle=id-Z_SETTINGS_STYLE_BASE; g_cfg.Save(); g_listScroll=0; BuildLayout();
         SetStatus(std::wstring(L"Estilo: ")+UiStyleName(g_cfg.uiStyle),2200); return; }
+    if(id==Z_FX_BTN){ g_fxp.open=true; return; }
     if(id==Z_HOST_BTN||id==Z_SET_HOST_PANEL){ host::PU().open=true; host::PU().scroll=0; host::PU().v=host::GetView(); return; }
     if(id==Z_SET_HOST_ON){ HostToggle(); return; }
     if(id==Z_SET_HOST_PORT){ StartHostEdit(6); return; } if(id==Z_SET_HOST_PIN){ StartHostEdit(7); return; } if(id==Z_SET_HOST_NAME){ StartHostEdit(8); return; }
@@ -484,6 +504,7 @@ static void OnChar(int c){ // so caracteres imprimiveis
 // Tecla pressionada com a janela em foco. kc = KeyCode (app_keys.h), mods = KM_*.
 // Enter/Esc/Backspace dos editores e da busca sao fixos; o resto passa pelos atalhos configuraveis.
 static void OnKeyEvent(int kc,int mods){
+    if(g_fxp.open&&kc==KC_ESC){ g_fxp.open=false; return; }
     if(host::PU().open&&kc==KC_ESC&&!g_editArtist&&!g_confirmOpen){ host::PU().open=false; return; }
     WebPick& wb=WP();
     if(g_hkCapture>=0){   // capturando um atalho nas configuracoes
@@ -555,6 +576,12 @@ static void RunAction(const std::string& a){
     else if(a=="hostok"){if(g_confirmOpen&&g_confirmKind==2)ConfirmYes();}
     else if(a=="hostno"){if(g_confirmOpen&&g_confirmKind==2){HostConfirm(false);g_confirmOpen=false;g_confirmKind=0;}}
     else if(a=="hostpanel"){host::PU().open=true;host::PU().v=host::GetView();}
+    else if(a=="fxpanel"){g_fxp.open=true;}
+    else if(a=="wavedump"){ float pu; int fr,hop; { std::lock_guard<std::mutex> lk(WS().fm); pu=WS().pulse; fr=(int)(WS().spec.size()/48); hop=WS().specHopMs; } fprintf(stderr,"[remix] onda: pos=%lu pulso=%.2f quadros=%d hop=%d latencia=%u\n",(unsigned long)(g_player.loaded?g_player.GetPositionMs():0),pu,fr,hop,Player::OutputLatencyMs()); }
+    else if(a.rfind("fx:",0)==0){ CycleFx(atoi(a.c_str()+3)); }
+    else if(a=="fxclear"){ ClearFx(); }
+    else if(a.rfind("stem:",0)==0){ SetStemMode(atoi(a.c_str()+5)); }
+    else if(a=="fxdump"){ auto j=stems::Find(StemKeyCurrent()); fprintf(stderr,"[remix] fx: slow=%d speed=%d reverb=%d grave=%d 8d=%d stem=%s instalado=%d chave=%s estado=%d pct=%d fonte=%s\n",g_cfg.fxSlow,g_cfg.fxSpeed,g_cfg.fxReverb,g_cfg.fxBass,g_cfg.fx8d,WideToUtf8(g_cfg.stemMode).c_str(),(int)stems::Installed(),WideToUtf8(StemKeyCurrent()).c_str(),j?j->state.load():-1,j?j->pct.load():-1,WideToUtf8(g_currentSource).c_str()); }
     else if(a=="hosthtml"){host::WriteConnectHtml();}
     else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
     else if(a.rfind("hostlib:",0)==0){ int i=atoi(a.c_str()+8); host::View v=host::GetView(); if(i>=0&&i<(int)v.devs.size()) host::SetDeviceLib(v.devs[(size_t)i].id,a.back()!='0'); }   // hostlib:<aparelho>:<0|1>

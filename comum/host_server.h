@@ -18,6 +18,7 @@
 #include "host_net.h"
 #include "host_web.h"
 #include "qrcode.h"
+#include "stems.h"
 #include "app_proc.h"
 #include <thread>
 #include <mutex>
@@ -659,20 +660,58 @@ struct StreamSlot {   // tira o streaming da contagem quando a conexao acaba
         State& s = St(); std::lock_guard<std::mutex> lk(s.m); s.streamsAll--; auto it = s.streams.find(dev); if (it != s.streams.end() && it->second == ctl) s.streams.erase(it); }
 };
 inline bool HttpLink(const std::wstring& u) { return u.rfind(L"https://", 0) == 0 || u.rfind(L"http://", 0) == 0; }
-inline void ServeOnlineStream(hsock_t c, const Device& dev, const std::string& id, int startSec) {
+// ---- efeitos e stems no audio do celular ------------------------------------------------------
+// O celular so recebe o audio pronto: o PC aplica tudo com o ffmpeg (a tela bloqueada do iPhone continua
+// funcionando, porque a pagina toca um <audio> comum). Mesmas intensidades 1..3 do PC.
+struct FxReq { int slow = 0, speed = 0, reverb = 0, bass = 0, d8 = 0, stem = 0; bool Any() const { return slow || speed || reverb || bass || d8; } };
+inline FxReq ParseFx(const std::string& fx, const std::string& stem) {
+    FxReq f;
+    for (auto& part : Split(fx, ',')) {
+        size_t c = part.find(':'); if (c == std::string::npos) continue;
+        std::string k = part.substr(0, c); int v = std::max(0, std::min(3, atoi(part.substr(c + 1).c_str())));
+        if (k == "slow") f.slow = v; else if (k == "speed") f.speed = v; else if (k == "reverb") f.reverb = v; else if (k == "bass") f.bass = v; else if (k == "8d") f.d8 = v;
+    }
+    if (f.slow) f.speed = 0;
+    f.stem = stems::ModeFromKey(Utf8ToWide(stem.size() < 20 ? stem : std::string()));
+    return f;
+}
+inline double FxRate(const FxReq& f) { static const double sl[4] = { 1, 0.90, 0.82, 0.75 }, sp[4] = { 1, 1.10, 1.20, 1.30 }; return f.slow ? sl[f.slow] : sp[f.speed]; }
+// Grafo do -filter_complex: [0:a] -> ... -> [o]. Reverb = convolucao com uma resposta gerada (ruido que decai).
+inline std::string FxGraph(const FxReq& f) {
+    char b[400]; std::string g = "[0:a]aresample=44100,aformat=channel_layouts=stereo";
+    double r = FxRate(f);
+    if (r != 1.0) { snprintf(b, sizeof b, ",asetrate=%d,aresample=44100", (int)lround(44100 * r)); g += b; }
+    if (f.bass) { snprintf(b, sizeof b, ",bass=g=%d:f=110:w=0.7", f.bass * 4); g += b; }
+    if (f.reverb) {
+        static const double wet[4] = { 0, 0.35, 0.6, 0.9 }, dec[4] = { 0, 6.0, 4.8, 3.6 }, dur[4] = { 0, 1.2, 1.6, 2.2 };
+        snprintf(b, sizeof b, "aevalsrc='(random(0)*2-1)*exp(-%.1f*t)|(random(1)*2-1)*exp(-%.1f*t)':s=44100:d=%.1f[ir];", dec[f.reverb], dec[f.reverb], dur[f.reverb]);
+        std::string pre = b;
+        snprintf(b, sizeof b, ",asplit=2[dry][wv];[wv][ir]afir=dry=10:wet=10:length=1:gtype=none,volume=%.2f[wet];[dry][wet]amix=inputs=2:normalize=0:duration=first", wet[f.reverb]);
+        g = pre + g + b;
+    }
+    if (f.d8) { static const double hz[4] = { 0, 0.08, 0.13, 0.20 }, am[4] = { 0, 0.70, 0.85, 0.95 }; snprintf(b, sizeof b, ",apulsator=mode=sine:timing=hz:hz=%.2f:amount=%.2f:offset_l=0:offset_r=0.5,volume=3dB", hz[f.d8], am[f.d8]); g += b; }
+    return g + ",alimiter=limit=0.95:level=0[o]";
+}
+
+// Stream convertido para o celular. online: link da musica (URL direta ou pipe do yt-dlp);
+// senao localFile: arquivo do PC (faixa com efeito ou stem ja separado).
+inline void ServeStream(hsock_t c, const Device& dev, const std::string& id, int startSec, const FxReq& fx, bool online, const std::wstring& localFile) {
     State& s = St();
     unsigned rg = s.runGen.load();
+    std::wstring play;
     OItem it;
-    { std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f == s.onl.end()) { SendErr(c, 404, "faixa"); return; } f->second.used = NowSec(); it = f->second; }
-    std::wstring play = it.play.empty() ? it.url : it.play;
-    if (!HttpLink(play)) { SendErr(c, 404, "faixa"); return; }   // so link http(s): nada que vire opcao ou arquivo local
+    if (online) {
+        { std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f == s.onl.end()) { SendErr(c, 404, "faixa"); return; } f->second.used = NowSec(); it = f->second; }
+        play = it.play.empty() ? it.url : it.play;
+        if (!HttpLink(play)) { SendErr(c, 404, "faixa"); return; }   // so link http(s): nada que vire opcao ou arquivo local
+    }
     EnsureTools();
-    if (!YtdlpOk() || !FfmpegOk()) { SendErr(c, 503, "sem_ferramentas"); return; }
+    if (!FfmpegOk() || (online && !YtdlpOk())) { SendErr(c, 503, "sem_ferramentas"); return; }
     auto ctl = std::make_shared<StreamCtl>();
     {
         std::lock_guard<std::mutex> lk(s.m);
         // reconfere aqui: o EnsureTools pode ter levado segundos e a permissao pode ter mudado
-        if (!s.opt.onlineOk || !StillAllowedLocked(dev, id)) { SendErr(c, 404, "faixa"); return; }
+        if ((online && !s.opt.onlineOk) || !StillAllowedLocked(dev, id)) { SendErr(c, 404, "faixa"); return; }
         auto old = s.streams.find(dev.id);
         bool mine = old != s.streams.end() && old->second && !old->second->cancel.load();
         if (s.streamsAll - (mine ? 1 : 0) >= 4) { SendErr(c, 429, "streams"); return; }   // o stream que vai ser trocado nao conta
@@ -685,28 +724,37 @@ inline void ServeOnlineStream(hsock_t c, const Device& dev, const std::string& i
     auto allowed = [&]() {
         if (s.runGen.load() != rg || ctl->cancel.load()) return false;
         if (s.authGen.load() == ag) return true;
-        ag = s.authGen.load(); std::lock_guard<std::mutex> lk(s.m); return s.opt.onlineOk && StillAllowedLocked(dev, id);
+        ag = s.authGen.load(); std::lock_guard<std::mutex> lk(s.m); return (!online || s.opt.onlineOk) && StillAllowedLocked(dev, id);
     };
     hostnet::SetTimeout(c, 150000);
-    if (NeedsMatch(DetectSource(play))) {   // Spotify/Deezer/Apple: acha a mesma musica no YouTube Music
-        OTrack t; t.url = it.url; t.title = it.title; t.artist = it.artist; t.dur = it.dur; std::wstring e;
-        if (!MatchOnYouTube(t, e, &ctl->cancel) || t.play.empty() || !HttpLink(t.play)) { SendErr(c, 404, "nao_achei"); return; }
-        play = t.play; std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f != s.onl.end()) f->second.play = play;
+    MediaInfo mi;
+    if (online) {
+        if (NeedsMatch(DetectSource(play))) {   // Spotify/Deezer/Apple: acha a mesma musica no YouTube Music
+            OTrack t; t.url = it.url; t.title = it.title; t.artist = it.artist; t.dur = it.dur; std::wstring e;
+            if (!MatchOnYouTube(t, e, &ctl->cancel) || t.play.empty() || !HttpLink(t.play)) { SendErr(c, 404, "nao_achei"); return; }
+            play = t.play; std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f != s.onl.end()) f->second.play = play;
+        }
+        std::wstring gerr;   // extracao compartilhada com o player do PC e os downloads (cache de ~25 min)
+        if (!GetMediaInfo(play, mi, gerr, &ctl->cancel)) { SendErr(c, 502, "nao_abriu"); return; }
     }
-    MediaInfo mi; std::wstring gerr;   // extracao compartilhada com o player do PC e os downloads (cache de ~25 min)
-    if (!GetMediaInfo(play, mi, gerr, &ctl->cancel)) { SendErr(c, 502, "nao_abriu"); return; }
     if (!allowed()) return;
-    bool mp3 = Mp3Encoder() == 1, pipeMode = mi.url.empty();
+    bool mp3 = Mp3Encoder() == 1, pipeMode = online && mi.url.empty();
     std::vector<std::wstring> fa = { FfmpegTool(), L"-nostdin", L"-hide_banner", L"-loglevel", L"error" };
     std::wstring ss = std::to_wstring(std::max(0, startSec));
-    if (!pipeMode) {
+    if (!online) {
+        for (const wchar_t* x : { L"-protocol_whitelist", L"file" }) fa.push_back(x);
+        if (startSec > 0) { fa.push_back(L"-ss"); fa.push_back(ss); }
+        fa.push_back(L"-i"); fa.push_back(localFile);
+    } else if (!pipeMode) {
         if (mi.url.rfind("https://", 0) != 0 && mi.url.rfind("http://", 0) != 0) { SendErr(c, 502, "url"); return; }   // so http(s): nada de arquivo/protocolo local vindo de fora
         for (const wchar_t* x : { L"-protocol_whitelist", L"https,http,tls,tcp,crypto", L"-reconnect", L"1", L"-reconnect_streamed", L"1", L"-reconnect_delay_max", L"5" }) fa.push_back(x);
         if (startSec > 0) { fa.push_back(L"-ss"); fa.push_back(ss); }
         if (!mi.headers.empty()) { std::string hs; for (auto& x : mi.headers) { std::string l; for (char ch : x) if (ch != '\r' && ch != '\n') l.push_back(ch); hs += l + "\r\n"; } fa.push_back(L"-headers"); fa.push_back(Utf8ToWide(hs)); }
         fa.push_back(L"-i"); fa.push_back(Utf8ToWide(mi.url));
     } else { fa.push_back(L"-protocol_whitelist"); fa.push_back(L"pipe"); fa.push_back(L"-i"); fa.push_back(L"pipe:0"); if (startSec > 0) { fa.push_back(L"-ss"); fa.push_back(ss); } }
-    for (const wchar_t* x : { L"-vn", L"-sn", L"-dn", L"-map_metadata", L"-1", L"-ac", L"2", L"-ar", L"44100" }) fa.push_back(x);
+    if (fx.Any()) { fa.push_back(L"-filter_complex"); fa.push_back(Utf8ToWide(FxGraph(fx))); fa.push_back(L"-map"); fa.push_back(L"[o]"); }
+    else for (const wchar_t* x : { L"-vn", L"-sn", L"-dn" }) fa.push_back(x);
+    for (const wchar_t* x : { L"-map_metadata", L"-1", L"-ac", L"2", L"-ar", L"44100" }) fa.push_back(x);
     if (mp3) for (const wchar_t* x : { L"-id3v2_version", L"0", L"-write_xing", L"0" }) fa.push_back(x);   // stream puro, sem cabecalho de arquivo
     if (mp3) for (const wchar_t* x : { L"-c:a", L"libmp3lame", L"-b:a", L"192k", L"-f", L"mp3", L"pipe:1" }) fa.push_back(x);
     else for (const wchar_t* x : { L"-c:a", L"aac", L"-b:a", L"192k", L"-f", L"adts", L"pipe:1" }) fa.push_back(x);
@@ -730,12 +778,66 @@ inline void ServeOnlineStream(hsock_t c, const Device& dev, const std::string& i
         if (!hostnet::SendAll(c, buf, (size_t)n)) break;
         sent += n;
     }
-    if (okHead && sent == 0 && !ctl->cancel.load() && !pipeMode) ForgetMediaInfo(play);   // link direto nao rendeu nada: extrai de novo na proxima
+    if (okHead && sent == 0 && !ctl->cancel.load() && online && !pipeMode) ForgetMediaInfo(play);   // link direto nao rendeu nada: extrai de novo na proxima
     if (ctl->cancel.load() || s.runGen.load() != rg) hostnet::Abort(c);   // parado de fora (troca de faixa, REMOVER, online desligado, Host desligado): corta ja
     { std::lock_guard<std::mutex> lk(ctl->m); ctl->a = nullptr; ctl->b = nullptr; }
     dec.Kill(); if (pipeMode) src.Kill();
     if (pump.joinable()) pump.join();
     dec.Wait(); if (pipeMode) src.Wait();
+}
+
+// ---- stems do celular -------------------------------------------------------------------------
+// Chave igual a do PC (mesmo arquivo/link = mesma separacao no cache). Com a trava.
+inline bool StemSourceLocked(const std::string& id, std::wstring& srcId, bool& online, std::wstring& play, std::wstring& title, std::wstring& artist, int& dur) {
+    State& s = St();
+    auto bi = s.byId.find(id);
+    if (bi != s.byId.end()) { const HTrack& t = s.tracks[bi->second]; srcId = t.path; online = false; title = t.title; artist = t.artist; dur = t.dur; return true; }
+    auto oi = s.onl.find(id);
+    if (oi != s.onl.end()) { srcId = oi->second.url; online = true; play = oi->second.play; title = oi->second.title; artist = oi->second.artist; dur = oi->second.dur; return true; }
+    return false;
+}
+inline std::string StemStatusJson(const std::wstring& key) {
+    if (stems::Complete(key)) return "{\"instalado\":true,\"estado\":\"pronto\",\"pct\":100}";
+    bool inst = stems::InstalledCached();
+    auto j = stems::Find(key); int st = j ? j->state.load() : -1;
+    static const char* nome[] = { "fila", "baixando", "separando", "pronto", "falhou", "cancelado" };
+    std::string e = st >= 0 && st <= 5 ? nome[st] : "nao";
+    std::string o = std::string("{\"instalado\":") + (inst ? "true" : "false") + ",\"estado\":\"" + e + "\",\"pct\":" + std::to_string(j ? j->pct.load() : 0);
+    if (st == stems::S_FAILED && j) { std::lock_guard<std::mutex> lk(j->m); o += ",\"erro\":" + JStr(j->err); }
+    return o + "}";
+}
+
+// ---- ritmo (onda do celular) ------------------------------------------------------------------
+// Energia e "batida" a cada 25 ms (0..255), calculadas no PC decodificando mono a 8 kHz. A pagina desenha
+// a onda sincronizada com o tempo do <audio>, sem Web Audio (que para quando o iPhone bloqueia a tela).
+struct RhythmCache { std::mutex m; std::map<std::string, std::pair<std::string, long long>> map; };
+inline RhythmCache& RC() { static RhythmCache* r = new RhythmCache(); return *r; }
+inline std::string RhythmFrom(const std::vector<std::wstring>& ffIn, const std::atomic<bool>* cancel) {
+    std::vector<std::wstring> a = { FfmpegTool(), L"-nostdin", L"-hide_banner", L"-loglevel", L"error" };
+    for (auto& x : ffIn) a.push_back(x);
+    for (const wchar_t* x : { L"-vn", L"-ac", L"1", L"-ar", L"8000", L"-f", L"f32le", L"pipe:1" }) a.push_back(x);
+    CapResult r = RunCapture(a, 120000, cancel, nullptr, (size_t)64 * 1024 * 1024);
+    size_t n = r.out.size() / 4; if (n < 800) return "";
+    const float* x = (const float*)(const void*)r.out.data();
+    const size_t hop = 200;   // 25 ms a 8 kHz
+    std::vector<float> full, low; float lp = 0;
+    for (size_t i = 0; i + hop <= n; i += hop) {
+        double sf = 0, sl = 0;
+        for (size_t k = 0; k < hop; ++k) { float v = x[i + k]; lp += (v - lp) * 0.111f; sf += (double)v * v; sl += (double)lp * lp; }
+        full.push_back((float)sqrt(sf / hop)); low.push_back((float)sqrt(sl / hop));
+    }
+    std::vector<float> on(full.size(), 0.0f); float emax = 0.0001f;
+    for (size_t i = 0; i < full.size(); ++i) { emax = std::max(emax, full[i]); if (i) on[i] = std::max(0.0f, low[i] - low[i - 1]) * 1.5f + std::max(0.0f, full[i] - full[i - 1]); }
+    std::string o = "{\"hop\":25,\"e\":["; char b[8];
+    for (size_t i = 0; i < full.size(); ++i) { snprintf(b, sizeof b, i ? ",%d" : "%d", (int)std::min(255.0f, full[i] / emax * 255.0f)); o += b; }
+    o += "],\"b\":[";
+    const size_t W = 120;   // normaliza a batida pelo maior valor dos 3 s em volta
+    for (size_t i = 0; i < on.size(); ++i) {
+        float mx = 0.0001f; for (size_t k = i > W ? i - W : 0; k < std::min(on.size(), i + W); ++k) mx = std::max(mx, on[k]);
+        float v = on[i] / mx; v = v > 0.35f ? (v - 0.35f) / 0.65f : 0.0f;
+        snprintf(b, sizeof b, i ? ",%d" : "%d", (int)(v * 255.0f)); o += b;
+    }
+    return o + "]}";
 }
 
 // ------------------------------------------------------------ rotas -------
@@ -828,7 +930,7 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
         std::string o;
         { std::lock_guard<std::mutex> lk(s.m);
           o = "{\"host\":" + JStr(s.hostName) + ",\"dispositivo\":" + JStrA(dev.name) + ",\"id\":\"" + dev.id + "\",\"v\":" + JStr(REMIX_VERSAO) +
-              ",\"biblioteca\":" + (dev.lib ? "true" : "false") + ",\"online\":" + (s.opt.onlineOk && tools ? "true" : "false") + ",\"faixas\":" + std::to_string(dev.lib ? s.libIds.size() : 0) + ",\"temporario\":" + (dev.persist ? "false" : "true") + "}"; }
+              ",\"biblioteca\":" + (dev.lib ? "true" : "false") + ",\"online\":" + (s.opt.onlineOk && tools ? "true" : "false") + ",\"faixas\":" + std::to_string(dev.lib ? s.libIds.size() : 0) + ",\"temporario\":" + (dev.persist ? "false" : "true") + ",\"stems\":" + (stems::InstalledCached() ? "true" : "false") + "}"; }
         SendJson(c, 200, o); return;   // envia sem a trava: celular lento nao congela o Host
     }
     if (P == "/api/biblioteca") {
@@ -911,6 +1013,19 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
             SendFile(c, r, cover, ContentTypeFor(cover), true, still); return;
         }
         if (online) { SendErr(c, 404, "use_ouvir"); return; }
+        {   // com efeito ou stem o PC converte (stream sem tamanho; avancar = ?t=)
+            FxReq fx = ParseFx(QueryGet(r.query, "fx"), QueryGet(r.query, "stem"));
+            if (fx.Any() || fx.stem) {
+                std::wstring file = path;
+                if (fx.stem) {
+                    std::wstring key = stems::KeyFor(path, false);
+                    if (!stems::Complete(key)) { SendJson(c, 409, StemStatusJson(key)); return; }
+                    file = stems::FileFor(key, fx.stem);
+                }
+                int t = atoi(QueryGet(r.query, "t").c_str()); if (t < 0 || t > 24 * 3600) t = 0;
+                ServeStream(c, dev, id, t, fx, false, file); return;
+            }
+        }
         SendFile(c, r, path, ContentTypeFor(path), false, still); return;
     }
     if (P == "/api/online/buscar") {
@@ -953,7 +1068,58 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
         if (!IsId(id)) { SendErr(c, 404, "id"); return; }
         { std::lock_guard<std::mutex> lk(s.m); if (!s.opt.onlineOk) { SendErr(c, 403, "online_desligado"); return; } if (!CanSee(dev, id) || !s.onl.count(id)) { SendErr(c, 404, "faixa"); return; } }
         int t = atoi(QueryGet(r.query, "t").c_str()); if (t < 0 || t > 24 * 3600) t = 0;
-        ServeOnlineStream(c, dev, id, t); return;
+        FxReq fx = ParseFx(QueryGet(r.query, "fx"), QueryGet(r.query, "stem"));
+        if (fx.stem) {   // stem de musica online: toca o arquivo separado do cache
+            std::wstring url; { std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f != s.onl.end()) url = f->second.url; }
+            std::wstring key = stems::KeyFor(url, true);
+            if (url.empty() || !stems::Complete(key)) { SendJson(c, 409, StemStatusJson(key)); return; }
+            ServeStream(c, dev, id, t, fx, false, stems::FileFor(key, fx.stem)); return;
+        }
+        ServeStream(c, dev, id, t, fx, true, L""); return;
+    }
+    if (P.rfind("/api/stems/", 0) == 0) {   // GET: como esta a separacao desta musica; POST: comecar
+        std::string id = P.substr(11);
+        if (!IsId(id)) { SendErr(c, 404, "id"); return; }
+        std::wstring srcId, play, title, artist; bool online = false; int dur = 0;
+        { std::lock_guard<std::mutex> lk(s.m); if (!CanSee(dev, id) || !StemSourceLocked(id, srcId, online, play, title, artist, dur)) { SendErr(c, 404, "faixa"); return; } }
+        std::wstring key = stems::KeyFor(srcId, online);
+        // separar pesa no PC: no maximo 4 esperando na fila (a musica atual sempre passa na frente)
+        if (r.method == "POST" && !stems::Complete(key) && stems::InstalledCached() && (stems::Find(key) || stems::QueuedCount() < 4))
+            stems::Request(srcId, online, play, title, artist, dur, JGet(r.body, "fila") != "true", [](const std::wstring& k, int st) { AppPost(EV_STEMS, k, st); });
+        SendJson(c, 200, StemStatusJson(key)); return;
+    }
+    if (P.rfind("/api/ritmo/", 0) == 0) {   // energia + batida a cada 25 ms, para a onda do celular
+        std::string id = P.substr(11);
+        if (!IsId(id)) { SendErr(c, 404, "id"); return; }
+        std::string sq = QueryGet(r.query, "stem"); int stemM = stems::ModeFromKey(Utf8ToWide(sq.size() < 20 ? sq : std::string()));
+        std::wstring srcId, play, title, artist; bool online = false; int dur = 0;
+        { std::lock_guard<std::mutex> lk(s.m); if (!CanSee(dev, id) || !StemSourceLocked(id, srcId, online, play, title, artist, dur)) { SendErr(c, 404, "faixa"); return; } }
+        std::string ck = id + "|" + std::to_string(stemM);
+        { std::lock_guard<std::mutex> lk(RC().m); auto hit = RC().map.find(ck); if (hit != RC().map.end()) { std::string j = hit->second.first; hit->second.second = NowSec(); SendJson(c, 200, j); return; } }
+        static std::atomic<int> rodando{ 0 };   // decodificar a musica inteira pesa: 2 de cada vez
+        if (rodando.load() >= 2) { SendJson(c, 429, "{\"erro\":\"calma\"}", { "Retry-After: 3" }); return; }
+        rodando++; struct Solta { ~Solta() { rodando--; } } solta;
+        EnsureTools();
+        const std::string vazio = "{\"hop\":25,\"e\":[],\"b\":[]}";
+        if (!FfmpegOk()) { SendJson(c, 200, vazio); return; }
+        std::vector<std::wstring> in;
+        std::wstring stemFile = stemM ? stems::FileFor(stems::KeyFor(srcId, online), stemM) : L"";
+        if (!stemFile.empty()) in = { L"-protocol_whitelist", L"file", L"-i", stemFile };
+        else if (!online) in = { L"-protocol_whitelist", L"file", L"-i", srcId };
+        else {
+            std::wstring pl = play.empty() ? srcId : play;
+            if (!HttpLink(pl) || NeedsMatch(DetectSource(pl))) { SendJson(c, 200, vazio); return; }
+            MediaInfo mi; std::wstring e;
+            if (!GetMediaInfo(pl, mi, e, nullptr) || mi.url.empty() || (mi.url.rfind("https://", 0) != 0 && mi.url.rfind("http://", 0) != 0)) { SendJson(c, 200, vazio); return; }
+            in = { L"-protocol_whitelist", L"https,http,tls,tcp,crypto" };
+            if (!mi.headers.empty()) { std::string hs; for (auto& x : mi.headers) { std::string l; for (char ch : x) if (ch != '\r' && ch != '\n') l.push_back(ch); hs += l + "\r\n"; } in.push_back(L"-headers"); in.push_back(Utf8ToWide(hs)); }
+            in.push_back(L"-i"); in.push_back(Utf8ToWide(mi.url));
+        }
+        hostnet::SetTimeout(c, 120000);
+        std::string j = RhythmFrom(in, nullptr);
+        if (j.empty()) j = vazio;
+        else { std::lock_guard<std::mutex> lk(RC().m); if (RC().map.size() >= 40) { auto old = RC().map.begin(); for (auto i = RC().map.begin(); i != RC().map.end(); ++i) if (i->second.second < old->second.second) old = i; RC().map.erase(old); } RC().map[ck] = { j, NowSec() }; }
+        SendJson(c, 200, j); return;
     }
     SendErr(c, 404, "rota");
 }

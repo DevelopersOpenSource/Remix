@@ -429,6 +429,7 @@ static void DrawNormal(Graphics& g,int w,int h){
     DrawPill(g,R_sortBtn,SortLabel(),g_cfg.sortMode==L"manual",S(11));
     DrawPill(g,R_folderBtn,g_view==2?L"PASTA DA PLAYLIST ▼":L"PASTA ▼",g_folderMenuOpen,S(10));
     if(R_hostBtn.right>R_hostBtn.left) DrawPill(g,R_hostBtn,host::Running()?L"HOST ●":L"HOST",host::Running(),S(10));
+    if(R_fxBtn.right>R_fxBtn.left) DrawPill(g,R_fxBtn,AnyFxOn()?L"EFEITOS ●":L"EFEITOS",AnyFxOn(),S(10));
     DrawChromeButtons(g);
     if(R_listBtn.right>R_listBtn.left){
         bool lm=g_cfg.listMode!=0;
@@ -1129,6 +1130,29 @@ static void DrawOnline(Graphics& g,int w,int h){
 }
 // ---- menus flutuantes / confirmacao ----
 // ---- painel HOST (acesso pelo celular) --------------------------------------
+static void DrawFxPanel(Graphics& g,int w,int h){
+    FxPanelUI& p=g_fxp; LayoutFxPanel(w,h);
+    { SolidBrush ov(Cs(Color(200,2,4,10),UI().bg,200)); g.FillRectangle(&ov,0,0,w,h); }
+    RectF box=RF(p.box); SolidBrush pb(Cs(Color(255,10,13,26),UI().surface)); Pen apn(Cs(ToGdi(g_theme.accent),UI().borderHi),1.8f);
+    DrawRoundRect(g,box,(int)S(14),&pb,&apn);
+    SolidBrush white(ToGdi(UI().text)), gray(ToGdi(UI().textFaint)), ab(ToGdi(g_theme.accent));
+    TextAt(g,L"EFEITOS  ·  STEMS",box.X+S(18),box.Y+S(14),S(14),UiClassic()?(Brush*)&ab:(Brush*)&white,true);
+    TextCenter(g,L"✕",RF(p.btnClose),S(14),&white);
+    TextTrim(g,L"Cada clique sobe o nível (● ○ ○ → ● ● ●) e o seguinte desliga. Slow e speed não somam.",RectF(box.X+S(18),box.Y+S(44),box.Width-S(36),S(20)),S(11),&gray,false,StringTrimmingEllipsisCharacter,true);
+    for(int i=0;i<5;i++){
+        int lv=FxLevel(i); std::wstring dots; for(int k=1;k<=3;k++) dots+=(k<=lv?L"●":L"○");
+        DrawPill(g,p.fx[i],std::wstring(FxName(i))+L"  "+dots,lv>0,S(11));
+    }
+    DrawPill(g,p.btnClear,L"DESLIGAR EFEITOS",false,S(10));
+    TextAt(g,L"STEMS: separar a música",box.X+S(18),(REAL)p.stem[0].top-S(28),S(12),&white,true);
+    int cur=StemModeNow();
+    for(int i=0;i<6;i++) DrawPill(g,p.stem[i],stems::ModeName(i),i==cur,S(10));
+    std::wstring l1,l2; FxStemStatus(l1,l2);
+    RectF inf=RF(p.info);
+    TextTrim(g,l1,RectF(inf.X,inf.Y,inf.Width,S(20)),S(11),&white,false,StringTrimmingEllipsisCharacter,true);
+    if(!l2.empty()) TextTrim(g,l2,RectF(inf.X,inf.Y+S(22),inf.Width,S(20)),S(10.5f),&gray,false,StringTrimmingEllipsisCharacter,true);
+    if(StemJobActive()) DrawPill(g,p.btnCancel,L"CANCELAR",false,S(10));
+}
 static void DrawHostPanel(Graphics& g,int w,int h){
     host::PanelUI& p=host::PU(); LayoutHostPanel(w,h); const host::View& v=p.v;
     { SolidBrush ov(Cs(Color(200,2,4,10),UI().bg,200)); g.FillRectangle(&ov,0,0,w,h); }

@@ -47,3 +47,6 @@ Programas externos (NÃO incluídos; o Remix só chama se estiverem instalados)
 ---------------------------------------------------------------------------
 yt-dlp (Unlicense), ffmpeg (LGPL/GPL), Node.js / Deno — usados para busca, streaming e
 download de música online. cloudflared (Apache 2.0) — túnel do Host.
+Separador de stems (opcional, baixado pelo instalador de dependências, não vem no
+Remix): Demucs (MIT, Meta) com PyTorch (BSD) e soundfile (BSD). O reverb do player
+segue o algoritmo Freeverb (Jezar at Dreampoint, domínio público).

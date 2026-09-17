@@ -9,7 +9,7 @@
 %global __brp_check_rpaths %{nil}
 
 Name:           remix
-Version:        %{?remix_version}%{!?remix_version:1.5.1}
+Version:        %{?remix_version}%{!?remix_version:1.5.2}
 Release:        %{?remix_release}%{!?remix_release:1}%{?dist}
 Summary:        Remix Player — player de música MP3/WAV com visual neon
 License:        Apache-2.0 AND zlib AND MIT AND Bitstream-Vera
@@ -54,6 +54,9 @@ cp -a usr %{buildroot}/
 %doc %{_docdir}/%{name}/
 
 %changelog
+* Thu Sep 17 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.2-1
+- Volume com curva perceptiva, subida controlada e limitador (nao estoura mais); efeitos slow, speed, reverb, grave e 8D (3 niveis) no PC e no celular; stems com Demucs (so vocal, so musica, bateria, baixo, outros); onda no ritmo real
+
 * Wed Sep 16 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.1-1
 - Playlists com pasta vinculada atualizam sozinhas e o card conta todas as faixas (pasta, avulsas e online); o celular recebe as musicas da pasta vinculada
 
