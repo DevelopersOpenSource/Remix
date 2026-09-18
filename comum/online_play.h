@@ -517,10 +517,12 @@ inline std::wstring OnlineStartupCleanup(std::wstring& lastUrl, std::wstring& la
 struct OnlineUI {
     bool open = false, editing = true, fromLink = false;
     int source = 1, targetPl = -1, scroll = 0;
+    int tipo = 0;                       // 0 = musicas, 1 = playlists prontas, 2 = albuns
     std::wstring query, linkName, linkUrl;
     std::mutex m; std::vector<OTrack> res; std::wstring status;
+    std::vector<desc::Item> listas;     // resultados quando tipo != 0
     std::atomic<bool> busy{ false }; std::atomic<int> gen{ 0 }; ULONGLONG busySince = 0;
-    RECT box{}, qbox{}, btnSearch{}, btnClose{}, src[3]{}, btnAddAll{};
+    RECT box{}, qbox{}, btnSearch{}, btnClose{}, src[3]{}, tab[3]{}, btnAddAll{};
     std::vector<RECT> rows, bPlay, bDl, bAdd;
 };
 inline OnlineUI& OU() { static OnlineUI* u = new OnlineUI(); return *u; }
@@ -530,6 +532,26 @@ inline void OnlineSearchAsync() {
     if (q.empty()) return;
     int gen = ++u.gen;
     bool link = IsUrlText(q);
+    if (!link && u.tipo != 0) {   // procurar playlists ou albuns prontos (Deezer publico)
+        int tipo = u.tipo;
+        u.busy = true; u.busySince = GetTickCount64(); u.scroll = 0; u.editing = false;
+        { std::lock_guard<std::mutex> lk(u.m); u.res.clear(); u.listas.clear(); u.fromLink = false; u.linkName.clear(); u.linkUrl.clear(); u.status = L"Procurando..."; }
+        std::thread([q, gen, tipo] {
+            OnlineUI& u2 = OU();
+            std::vector<desc::Item> v;
+            RemixSafe("busca de listas", [&] { v = tipo == 1 ? desc::BuscarPlaylists(q, 30) : desc::BuscarAlbuns(q, 30); });
+            if (gen != u2.gen.load()) return;
+            {
+                std::lock_guard<std::mutex> lk(u2.m);
+                u2.listas = v;
+                u2.status = v.empty() ? L"Nada encontrado." : (std::to_wstring(v.size()) + (tipo == 1 ? L" playlists" : L" álbuns"));
+            }
+            u2.busy = false;
+            AppPost(EV_ONLINE_SEARCH, L"", gen);
+        }).detach();
+        return;
+    }
+    { std::lock_guard<std::mutex> lk(u.m); u.listas.clear(); }
     u.busy = true; u.busySince = GetTickCount64(); u.scroll = 0; u.editing = false;
     { std::lock_guard<std::mutex> lk(u.m); u.res.clear(); u.fromLink = link; u.linkName.clear(); u.linkUrl = link ? q : L""; u.status = link ? L"Lendo o link..." : L"Buscando..."; }
     std::thread([q, where, gen, link] {
@@ -544,6 +566,15 @@ inline void OnlineSearchAsync() {
         });
         });
         if (gen != u.gen.load()) return;
+        if (!link && out.size() > 1) {
+            // o que voce ouve desempata: um artista do seu gosto sobe ate 3 lugares
+            std::vector<std::pair<double, size_t>> ord;
+            for (size_t i = 0; i < out.size(); i++) ord.push_back({ (double)i - std::min(3.0, desc::PesoArtista(out[i].artist) * 0.5), i });
+            std::stable_sort(ord.begin(), ord.end(), [](const std::pair<double, size_t>& a, const std::pair<double, size_t>& b) { return a.first < b.first; });
+            std::vector<OTrack> nv; nv.reserve(out.size());
+            for (auto& o : ord) nv.push_back(out[o.second]);
+            out.swap(nv);
+        }
         {
             std::lock_guard<std::mutex> lk(u.m);
             u.res = out; u.linkName = name;

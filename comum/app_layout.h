@@ -877,11 +877,13 @@ static void LayoutOnline(int w,int h){
     int qy=by+SI(56);
     u.btnSearch={bx+bw-SI(16)-(int)S(120),qy,bx+bw-SI(16),qy+SI(40)};
     u.qbox={bx+SI(16),qy,u.btnSearch.left-SI(8),qy+SI(40)};
-    int sy=qy+SI(50), sw=std::min((int)S(150),(bw-SI(48))/3);
-    for(int i=0;i<3;i++) u.src[i]={bx+SI(16)+i*(sw+SI(8)),sy,bx+SI(16)+i*(sw+SI(8))+sw,sy+SI(32)};
-    int listTop=sy+SI(44), listBot=by+bh-SI(62), rowH=SI(58);
+    int ty=qy+SI(50), tw2=std::min((int)S(130),(bw-SI(48))/3);
+    for(int i=0;i<3;i++) u.tab[i]={bx+SI(16)+i*(tw2+SI(8)),ty,bx+SI(16)+i*(tw2+SI(8))+tw2,ty+SI(30)};
+    int sy=ty+SI(38), sw=std::min((int)S(150),(bw-SI(48))/3);
+    for(int i=0;i<3;i++) u.src[i]= u.tipo==0 ? RECT{bx+SI(16)+i*(sw+SI(8)),sy,bx+SI(16)+i*(sw+SI(8))+sw,sy+SI(32)} : RECT{0,0,0,0};
+    int listTop=(u.tipo==0?sy+SI(44):sy+SI(6)), listBot=by+bh-SI(62), rowH=SI(58);
     R_onList={bx+SI(8),listTop,bx+bw-SI(8),listBot};
-    size_t n; { std::lock_guard<std::mutex> lk(u.m); n=u.res.size(); }
+    size_t n; { std::lock_guard<std::mutex> lk(u.m); n=u.tipo==0?u.res.size():u.listas.size(); }
     int maxSc=std::max(0,(int)n*rowH-(listBot-listTop)); u.scroll=std::max(0,std::min(u.scroll,maxSc));
     u.rows.assign(n,RECT{0,0,0,0}); u.bPlay.assign(n,RECT{0,0,0,0}); u.bDl.assign(n,RECT{0,0,0,0}); u.bAdd.assign(n,RECT{0,0,0,0});
     for(size_t i=0;i<n;++i){
@@ -892,7 +894,7 @@ static void LayoutOnline(int w,int h){
         u.bDl[i]={u.bAdd[i].left-SI(6)-bs,cy-bs/2,u.bAdd[i].left-SI(6),cy+bs/2};
         u.bPlay[i]={u.bDl[i].left-SI(6)-bs,cy-bs/2,u.bDl[i].left-SI(6),cy+bs/2};
     }
-    u.btnAddAll=n>0?RECT{bx+bw-SI(16)-(int)S(260),by+bh-SI(50),bx+bw-SI(16),by+bh-SI(14)}:RECT{0,0,0,0};
+    u.btnAddAll=(n>0&&u.tipo==0)?RECT{bx+bw-SI(16)-(int)S(260),by+bh-SI(50),bx+bw-SI(16),by+bh-SI(14)}:RECT{0,0,0,0};
 }
 // Geometria do editor de texto (artista / nome do arquivo).
 static void LayoutEditor(int w,int h){

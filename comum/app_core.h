@@ -134,10 +134,10 @@ enum : int {
 // O dono passa o job do canal: a analise roda sem prender o SPool() (so st->m -> w.m).
 struct StreamJob;
 void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
-#include "online_play.h"
-#include "stems.h"
 #include "descobrir.h"   // novidades/recomendacoes da tela inicial (Deezer publico + o que voce ouve)
 #include "letras.h"      // letra da musica (LRCLIB), guardada no disco para sempre
+#include "online_play.h"
+#include "stems.h"
 #include "discord_rpc.h"  // Rich Presence: mostra no Discord o que esta tocando
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
@@ -190,7 +190,7 @@ enum : int {
     Z_EQ_BASE=740, Z_SET_AUTOPLAY=760, Z_SET_SORT=761, Z_SET_SORTDIR=762, Z_EQ_ON=763, Z_EQ_RESET=764,
     Z_AUTOPLAY=765, Z_SORT=766, Z_VOL_ICON=767, Z_FOLDER_BTN=768, Z_CONFIRM_YES=769, Z_CONFIRM_NO=770, Z_PERF_TOGGLE=771, Z_BG_TOGGLE=772, Z_QUIT_BTN=773, Z_SYSMEDIA_TOGGLE=774, Z_TAB_TRACKS=780, Z_TAB_PLAYLISTS=781, Z_SEARCH_BOX=782, Z_SEARCH_CLEAR=783, Z_PL_BACK=784, Z_PL_NEW=785, Z_HK_RESET=786,
     Z_TAB_ONLINE=787, Z_PL_ADD=788, Z_PICK_DONE=789, Z_PICK_CANCEL=790, Z_ACTIVITY=791, Z_SET_ON_MODE=792, Z_SET_ON_FMT=793, Z_SET_ON_SRC=794,
-    Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810,
+    Z_SET_ON_FOLDER=795, Z_SET_ON_RECHECK=796, Z_PL_MODE=797, Z_ON_CLOSE=798, Z_ON_QBOX=799, Z_ON_SEARCH=800, Z_ON_ADDALL=801, Z_ON_SRC_BASE=810, Z_ON_TAB_BASE=814,
     Z_SETTINGS_STYLE_BASE=820,   // +0 classico, +1 limpo, +2 spotify
     // Host: faixa 22000+ (na 1.4.0 ficaram em 821..838 e colidiam com Z_SETTINGS_STYLE_BASE+1/+2:
     // o botao HOST virava "Limpo" e LIGAR O HOST virava "Spotify + LED"). Os static_assert abaixo travam isso.

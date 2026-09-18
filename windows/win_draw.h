@@ -1144,10 +1144,35 @@ static void DrawOnline(Graphics& g,int w,int h){
         g.SetClip(&old);
     }
     { RectF sb=RF(u.btnSearch); SolidBrush f(Cs(ToGdi(g_theme.accent,55),g_theme.accent)); Pen sp(ToGdi(g_theme.accent),1.4f); DrawRoundRect(g,sb,(int)S(9),&f,&sp); Color tc=UiClassic()?ToGdi(g_theme.accent):ToGdi(UI().bg); SolidBrush tb(tc); if(u.busy.load()) DrawSpinner(g,sb.X+sb.Width/2,sb.Y+sb.Height/2,S(9),tc,S(2.5f)); else TextCenter(g,L"BUSCAR",sb,S(12),&tb,true); }
+    static const wchar_t* tabN[3]={L"MÚSICAS",L"PLAYLISTS",L"ÁLBUNS"};
+    for(int i=0;i<3;i++) DrawPill(g,u.tab[i],tabN[i],u.tipo==i,S(10));
     static const wchar_t* srcN[3]={L"YOUTUBE MUSIC",L"YOUTUBE",L"SOUNDCLOUD"};
     for(int i=0;i<3;i++) DrawPill(g,u.src[i],srcN[i],u.source==i,S(10));
     Region oldL; g.GetClip(&oldL); g.SetClip(RF(R_onList));
-    {
+    if(u.tipo!=0){   // playlists ou albuns prontos
+        std::lock_guard<std::mutex> lk(u.m);
+        for(size_t i=0;i<u.listas.size()&&i<u.rows.size();++i){
+            RECT rr=u.rows[i]; if(rr.right<=rr.left) continue;
+            const desc::Item& it=u.listas[i];
+            RectF row=RF(rr);
+            bool hot=UiHot(rr);
+            SolidBrush rb(Cs(Color(210,9,12,25),hot?UI().surfaceHi:UI().surface));
+            DrawRoundRect(g,row,(int)S(UI_R_CARD),&rb,nullptr);
+            REAL cv=row.Height-S(12);
+            RectF art(row.X+S(8),row.Y+S(6),cv,cv);
+            SolidBrush plate(Cs(Color(255,18,21,34),UI().bg)); DrawRoundRect(g,art,(int)S(4),&plate,nullptr);
+            if(!it.capa.empty()){
+                std::wstring tf=OnlineThumbFile(it.capa);
+                if(g_thumbReady.count(tf)){ Image* im=GetThumb(tf); if(im) DrawImgCover(g,im,art); }
+                else { std::error_code ec; if(std::filesystem::exists(std::filesystem::path(tf),ec)) g_thumbReady.insert(tf); else g_rxThumbFila.push_back({it.capa,it.capa}); }
+            }
+            REAL tx=art.X+cv+S(12);
+            TextTrim(g,it.titulo,RectF(tx,row.Y+S(10),row.Width-(tx-row.X)-S(120),S(20)),S(13),&white,true,StringTrimmingEllipsisCharacter);
+            TextTrim(g,it.sub,RectF(tx,row.Y+S(30),row.Width-(tx-row.X)-S(120),S(17)),S(10),&gray,false,StringTrimmingEllipsisCharacter);
+            if(hot){ SolidBrush acc(ToGdi(g_theme.accent)); StringFormat rf; rf.SetAlignment(StringAlignmentFar); rf.SetLineAlignment(StringAlignmentCenter); g.DrawString(L"ABRIR ▸",-1,UiFont(S(10),true),RectF(row.X+row.Width-S(110),row.Y,S(100),row.Height),&rf,&acc); }
+        }
+        RxBaixarCapasPendentes();
+    } else {
         std::lock_guard<std::mutex> lk(u.m);
         for(size_t i=0;i<u.res.size()&&i<u.rows.size();++i){
             RECT rr=u.rows[i]; if(rr.right<=rr.left) continue;

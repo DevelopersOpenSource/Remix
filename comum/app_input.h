@@ -45,7 +45,8 @@ static int HitTest(int x,int y){
         if(PtIn(u.btnClose,x,y)) return Z_ON_CLOSE;
         if(PtIn(u.qbox,x,y)) return Z_ON_QBOX;
         if(PtIn(u.btnSearch,x,y)) return Z_ON_SEARCH;
-        for(int i=0;i<3;i++) if(PtIn(u.src[i],x,y)) return Z_ON_SRC_BASE+i;
+        for(int i=0;i<3;i++) if(u.src[i].right>u.src[i].left&&PtIn(u.src[i],x,y)) return Z_ON_SRC_BASE+i;
+        for(int i=0;i<3;i++) if(PtIn(u.tab[i],x,y)) return Z_ON_TAB_BASE+i;
         if(PtIn(R_onList,x,y)) for(size_t i=0;i<u.rows.size()&&i<500;++i){
             if(u.rows[i].right<=u.rows[i].left) continue;
             if(PtIn(u.bPlay[i],x,y)) return Z_ON_PLAY_BASE+(int)i;
@@ -389,6 +390,17 @@ static void OnLButtonDown(int x,int y){
         u.editing=false;
         if(oid==Z_ON_SEARCH){ OnlineSearchAsync(); return; }
         if(oid>=Z_ON_SRC_BASE&&oid<Z_ON_SRC_BASE+3){ u.source=oid-Z_ON_SRC_BASE; g_cfg.onlineSource=u.source; g_cfg.Save(); std::wstring q=Config::Trim(u.query); if(!q.empty()&&!IsUrlText(q)) OnlineSearchAsync(); return; }
+        if(oid>=Z_ON_TAB_BASE&&oid<Z_ON_TAB_BASE+3){
+            int t=oid-Z_ON_TAB_BASE;
+            if(u.tipo!=t){ u.tipo=t; u.scroll=0; { std::lock_guard<std::mutex> lk(u.m); u.res.clear(); u.listas.clear(); u.status=t==0?L"Digite o nome da música (ou cole um link) e aperte ENTER.":(t==1?L"Procure playlists prontas pelo nome.":L"Procure álbuns pelo nome."); } std::wstring q=Config::Trim(u.query); if(!q.empty()&&!IsUrlText(q)) OnlineSearchAsync(); }
+            return;
+        }
+        if(u.tipo!=0&&oid>=Z_ON_PLAY_BASE&&oid<Z_ON_PLAY_BASE+500){   // playlist/album: abre o link (vira lista de musicas)
+            size_t i=(size_t)(oid-Z_ON_PLAY_BASE); std::wstring link;
+            { std::lock_guard<std::mutex> lk(u.m); if(i<u.listas.size()) link=u.listas[i].link; }
+            if(!link.empty()){ u.tipo=0; u.query=link; OnlineSearchAsync(); }
+            return;
+        }
         if(oid>=Z_ON_PLAY_BASE&&oid<Z_ON_PLAY_BASE+500){ OnlinePlayResult(oid-Z_ON_PLAY_BASE); return; }
         if(oid>=Z_ON_DL_BASE&&oid<Z_ON_DL_BASE+500){ OnlineDownloadResult(oid-Z_ON_DL_BASE); return; }
         if(oid>=Z_ON_ADD_BASE&&oid<Z_ON_ADD_BASE+500){ OnlineAddResult(oid-Z_ON_ADD_BASE,x,y); return; }
@@ -701,6 +713,8 @@ static void RunAction(const std::string& a){
     else if(a=="hosthtml"){host::WriteConnectHtml();}
     else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
     else if(a.rfind("hostlib:",0)==0){ int i=atoi(a.c_str()+8); host::View v=host::GetView(); if(i>=0&&i<(int)v.devs.size()) host::SetDeviceLib(v.devs[(size_t)i].id,a.back()!='0'); }   // hostlib:<aparelho>:<0|1>
+    else if(a.rfind("ontab:",0)==0){ OU().tipo=std::max(0,std::min(2,atoi(a.c_str()+6))); { std::lock_guard<std::mutex> lk(OU().m); OU().res.clear(); OU().listas.clear(); } }
+    else if(a.rfind("onbusca:",0)==0){ OU().open=true; OU().query=Utf8ToWide(a.substr(8)); OnlineSearchAsync(); }
     else if(a=="letra"){ g_rxLetraOn=!g_rxLetraOn; g_rxLetraScroll=0; BuildLayout(); }
     else if(a=="rxpainel"){ g_rxPainelOn=!g_rxPainelOn; BuildLayout(); }
     else if(a=="saidas"){ auto v=Player::OutDevices(); fprintf(stderr,"[remix] saidas (%d): ",(int)v.size()); for(auto& s:v) fprintf(stderr,"%s | ",WideToUtf8(s).c_str()); fprintf(stderr,"| atual=%s\n",WideToUtf8(Player::OutDeviceAtual()).c_str()); }

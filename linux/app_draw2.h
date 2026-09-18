@@ -441,10 +441,36 @@ static void DrawOnline(int w,int h){
         gfx::PopClip();
     }
     { RectF sb=RF(u.btnSearch); Color f=Cs(ToGdi(g_theme.accent,55),g_theme.accent), fp=ToGdi(g_theme.accent); DrawRoundRect(sb,S(9),&f,&fp,1.4f); Color tc=UiClassic()?ab:ToGdi(UI().bg); if(u.busy.load()) DrawSpinner(sb.X+sb.Width/2,sb.Y+sb.Height/2,S(9),tc,S(2.5f)); else gfx::TextRect(L"BUSCAR",sb,S(12),tc,true,gfx::Center,true); }
+    static const wchar_t* tabN[3]={L"MÚSICAS",L"PLAYLISTS",L"ÁLBUNS"};
+    for(int i=0;i<3;i++) DrawPill(u.tab[i],tabN[i],u.tipo==i,S(10));
     static const wchar_t* srcN[3]={L"YOUTUBE MUSIC",L"YOUTUBE",L"SOUNDCLOUD"};
-    for(int i=0;i<3;i++) DrawPill(u.src[i],srcN[i],u.source==i,S(10));
+    for(int i=0;i<3;i++) if(u.src[i].right>u.src[i].left) DrawPill(u.src[i],srcN[i],u.source==i,S(10));
     gfx::PushClip(RF(R_onList));
-    {
+    if(u.tipo!=0){   // playlists ou albuns prontos: capa, nome e quantas musicas
+        std::lock_guard<std::mutex> lk(u.m);
+        for(size_t i=0;i<u.listas.size()&&i<u.rows.size();++i){
+            RECT rr=u.rows[i]; if(rr.right<=rr.left) continue;
+            const desc::Item& it=u.listas[i];
+            RectF row=RF(rr);
+            bool hot=UiHot(rr);
+            Color rb=Cs(Argb(210,9,12,25),(hot?UI().surfaceHi:UI().surface));
+            DrawRoundRect(row,S(UI_R_CARD),&rb,nullptr);
+            float cv=row.Height-S(12);
+            RectF art(row.X+S(8),row.Y+S(6),cv,cv);
+            Color plate=Cs(Argb(255,18,21,34),UI().bg);
+            DrawRoundRect(art,S(4),&plate,nullptr);
+            if(!it.capa.empty()){
+                std::wstring tf=OnlineThumbFile(it.capa);
+                if(g_thumbReady.count(tf)){ Img* im=GetThumb(tf); if(im) gfx::DrawImgCover(im,art); }
+                else { std::error_code ec; if(std::filesystem::exists(std::filesystem::path(tf),ec)) g_thumbReady.insert(tf); else g_rxThumbFila.push_back({it.capa,it.capa}); }
+            }
+            float tx=art.X+cv+S(12);
+            gfx::TextRect(it.titulo,RectF(tx,row.Y+S(10),row.Width-(tx-row.X)-S(120),S(20)),S(13),C_WHITE,true,gfx::Near,false,gfx::EllipsisChar);
+            gfx::TextRect(it.sub,RectF(tx,row.Y+S(30),row.Width-(tx-row.X)-S(120),S(17)),S(10),C_GRAY,false,gfx::Near,false,gfx::EllipsisChar);
+            gfx::TextRect(hot?L"ABRIR ▸":L"",RectF(row.X+row.Width-S(110),row.Y,S(100),row.Height),S(10),ToGdi(g_theme.accent),true,gfx::Far,true);
+        }
+        RxBaixarCapasPendentes();
+    } else {
         std::lock_guard<std::mutex> lk(u.m);
         for(size_t i=0;i<u.res.size()&&i<u.rows.size();++i){
             RECT rr=u.rows[i]; if(rr.right<=rr.left) continue;

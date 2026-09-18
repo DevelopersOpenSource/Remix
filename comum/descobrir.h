@@ -304,6 +304,15 @@ inline std::wstring DzArtistaId(const std::wstring& nome) {
     const JVal* d = v.get("data"); if (!d || d->t != JVal::ARR || d->a.empty()) return L"";
     return DzId(d->a[0]);
 }
+// Procurar playlists prontas pelo nome (para nao precisar sair do app).
+inline std::vector<Item> BuscarPlaylists(const std::wstring& q, int max) {
+    if (q.empty()) return {};
+    return DzLista("https://api.deezer.com/search/playlist?limit=" + std::to_string(max) + "&q=" + OUrlEnc(q), K_PLAYLIST, max);
+}
+inline std::vector<Item> BuscarAlbuns(const std::wstring& q, int max) {
+    if (q.empty()) return {};
+    return DzLista("https://api.deezer.com/search/album?limit=" + std::to_string(max) + "&q=" + OUrlEnc(q), K_ALBUM, max);
+}
 // Generos do Deezer (aba "explorar"): id + nome + imagem.
 inline std::vector<Item> Generos() {
     std::vector<Item> out; JVal v;
