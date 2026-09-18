@@ -207,7 +207,7 @@ enum : int {
     // Estilo REMIX (1.6): lateral, tela inicial com fileiras e player embaixo.
     Z_RX_NAV_BASE=30000,          // +3: Início / Buscar / Sua biblioteca
     Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS, Z_RX_TOCAR, Z_RX_ALEATORIO, Z_RX_VOLTAR, Z_RX_BUSCARON, Z_RX_SIDEDRAG,
-    Z_RX_LETRA=30030, Z_RX_SAIDA, Z_RX_PAINEL, Z_RX_LETRA_LINHA_BASE=30200,   // +200: clicar numa linha da letra pula para ela
+    Z_RX_LETRA=30030, Z_RX_SAIDA, Z_RX_PAINEL, Z_RX_HERO, Z_RX_LETRA_LINHA_BASE=30200,   // +200: clicar numa linha da letra pula para ela
     Z_RX_ATALHO_BASE=30100,       // +16: atalhos do topo do Início (mais ouvidos)
     Z_RX_SIDE_BASE=31000,         // +500: itens da lateral (0 = todas as músicas, depois as playlists)
     Z_RX_CARD_BASE=32000,         // +4000: cartões da tela inicial
@@ -288,6 +288,9 @@ static RECT R_rxSideDrag{0,0,0,0};         // divisória: arrasta para mudar a l
 // Atalhos do topo do Início: o que você mais ouviu por último (playlists e músicas).
 struct RxAtalho { RECT r{0,0,0,0}; int tipo=0; int idx=0; std::wstring nome, sub, capa; };
 static std::vector<RxAtalho> g_rxAtalhos;
+// Destaque do topo do Início (a novidade da vez).
+static RECT R_rxHero{0,0,0,0}, R_rxHeroBtn{0,0,0,0};
+static desc::Item g_rxHeroItem; static bool g_rxHeroOk=false; static std::wstring g_rxHeroFileira;
 // Barra de baixo: botoes de letra, fila e onde tocar.
 static RECT R_rxLetra{0,0,0,0}, R_rxSaida{0,0,0,0}, R_rxPainel{0,0,0,0};
 static bool g_rxLetraOn=false;         // letra ocupando a area principal

@@ -324,7 +324,8 @@ static void RxDrawPainel(Color ab,Color white,Color gray){
     float x=p.X+S(14), w=p.Width-S(28), y=p.Y+S(14);
     gfx::Text(L"TOCANDO AGORA",x,y,S(9.5f),ToGdi(UI().textFaint),true); y+=S(20);
     if(!ct){ gfx::TextRect(L"Nada tocando.",RectF(x,y+S(10),w,S(20)),S(12),gray,false,gfx::Near,true); gfx::PopClip(); return; }
-    RectF art(x,y,w,w);
+    float aw=std::min(w,(float)S(190));   // capa menor: sobra espaço para o artista e a fila
+    RectF art(x+(w-aw)/2,y,aw,aw);
     Color plate=ToGdi(UI().surface);
     if(g_cfg.artShape==L"cd") DrawCoverCircle(g_coverImg,art,ToGdi(UI().borderHi),1.2f,g_player.playing?g_rotation:0);
     else { DrawRoundRect(art,S(UI_R_CARD),&plate,nullptr); if(g_coverImg&&g_coverImg->ok) gfx::DrawImgCover(g_coverImg,art); }
@@ -338,6 +339,24 @@ static void RxDrawPainel(Color ab,Color white,Color gray){
         y+=S(24);
     }
     // a seguir
+    {   // sobre o artista (foto, fãs e quem é parecido) — só com o online ligado
+        desc::Artista ar=desc::SobreArtista(ct->artist,RxAvisarNovidades);
+        if(ar.estado==1&&y+S(92)<p.Y+p.Height){
+            gfx::Text(L"SOBRE O ARTISTA",x,y,S(9.5f),ToGdi(UI().textFaint),true); y+=S(18);
+            float fh=S(64);
+            RectF foto(x,y,fh,fh);
+            RxCapa(foto,ar.capa,L"",true,ToGdi(UI().surface));
+            float tx2=x+fh+S(10);
+            gfx::TextRect(ar.nome,RectF(tx2,y+S(8),w-fh-S(10),S(19)),S(12),white,true,gfx::Near,false,gfx::EllipsisChar);
+            gfx::TextRect(desc::FormataFas(ar.fas),RectF(tx2,y+S(27),w-fh-S(10),S(16)),S(10),gray,false,gfx::Near,false,gfx::EllipsisChar);
+            if(!ar.parecidos.empty()){
+                std::wstring par;
+                for(size_t i=0;i<ar.parecidos.size()&&i<3;i++){ if(!par.empty()) par+=L", "; par+=ar.parecidos[i].titulo; }
+                gfx::TextRect(L"Parecidos: "+par,RectF(tx2,y+S(43),w-fh-S(10),S(16)),S(9.5f),ToGdi(UI().textFaint),false,gfx::Near,false,gfx::EllipsisChar);
+            }
+            y+=fh+S(14);
+        }
+    }
     gfx::Text(L"A SEGUIR",x,y,S(9.5f),ToGdi(UI().textFaint),true); y+=S(18);
     int mostrados=0;
     for(int k=1;k<=4&&mostrados<4;k++){
@@ -447,6 +466,23 @@ static void RxDrawInicio(int w,int h,Color ab,Color white,Color gray){
         desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
         if(!g_rxGenero.empty()) desc::HomeDoGenero(g_rxGenero,home);
         else generos=desc::ListaGeneros();
+    }
+    if(g_rxHeroOk&&R_rxHero.right>R_rxHero.left){   // destaque do topo
+        RectF b=RF(R_rxHero);
+        if(b.Y<main.Y+main.Height&&b.Y+b.Height>main.Y){
+            bool hot=UiHot(R_rxHero);
+            Color bg=ToGdi(hot?UI().surfaceHi:UI().surface);
+            DrawRoundRect(b,S(10),&bg,nullptr);
+            float cv=b.Height;
+            RxCapa(RectF(b.X,b.Y,cv,cv),g_rxHeroItem.capa,L"",g_rxHeroItem.kind==desc::K_ARTISTA,ToGdi(UI().bg));
+            float tx=b.X+cv+S(22), tw=b.Width-(tx-b.X)-S(24);
+            gfx::Text(g_rxHeroFileira.empty()?L"EM DESTAQUE":g_rxHeroFileira,tx,b.Y+S(18),S(9.5f),ab,true);
+            gfx::TextRect(g_rxHeroItem.titulo,RectF(tx,b.Y+S(34),tw,S(34)),S(24),white,true,gfx::Near,false,gfx::EllipsisChar);
+            gfx::TextRect(g_rxHeroItem.sub.empty()?RxNomeTipo(g_rxHeroItem.kind):g_rxHeroItem.sub,RectF(tx,b.Y+S(68),tw,S(20)),S(11),gray,false,gfx::Near,false,gfx::EllipsisChar);
+            RectF bt=RF(R_rxHeroBtn);
+            Color bb=ab; DrawRoundRect(bt,bt.Height/2.f,&bb,nullptr);
+            gfx::TextRect(g_rxHeroItem.kind==desc::K_FAIXA?L"OUVIR AGORA":L"ABRIR",bt,S(11),ToGdi(UI().bg),true,gfx::Center,true);
+        }
     }
     for(const RxAtalho& k:g_rxAtalhos){   // atalhos: capa pequena + nome, em duas colunas
         if(k.r.right<=k.r.left) continue;

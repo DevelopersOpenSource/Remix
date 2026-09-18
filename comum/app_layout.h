@@ -568,6 +568,21 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     if(comGeneros) locais.push_back(-2);
     int nFil=(int)home.fileiras.size()+(int)locais.size();
     int y=(int)R_rxMain.top+SI(46)-g_rxScroll;        // espaco do titulo da pagina
+    R_rxHero={0,0,0,0}; R_rxHeroBtn={0,0,0,0}; g_rxHeroOk=false;
+    if(g_rxPag==RXP_INICIO&&!home.fileiras.empty()&&mw>=SI(520)){
+        // destaque: o primeiro item de "dos artistas que você ouve" ou, na falta, o que está bombando
+        const desc::Shelf* esc=nullptr;
+        for(auto& s:home.fileiras) if(s.chave==L"lancamentos"){ esc=&s; break; }
+        if(!esc) for(auto& s:home.fileiras) if(s.chave==L"chart-faixas"){ esc=&s; break; }
+        if(!esc) esc=&home.fileiras[0];
+        if(!esc->itens.empty()){
+            g_rxHeroItem=esc->itens[0]; g_rxHeroOk=true; g_rxHeroFileira=esc->titulo;
+            int hh=SI(150);
+            R_rxHero={mxL,y,mxR,y+hh};
+            R_rxHeroBtn={mxL+hh+SI(22),y+hh-SI(52),mxL+hh+SI(22)+(int)S(132),y+hh-SI(18)};
+            y+=hh+SI(18);
+        }
+    }
     if(g_rxPag==RXP_INICIO&&!g_rxAtalhos.empty()){
         // grade de atalhos larga (capa pequena + nome), como os players novos fazem
         int acols=mw>=SI(900)?3:(mw>=SI(620)?2:1);

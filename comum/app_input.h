@@ -150,6 +150,7 @@ static int HitTest(int x,int y){
         if(R_rxPainel.right>R_rxPainel.left&&PtIn(R_rxPainel,x,y)) return Z_RX_PAINEL;
         if(R_rxSaida.right>R_rxSaida.left&&PtIn(R_rxSaida,x,y)) return Z_RX_SAIDA;
         for(size_t i=0;i<R_rxLetraLinhas.size()&&i<200;i++) if(PtIn(R_rxLetraLinhas[i],x,y)) return Z_RX_LETRA_LINHA_BASE+(int)i;
+        if(g_rxPag==RXP_INICIO&&R_rxHero.right>R_rxHero.left&&PtIn(R_rxHero,x,y)) return Z_RX_HERO;
         if(g_rxPag==RXP_INICIO&&PtIn(R_rxMain,x,y))
             for(size_t i=0;i<g_rxAtalhos.size()&&i<16;i++) if(g_rxAtalhos[i].r.right>g_rxAtalhos[i].r.left&&PtIn(g_rxAtalhos[i].r,x,y)) return Z_RX_ATALHO_BASE+(int)i;
         if(R_rxTocar.right>R_rxTocar.left&&PtIn(R_rxTocar,x,y)) return Z_RX_TOCAR;
@@ -426,6 +427,7 @@ static void OnLButtonDown(int x,int y){
         if(k.idx>=0&&k.idx<(int)fonte.size()){ std::wstring chave=fonte[(size_t)k.idx].path; RxTocarLocal({chave},0); }
         return;
     }
+    if(id==Z_RX_HERO){ if(g_rxHeroOk) RxAbrirItem(g_rxHeroItem,true); return; }
     if(id==Z_RX_LETRA){ g_rxLetraOn=!g_rxLetraOn; g_rxLetraScroll=0; BuildLayout(); return; }
     if(id==Z_RX_PAINEL){ g_rxPainelOn=!g_rxPainelOn; BuildLayout(); return; }
     if(id==Z_RX_SAIDA){ OpenSaidaMenu((int)R_rxSaida.left-(int)S(240),(int)R_rxSaida.top-(int)S(220)); return; }

@@ -328,6 +328,63 @@ inline std::vector<Item> Generos() {
     return out;
 }
 
+// ------------------------------------------------------- sobre o artista ---
+// Ficha do artista que esta tocando: foto, quantos fas e quem e parecido.
+struct Artista {
+    std::wstring nome, capa, link;
+    long long fas = 0;
+    std::vector<Item> parecidos;
+    int estado = 0;   // 0 = procurando, 1 = achou, 2 = nao achou
+};
+struct ArtEstado { std::mutex m; std::map<std::wstring, Artista> cache; std::map<std::wstring, bool> indo; };
+inline ArtEstado& A() { static ArtEstado* a = new ArtEstado(); return *a; }
+inline std::wstring ArtistaPrincipal(const std::wstring& artista) {
+    std::wstring a = artista; size_t c = a.find_first_of(L",&");
+    if (c != std::wstring::npos) a = a.substr(0, c);
+    while (!a.empty() && a.back() == L' ') a.pop_back();
+    return a;
+}
+inline Artista SobreArtista(const std::wstring& artista, void (*avisar)()) {
+    std::wstring nome = ArtistaPrincipal(artista);
+    Artista vazio; vazio.estado = 2;
+    if (nome.empty()) return vazio;
+    std::wstring k = Min(nome);
+    ArtEstado& a = A();
+    {
+        std::lock_guard<std::mutex> lk(a.m);
+        auto it = a.cache.find(k);
+        if (it != a.cache.end()) return it->second;
+        if (a.indo.count(k)) { Artista p; p.estado = 0; p.nome = nome; return p; }
+        a.indo[k] = true;
+    }
+    std::thread([nome, k, avisar] {
+        ArtEstado& a2 = A();
+        Artista r; r.nome = nome; r.estado = 2;
+        RemixSafe("sobre o artista", [&] {
+            JVal v;
+            if (!HttpJson("https://api.deezer.com/search/artist?limit=1&q=" + OUrlEnc(nome), v)) return;
+            const JVal* d = v.get("data");
+            if (!d || d->t != JVal::ARR || d->a.empty()) return;
+            const JVal& x = d->a[0];
+            Item it = ItemArtista(x);
+            r.capa = DzImg(x, "picture_medium", "picture_big");
+            if (r.capa.empty()) r.capa = it.capa;
+            r.link = it.link;
+            r.fas = (long long)x.num("nb_fan", 0);
+            r.parecidos = DzLista("https://api.deezer.com/artist/" + WideToUtf8(it.id) + "/related?limit=6", K_ARTISTA, 6);
+            r.estado = 1;
+        });
+        { std::lock_guard<std::mutex> lk(a2.m); a2.cache[k] = r; a2.indo.erase(k); }
+        if (avisar) avisar();
+    }).detach();
+    Artista p; p.estado = 0; p.nome = nome; return p;
+}
+inline std::wstring FormataFas(long long n) {
+    if (n >= 1000000) { wchar_t b[32]; swprintf(b, 32, L"%.1f mi de fãs", (double)n / 1000000.0); return b; }
+    if (n >= 1000) return std::to_wstring(n / 1000) + L" mil fãs";
+    return n > 0 ? (std::to_wstring(n) + L" fãs") : L"";
+}
+
 // -------------------------------------------------------------- cache -----
 inline std::wstring CachePath() { return Config::Join(Config::CacheDir(), L"descobrir.cache"); }
 inline void Gravar(const Home& h) {

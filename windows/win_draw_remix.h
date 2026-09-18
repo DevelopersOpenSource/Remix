@@ -333,7 +333,8 @@ static void RxDrawPainel(Graphics& g,const Color& ab,const Color& white,const Co
     REAL x=p.X+S(14), w=p.Width-S(28), y=p.Y+S(14);
     TextAt(g,L"TOCANDO AGORA",x,y,S(9.5f),&fb,true); y+=S(20);
     if(!ct){ TextTrim(g,L"Nada tocando.",RectF(x,y+S(10),w,S(20)),S(12),&gb,false,StringTrimmingEllipsisCharacter,true); g.SetClip(&old); return; }
-    RectF art(x,y,w,w);
+    REAL aw=std::min(w,(REAL)S(190));   // capa menor: sobra espaço para o artista e a fila
+    RectF art(x+(w-aw)/2,y,aw,aw);
     if(g_cfg.artShape==L"cd"){ Pen pn(ToGdi(UI().borderHi),1.2f); DrawCoverCircle(g,g_coverImg,Rect((int)art.X,(int)art.Y,(int)art.Width,(int)art.Height),&pn,g_player.playing?g_rotation:0); }
     else { SolidBrush plate(ToGdi(UI().surface)); DrawRoundRect(g,art,(int)S(UI_R_CARD),&plate,nullptr); if(g_coverImg&&g_coverImg->GetLastStatus()==Ok) DrawImgCover(g,g_coverImg,art); }
     y=art.Y+art.Height+S(12);
@@ -344,6 +345,24 @@ static void RxDrawPainel(Graphics& g,const Color& ab,const Color& white,const Co
         std::wstring de=IsOnlineTrack(*ct)?std::wstring(L"Online"):std::filesystem::path(ct->path).parent_path().filename().wstring();
         TextTrim(g,de+(dur>0?(L"  ·  "+FormatTime((DWORD)dur*1000)):std::wstring()),RectF(x,y,w,S(16)),S(10),&fb,false,StringTrimmingEllipsisCharacter);
         y+=S(24);
+    }
+    {   // sobre o artista (foto, fãs e quem é parecido)
+        desc::Artista ar=desc::SobreArtista(ct->artist,RxAvisarNovidades);
+        if(ar.estado==1&&y+S(92)<p.Y+p.Height){
+            TextAt(g,L"SOBRE O ARTISTA",x,y,S(9.5f),&fb,true); y+=S(18);
+            REAL fh=S(64);
+            RectF foto(x,y,fh,fh);
+            RxCapa(g,foto,ar.capa,L"",true,ToGdi(UI().surface));
+            REAL tx2=x+fh+S(10);
+            TextTrim(g,ar.nome,RectF(tx2,y+S(8),w-fh-S(10),S(19)),S(12),&wb,true,StringTrimmingEllipsisCharacter);
+            TextTrim(g,desc::FormataFas(ar.fas),RectF(tx2,y+S(27),w-fh-S(10),S(16)),S(10),&gb,false,StringTrimmingEllipsisCharacter);
+            if(!ar.parecidos.empty()){
+                std::wstring par;
+                for(size_t i=0;i<ar.parecidos.size()&&i<3;i++){ if(!par.empty()) par+=L", "; par+=ar.parecidos[i].titulo; }
+                TextTrim(g,L"Parecidos: "+par,RectF(tx2,y+S(43),w-fh-S(10),S(16)),S(9.5f),&fb,false,StringTrimmingEllipsisCharacter);
+            }
+            y+=fh+S(14);
+        }
     }
     TextAt(g,L"A SEGUIR",x,y,S(9.5f),&fb,true); y+=S(18);
     int mostrados=0;
@@ -450,6 +469,25 @@ static void RxDrawInicio(Graphics& g,int w,int h,const Color& ab,const Color& wh
         desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
         if(!g_rxGenero.empty()) desc::HomeDoGenero(g_rxGenero,home);
         else generos=desc::ListaGeneros();
+    }
+    if(g_rxHeroOk&&R_rxHero.right>R_rxHero.left){   // destaque do topo
+        RectF b=RF(R_rxHero);
+        if(b.Y<main.Y+main.Height&&b.Y+b.Height>main.Y){
+            bool hot=UiHot(R_rxHero);
+            SolidBrush bg(ToGdi(hot?UI().surfaceHi:UI().surface));
+            DrawRoundRect(g,b,(int)S(10),&bg,nullptr);
+            REAL cv=b.Height;
+            RxCapa(g,RectF(b.X,b.Y,cv,cv),g_rxHeroItem.capa,L"",g_rxHeroItem.kind==desc::K_ARTISTA,ToGdi(UI().bg));
+            REAL tx=b.X+cv+S(22), tw=b.Width-(tx-b.X)-S(24);
+            SolidBrush acc(ab);
+            TextAt(g,g_rxHeroFileira.empty()?std::wstring(L"EM DESTAQUE"):g_rxHeroFileira,tx,b.Y+S(18),S(9.5f),&acc,true);
+            TextTrim(g,g_rxHeroItem.titulo,RectF(tx,b.Y+S(34),tw,S(34)),S(24),&wb,true,StringTrimmingEllipsisCharacter);
+            TextTrim(g,g_rxHeroItem.sub.empty()?std::wstring(RxNomeTipo(g_rxHeroItem.kind)):g_rxHeroItem.sub,RectF(tx,b.Y+S(68),tw,S(20)),S(11),&gb,false,StringTrimmingEllipsisCharacter);
+            RectF bt=RF(R_rxHeroBtn);
+            DrawRoundRect(g,bt,(int)(bt.Height/2.f),&acc,nullptr);
+            SolidBrush btx(ToGdi(UI().bg));
+            TextCenter(g,g_rxHeroItem.kind==desc::K_FAIXA?L"OUVIR AGORA":L"ABRIR",bt,S(11),&btx,true);
+        }
     }
     for(const RxAtalho& k:g_rxAtalhos){   // atalhos: capa pequena + nome, em duas colunas
         if(k.r.right<=k.r.left) continue;
