@@ -121,7 +121,7 @@ static const char* INDEX_HTML = R"~~~(<!doctype html>
           <button id="npNext" class="ib big" type="button" data-ic="next" aria-label="Próxima"></button>
           <button id="npRep" class="ib dot" type="button" data-ic="repeat" aria-label="Repetir: desligado"></button>
         </div>
-        <div class="npFxRow"><button id="npFx" class="npFxBtn" type="button" aria-label="Efeitos e stems"><span data-ic="fx"></span><span id="npFxTxt">Efeitos e stems</span></button></div>
+        <div class="npFxRow"><button id="npFx" class="npFxBtn" type="button" aria-label="Efeitos e stems"><span data-ic="fx"></span><span id="npFxTxt">Efeitos e stems</span></button><button id="npLetra" class="npFxBtn" type="button" aria-label="Letra da música"><span data-ic="lib"></span><span>Letra</span></button></div>
         <div id="npMsg" class="npMsg" role="status" aria-live="polite" hidden></div>
         <div class="npDev"><span data-ic="phone"></span><span id="npDev">Tocando neste celular</span></div>
       </div>
@@ -241,6 +241,11 @@ svg{display:block;width:24px;height:24px;flex:none}
 .art .ini{font-weight:800;line-height:1;text-shadow:0 2px 12px rgba(0,0,0,.25);font-size:22px}
 .art.newPl{background:#2a2a2a;color:var(--tx2)}
 .art.round,.art.round img{border-radius:50%}
+.lyr{padding:4px 2px 10px}
+.lyr b,.lyr span{display:block;padding:9px 12px;border-radius:8px;font-size:15px;line-height:1.35}
+.lyr span{color:var(--tx2);font-weight:500}
+.lyr b{color:#fff;background:rgba(255,255,255,.08);font-weight:700}
+.lyrNote{color:var(--tx3);font-size:12px;padding:6px 12px}
 .s44{width:44px;height:44px}
 .s48{width:48px;height:48px}
 .s56{width:56px;height:56px}
@@ -783,7 +788,7 @@ function sheet(build){
   else{try{box.focus({preventScroll:true});}catch(e){}}
 }
 function closeSheetNow(){
-  SH.open=false;const wrap=$('sheetWrap');wrap.classList.remove('open');updLock();
+  SH.open=false;LYR.aberta=false;const wrap=$('sheetWrap');wrap.classList.remove('open');updLock();
   setTimeout(()=>{if(!SH.open){wrap.hidden=true;clear($('sheet'));}},280);
 }
 const closeSheet=()=>closeL('sheet');
@@ -1015,6 +1020,66 @@ async function loadDesc(force){
 function novCard(it){
   return h('button',{class:'card',type:'button',onclick:()=>abrirNov(it)},
     art(it,'c140',{round:it.k===3}),h('span',{class:'cT',text:it.t}),h('span',{class:'cS',text:it.s||TIPO[it.k]||''}));
+}
+// Procurar playlists ou álbuns prontos (o PC consulta o catálogo público).
+const LST={tipo:0,busy:false,itens:[],q:'',err:''};
+async function buscarListas(){
+  const q=(S.sq.q||'').trim();
+  if(!q||LST.tipo===0)return;
+  LST.busy=true;LST.err='';LST.itens=[];renderResults();
+  try{
+    const j=await api('/api/online/listas',{q,tipo:LST.tipo});
+    LST.itens=arr(j.itens).slice(0,24).map(i=>({t:str(i.t,120),s:str(i.s,120),c:str(i.c,32),l:str(i.l,300),k:+i.k||2,dc:1}));
+    LST.q=q;
+  }catch(e){LST.err=(e&&e.message)||'Algo deu errado.';}
+  LST.busy=false;renderResults();
+}
+// Letra: o PC busca (LRCLIB) e guarda; aqui só mostramos acompanhando o tempo.
+const LYR={id:'',estado:0,sync:false,linhas:[],texto:'',fonte:'',pedindo:false,aberta:false};
+async function carregarLetra(id){
+  if(!id||LYR.pedindo)return;
+  if(LYR.id===id&&LYR.estado!==0)return;
+  LYR.pedindo=true;
+  try{
+    const j=await api('/api/letra',{id});
+    LYR.id=id;LYR.estado=+j.estado||0;LYR.sync=!!j.sync;LYR.fonte=str(j.fonte,60);
+    LYR.linhas=arr(j.linhas).slice(0,400).map(x=>({ms:+x.ms||0,t:str(x.t,200)}));
+    LYR.texto=str(j.texto,20000);
+  }catch(e){LYR.estado=2;LYR.id=id;}
+  LYR.pedindo=false;
+  if(LYR.aberta)pintaLetra();
+  if(LYR.estado===0)setTimeout(()=>{LYR.id='';carregarLetra(id);},2500);
+}
+function pintaLetra(){
+  const box=$('lyrBox');if(!box)return;
+  clear(box);
+  if(LYR.estado===0){box.appendChild(h('p',{class:'lyrNote',text:'O PC está procurando a letra...'}));return;}
+  if(LYR.estado===2){box.appendChild(h('p',{class:'lyrNote',text:'Não achei a letra desta música. O PC procura no LRCLIB pelo nome, artista e duração.'}));return;}
+  if(!LYR.sync){
+    LYR.texto.split('\n').forEach(l=>box.appendChild(h('span',{text:l||' '})));
+    box.appendChild(h('p',{class:'lyrNote',text:(LYR.fonte||'LRCLIB')+' · sem marcação de tempo'}));
+    return;
+  }
+  const pos=Math.round(curTime()*1000);
+  let at=-1;
+  for(let i=0;i<LYR.linhas.length;i++){if(LYR.linhas[i].ms<=pos)at=i;else break;}
+  LYR.linhas.forEach((l,i)=>{
+    const el=h(i===at?'b':'span',{text:l.t||'♪'});
+    el.addEventListener('click',()=>seek(Math.max(0,l.ms/1000)));
+    box.appendChild(el);
+    if(i===at){const sc=box.parentElement;if(sc)sc.scrollTop=Math.max(0,el.offsetTop-sc.clientHeight/2);}
+  });
+  box.appendChild(h('p',{class:'lyrNote',text:(LYR.fonte||'LRCLIB')+' · toque numa linha para pular'}));
+}
+function abrirLetra(){
+  if(!S.cur){toast('Toque uma música primeiro.');return;}
+  LYR.aberta=true;
+  sheet(box=>{
+    box.appendChild(shHead('Letra',S.cur.t+' · '+(S.cur.a||''),art(S.cur,'s64')));
+    box.appendChild(h('div',{id:'lyrBox',class:'lyr'}));
+  });
+  carregarLetra(S.cur.id);
+  pintaLetra();
 }
 async function abrirNov(it){
   if(it.k===0){   // música: o PC resolve o link e já toca
@@ -1285,11 +1350,17 @@ function renderSearch(){
   }
   v.appendChild(chips);
   if(on){
+    const tp=h('div',{class:'chips sub','aria-label':'O que procurar'});
+    [['Músicas',0],['Playlists',1],['Álbuns',2]].forEach(([n,i])=>tp.appendChild(h('button',{class:'chip'+(LST.tipo===i?' on':''),type:'button','aria-pressed':String(LST.tipo===i),text:n,
+      onclick:()=>{if(LST.tipo===i)return;LST.tipo=i;LST.itens=[];LST.q='';renderSearch();if(i&&(S.sq.q||'').trim())buscarListas();}})));
+    v.appendChild(tp);
+  }
+  if(on&&LST.tipo===0){
     const f=h('div',{class:'chips sub','aria-label':'Fonte'});
     FONTES.forEach((n,i)=>f.appendChild(h('button',{class:'chip'+(S.sq.fonte===i?' on':''),type:'button','aria-pressed':String(S.sq.fonte===i),text:n,
       onclick:()=>{if(S.sq.fonte===i)return;S.sq.fonte=i;LS.set('fonte',i);const again=(!!S.sq.done||S.sq.busy)&&!!S.sq.q.trim();renderSearch();if(again)searchOnline();}})));
     v.appendChild(f);
-    v.appendChild(h('div',{class:'sGo'},h('button',{id:'sGoBtn',class:'btnP',type:'button',text:S.sq.busy?(isLink(S.sq.q)?'Abrindo o link...':'Buscando...'):(isLink(S.sq.q)?'Abrir link':'Buscar'),onclick:searchOnline})));
+    v.appendChild(h('div',{class:'sGo'},h('button',{id:'sGoBtn',class:'btnP',type:'button',text:S.sq.busy?(isLink(S.sq.q)?'Abrindo o link...':'Buscando...'):(isLink(S.sq.q)?'Abrir link':'Buscar'),onclick:()=>{if(LST.tipo)buscarListas();else searchOnline();}})));
     if(isLink(S.sq.q))v.appendChild(h('p',{class:'resInfo',text:'Link reconhecido: o PC abre a playlist ou o álbum e você salva no seu aparelho.'}));
   }
   v.appendChild(h('div',{id:'sRes'}));
@@ -1301,6 +1372,16 @@ function renderResults(){
   clear(box);
   const b=$('sGoBtn');if(b){const lk=isLink(S.sq.q);b.textContent=S.sq.busy?(lk?'Abrindo o link...':'Buscando...'):(lk?'Abrir link':'Buscar');b.disabled=S.sq.busy;}
   const q=S.sq.q.trim();
+  if(S.sq.mode==='online'&&LST.tipo!==0){
+    if(LST.busy){box.appendChild(h('div',{class:'loading',role:'status'},h('div',{class:'spin'}),h('p',{text:'O PC está procurando...'})));return;}
+    if(LST.err){box.appendChild(emptyBox('globe','Não deu para procurar',LST.err,[['Tentar de novo',buscarListas]]));return;}
+    if(!LST.q){box.appendChild(emptyBox('globe',LST.tipo===1?'Procurar playlists':'Procurar álbuns','Digite o nome e toque em Buscar: o PC procura no catálogo e você abre a lista aqui mesmo, sem sair do app.'));return;}
+    if(!LST.itens.length){box.appendChild(emptyBox('search','Nada encontrado','Nenhum resultado para “'+LST.q+'”.'));return;}
+    const lb=h('div',{class:'tlist'});box.appendChild(lb);
+    LST.itens.forEach(it=>lb.appendChild(h('button',{class:'prow',type:'button',onclick:()=>{LST.tipo=0;S.sq.q=it.l;renderSearch();openLinkOnline(it.l);}},
+      art(it,'s64'),h('span',{class:'pTx'},h('span',{class:'pn',text:it.t}),h('span',{class:'ps',text:it.s||(it.k===1?'Playlist':'Álbum')})))));
+    return;
+  }
   if(S.sq.mode==='online'){
     if(S.sq.busy){box.appendChild(h('div',{class:'loading',role:'status'},h('div',{class:'spin'}),h('p',{text:isLink(S.sq.q)?'O PC está abrindo o link... playlist grande pode levar um tempo.':'O PC está buscando em '+FONTES[S.sq.fonte]+'... pode levar alguns segundos.'})));return;}
     if(S.sq.err){box.appendChild(emptyBox('globe','Não deu para buscar',S.sq.err,[['Tentar de novo',searchOnline]]));return;}
@@ -1962,6 +2043,7 @@ function updTime(){
   const sk=$('npSeek');sk.disabled=!S.cur||!d;
   if(!NP.drag){sk.value=String(Math.round(p*1000));sk.style.setProperty('--p',(p*100).toFixed(2)+'%');$('npPos').textContent=fmt(d?Math.min(c,d):c);}
   $('npLen').textContent=d?fmt(d):'--:--';
+  if(LYR.aberta&&LYR.sync)pintaLetra();   // a letra acompanha a música
   posState(false);saveSess();
 }
 let posT=0;
@@ -2164,6 +2246,7 @@ function init(){
   $('npShuf').addEventListener('click',()=>setShuffle(!S.shuffle));
   $('npRep').addEventListener('click',cycleRepeat);
   $('npFx').addEventListener('click',fxSheet);
+  $('npLetra').addEventListener('click',abrirLetra);
   updFxBtn();
   // Barra de posicao: no iOS o range so arrasta se o dedo comecar em cima do polegar e tocar na trilha nao
   // faz nada. A area inteira (barra + tempos) vira a pista: tocar pula para o ponto, arrastar acompanha.

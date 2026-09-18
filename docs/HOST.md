@@ -178,6 +178,13 @@ o estado do host.
 
 ## O que mudou na 1.6
 
+- **Letra da música no celular**: no player, botão **Letra**. O PC procura no LRCLIB (banco
+  público, sem conta) e guarda no disco para sempre; quando existe versão sincronizada, a linha
+  atual fica em destaque e tocar numa linha pula para aquele ponto (`POST /api/letra`).
+- **Procurar playlists e álbuns prontos**: na aba Buscar > Online, as opções **Playlists** e
+  **Álbuns** procuram no catálogo público e abrem a lista ali mesmo, com Tocar tudo e Salvar como
+  playlist (`POST /api/online/listas`). Não precisa mais sair do app para achar uma playlist.
+
 - **Início com novidades**: o celular mostra as mesmas fileiras do PC (o melhor do artista que
   você ouve, parecidos, álbuns recentes, bombando, playlists da semana, álbuns e artistas em
   alta), abaixo da biblioteca e das playlists. Detalhes em [DESCOBRIR.md](DESCOBRIR.md).

@@ -17,6 +17,8 @@
 //     atravessa CGNAT e nao entrega IP nem localizacao; o link so aparece depois de testado.
 #include "host_net.h"
 #include "host_web.h"
+#include "descobrir.h"   // novidades e busca de playlists/albuns para o celular
+#include "letras.h"      // letra sincronizada para o celular
 #include "qrcode.h"
 #include "stems.h"
 #include "app_proc.h"
@@ -1232,6 +1234,47 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
         }
         int dsec = 0; { std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f != s.onl.end()) dsec = f->second.dur; }
         ServeStream(c, r, dev, id, t, fx, true, L"", dsec); return;
+    }
+    if (P == "/api/online/listas") {   // celular procura playlists ou albuns prontos (catalogo publico do Deezer)
+        if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }
+        { std::lock_guard<std::mutex> lk(s.m); if (!s.opt.onlineOk) { SendErr(c, 403, "online_desligado"); return; } }
+        std::wstring q = Utf8ToWide(JGet(r.body, "q"));
+        while (!q.empty() && (q.back() == L' ' || q.back() == L'\n' || q.back() == L'\r')) q.pop_back();
+        if (q.empty() || q.size() > 120) { SendErr(c, 400, "busca"); return; }
+        int tipo = atoi(JGet(r.body, "tipo").c_str());
+        { std::lock_guard<std::mutex> lk(s.m); if (s.searching[dev.id] >= 1 || s.searchingAll >= 3) { SendErr(c, 429, "buscando"); return; } s.searching[dev.id]++; s.searchingAll++; }
+        struct Done { std::string d; ~Done() { std::lock_guard<std::mutex> lk(St().m); if (--St().searching[d] <= 0) St().searching.erase(d); St().searchingAll--; } } done{ dev.id };
+        hostnet::SetTimeout(c, 60000);
+        std::vector<desc::Item> v = (tipo == 2) ? desc::BuscarAlbuns(q, 24) : desc::BuscarPlaylists(q, 24);
+        std::string o = "{\"itens\":[";
+        bool p1 = true;
+        for (auto& it : v) {
+            if (!p1) o += ","; p1 = false;
+            std::string cid;
+            if (AllowedThumbUrl(it.capa)) { cid = DescCapaId(it.capa); std::lock_guard<std::mutex> lk(s.m); s.descCapas[cid] = it.capa; }
+            o += "{\"t\":" + JStr(it.titulo) + ",\"s\":" + JStr(it.sub) + ",\"c\":" + JStrA(cid) + ",\"l\":" + JStr(it.link) + ",\"k\":" + std::to_string((int)it.kind) + "}";
+        }
+        o += "]}";
+        SendJson(c, 200, o); return;
+    }
+    if (P == "/api/letra") {   // letra da musica que o celular esta ouvindo (LRCLIB, guardada no PC)
+        if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }
+        std::string id = JGet(r.body, "id");
+        if (!IsId(id)) { SendErr(c, 404, "faixa"); return; }
+        std::wstring titulo, artista, chave; int dur = 0;
+        {
+            std::lock_guard<std::mutex> lk(s.m);
+            if (!CanSee(dev, id)) { SendErr(c, 404, "faixa"); return; }
+            auto bi = s.byId.find(id);
+            if (bi != s.byId.end()) { const HTrack& t = s.tracks[bi->second]; titulo = t.title; artista = t.artist; chave = t.path; dur = t.dur; }
+            else { auto oi = s.onl.find(id); if (oi == s.onl.end()) { SendErr(c, 404, "faixa"); return; } titulo = oi->second.title; artista = oi->second.artist; chave = oi->second.url; dur = oi->second.dur; }
+        }
+        letra::Letra L = letra::Para(chave, titulo, artista, dur, nullptr);
+        std::string o = "{\"estado\":" + std::to_string(L.estado) + ",\"sync\":" + (L.sync ? "1" : "0") + ",\"fonte\":" + JStr(L.fonte) + ",\"linhas\":[";
+        bool p1 = true;
+        if (L.sync) for (auto& ln : L.linhas) { if (!p1) o += ","; p1 = false; o += "{\"ms\":" + std::to_string(ln.ms) + ",\"t\":" + JStr(ln.txt) + "}"; }
+        o += "],\"texto\":" + JStr(L.sync ? std::wstring() : L.texto) + "}";
+        SendJson(c, 200, o); return;
     }
     if (P == "/api/online/link") {   // celular cola um link de playlist/album (Spotify, YouTube, Deezer, Apple, SoundCloud)
         if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }
