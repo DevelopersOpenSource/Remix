@@ -14,7 +14,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$ROOT"
-VER="${REMIX_VERSION:-1.5.6}"
+VER="${REMIX_VERSION:-1.6.0}"
 TC="${REMIX_WIN_TOOLCHAIN:-mingw}"
 mkdir -p build/win dist/windows
 LIBS=(-lgdiplus -lshell32 -lcomdlg32 -lole32 -luuid -lwinmm -lwinhttp -ldwmapi -lws2_32 -liphlpapi -lcrypt32)   # ws2_32/iphlpapi: Host; crypt32: token do Discord (DPAPI)

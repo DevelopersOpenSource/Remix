@@ -349,6 +349,9 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     R_rxTop={0,0,w,topH};
     int sideW = w>=SI(1040)?SI(250) : (w>=SI(840)?SI(206) : 0);
     g_sideW=sideW;
+    // Janela estreita: sem lateral nao teria como navegar, entao volta a barra de
+    // abas MUSICAS/PLAYLISTS/ONLINE da biblioteca.
+    if(!sideW&&g_rxPag!=RXP_LISTA) g_rxPag=RXP_LISTA;
     R_rxSide = sideW? RECT{0,topH,sideW,h-barH} : RECT{0,0,0,0};
     R_rxBar={0,h-barH,w,h};
     int mx = sideW? sideW+gap : gap;
@@ -365,9 +368,10 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     if(g_rxPag==RXP_LISTA){ pilula(R_folderBtn,g_view==2?160.f:100.f); pilula(R_sortBtn,160); }
     else { R_folderBtn={0,0,0,0}; R_sortBtn={0,0,0,0}; }
     R_shapeTgl={0,0,0,0}; R_autoTgl={0,0,0,0};
-    {   // busca do topo: e a busca da biblioteca (o mesmo texto e o mesmo X)
+    {   // busca do topo: e a busca da biblioteca (o mesmo texto e o mesmo X).
+        // Sem lateral a busca volta para a barra de abas, para nao aparecer duas vezes.
         int bw2=std::min((int)S(420),rx-SI(12)-bx);
-        if(bw2>=SI(150)){ R_searchBox={bx,SI(10),bx+bw2,SI(46)}; R_searchClear={R_searchBox.right-SI(34),SI(10),R_searchBox.right,SI(46)}; }
+        if(sideW&&bw2>=SI(150)){ R_searchBox={bx,SI(10),bx+bw2,SI(46)}; R_searchClear={R_searchBox.right-SI(34),SI(10),R_searchBox.right,SI(46)}; }
         else { R_searchBox={0,0,0,0}; R_searchClear={0,0,0,0}; }
     }
     // ---- barra lateral: Início / Descobrir / Sua biblioteca + playlists
@@ -410,6 +414,7 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     if(g_rxPag==RXP_LISTA){
         // cabecalho da pagina: nome da lista, quantas musicas e os botoes de tocar
         int cabH=SI(74);
+        if(!sideW){ BuildLibraryArea((int)R_rxMain.left,(int)R_rxMain.top,(int)R_rxMain.right,(int)R_rxMain.bottom,true); return; }
         if(!g_pickMode&&R_rxMain.bottom-R_rxMain.top>cabH+SI(120)){
             R_rxCab={(int)R_rxMain.left,(int)R_rxMain.top+SI(6),(int)R_rxMain.right,(int)R_rxMain.top+SI(6)+cabH};
             int by=(int)R_rxCab.top+SI(26), bw2=(int)S(112);

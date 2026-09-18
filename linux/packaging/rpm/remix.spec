@@ -9,7 +9,7 @@
 %global __brp_check_rpaths %{nil}
 
 Name:           remix
-Version:        %{?remix_version}%{!?remix_version:1.5.6}
+Version:        %{?remix_version}%{!?remix_version:1.6.0}
 Release:        %{?remix_release}%{!?remix_release:1}%{?dist}
 Summary:        Remix Player — player de música MP3/WAV com visual neon
 License:        Apache-2.0 AND zlib AND MIT AND Bitstream-Vera
@@ -54,6 +54,13 @@ cp -a usr %{buildroot}/
 %doc %{_docdir}/%{name}/
 
 %changelog
+* Fri Sep 18 2026 DevelopersOpenSource <103298328+NinjaZinS2@users.noreply.github.com> - 1.6.0-1
+- Estilo REMIX: barra lateral com a biblioteca, tela inicial com novidades e o
+  player numa barra embaixo (substitui os estilos Limpo e Spotify + LED)
+- Descobrir: gêneros e paradas (API pública do Deezer), recomendações pelo que
+  você ouve, e as mesmas fileiras no celular
+- O vínculo do celular passou a ficar no PC (chave permanente por aparelho)
+
 * Thu Sep 17 2026 EchoGroupStudio <103298328+NinjaZinS2@users.noreply.github.com> - 1.5.6-1
 - Soundpad: sons no microfone (microfone virtual Remix Microfone no PipeWire/PulseAudio, VB-CABLE no Windows); bot de musica do Discord do dono com fila, votacao, cargo DJ, playlists liberadas e botao DISCORD em cima da capa (Node.js 22.12+)
 

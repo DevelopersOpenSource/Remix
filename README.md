@@ -109,7 +109,8 @@ inside the `.zip`) and that your antivirus did not quarantine it.
   latency compensated (before it read 50 ms ahead and drifted up to 4% over a song).
 
 **Look and feel**
-- Three interface styles (Settings > INTERFACE STYLE): **Classic** (the original look: theme-colored outlines, LED glow, transport on every card), **Clean** (neutral grays, flat surfaces, theme color only on what is playing, no LED) and **Spotify + LED** (Clean with the LED glow and light runner on). The choice is saved as `Style=` in config.ini.
+- Two interface styles (Settings > INTERFACE STYLE): **Classic** (the original look: theme-colored outlines, LED glow, transport on every card) and **REMIX** (1.6, replacing the old Clean and Spotify + LED): sidebar with Home / Discover / Your library and your playlists, search in the top bar, and the player in a full-width bar at the bottom. The choice is saved as `Style=` in config.ini.
+- Home screen with what is new (1.6): rows built from what you actually listen to ("Best of <artist>", "Similar to <artist>", "From the artists you listen to") next to the country charts, week playlists, hot albums and artists; **Discover** browses by genre. Metadata comes from Deezer's public API (no login, no key); playback still goes through Remix's own online engine (yt-dlp), so you get the full song. Your listening profile stays on your PC (`gostos.ini`).
 - Square, CD or compact vertical layout; grid or list; themes; LED glow, particles and glitch effects (with a light mode for slower PCs); 8-band equalizer.
 
 **Desktop integration**

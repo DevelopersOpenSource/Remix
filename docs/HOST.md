@@ -176,6 +176,17 @@ o estado do host.
   (`LayoutHostPanel`/`DrawHostPanel` nas duas cascas), copiar link
   (`PlatformSetClipboardText`).
 
+## O que mudou na 1.6
+
+- **Início com novidades**: o celular mostra as mesmas fileiras do PC (o melhor do artista que
+  você ouve, parecidos, álbuns recentes, bombando, playlists da semana, álbuns e artistas em
+  alta), abaixo da biblioteca e das playlists. Detalhes em [DESCOBRIR.md](DESCOBRIR.md).
+  - `GET /api/descobrir`: as fileiras já montadas (só com o online ligado).
+  - `GET /api/desccapa/<id>`: a capa. O PC baixa e guarda; o celular nunca fala com a internet
+    direto (o CSP da página só deixa carregar imagem do próprio PC).
+  - Tocar um cartão de música resolve o link no PC e põe na fila; álbum, playlist ou artista
+    abre na aba Buscar, com TOCAR TUDO e SALVAR COMO PLAYLIST.
+
 ## O que mudou na 1.5.6
 
 - **Corrigido: a música voltava para o começo no meio do streaming** (com o relógio parado no tempo

@@ -33,12 +33,19 @@ Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na 
 
 ## Interface
 
-- **Estilo da interface** (1.3, Configuracoes > ESTILO DA INTERFACE): **Classico** (o visual
-  original, com contorno da cor do tema, LED e transporte em cada card), **Limpo** (cinza neutro,
-  superficies lisas encostadas na janela, a cor do tema so no que esta tocando, sem LED) e
-  **Spotify + LED** (o Limpo com o LED e o corredor de luz ligados). Nos estilos novos o card
-  mostra capa grande, nome e artista; o play aparece sobre a capa ao passar o mouse e o
-  transporte fica so no player. A escolha vale para Windows e Linux (`Style=` no config.ini).
+- **Estilo da interface** (Configuracoes > ESTILO DA INTERFACE): **Classico** (o visual
+  original, com contorno da cor do tema, LED e transporte em cada card) e **REMIX** (1.6; no lugar
+  dos antigos Limpo e Spotify + LED). O REMIX muda a tela inteira: barra lateral com Inicio,
+  Descobrir, Sua biblioteca, + NOVA PLAYLIST e a lista de playlists; busca na barra de cima;
+  area principal com a tela inicial de novidades ou a grade/lista da biblioteca; e o player numa
+  barra embaixo, da largura toda (capa, titulo, transporte, tempo e volume). A escolha vale para
+  Windows e Linux (`Style=` no config.ini).
+- **Tela inicial com novidades** (1.6): fileiras montadas pelo que voce ouve — "O melhor de
+  <artista>", "Parecido com <artista>", "Dos artistas que voce ouve" — junto com "Bombando agora",
+  "Playlists da semana", "Albuns em alta" e "Artistas do momento". Em **Descobrir** da para
+  navegar por genero e ver as paradas de cada estilo. Tudo vem da API publica do Deezer (sem
+  login e sem chave) e so traz metadados: quem toca e baixa continua sendo o motor online do
+  Remix (yt-dlp), entao vem a musica inteira. O que voce ouve fica em `gostos.ini`, so no seu PC.
 - Modo **normal** redesenhado seguindo a referencia enviada: painel superior com Quadrado/CD e temas, seguido por cards de musica em grade.
 - Modo **vertical** minimalista, focado somente na musica, com CD/capa menor, onda, seek, controles e engrenagem.
 - O modo vertical pode voltar para **Quadrado** ou **CD** em Configuracoes.

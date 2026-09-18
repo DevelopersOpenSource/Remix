@@ -196,7 +196,7 @@ static void DiagInit(bool forceSafe) {
     SYSTEMTIME st; GetLocalTime(&st);
     wchar_t exe[MAX_PATH] = L""; GetModuleFileNameW(NULL, exe, MAX_PATH);
     HDC hdc = GetDC(NULL); int dpi = hdc ? GetDeviceCaps(hdc, LOGPIXELSX) : 0; if (hdc) ReleaseDC(NULL, hdc);
-    DiagLine("Remix Player 1.5.6 (Windows) - log de diagnostico");
+    DiagLine("Remix Player 1.6.0 beta (Windows) - log de diagnostico");
     {   // id do build (carimbo do cabecalho PE): o linux/traduzir-log-windows.sh acha o Remix-sym.exe certo por ele
         HMODULE self = GetModuleHandleW(NULL); DWORD stamp = 0;
         if (self) stamp = ((IMAGE_NT_HEADERS*)((BYTE*)self + ((IMAGE_DOS_HEADER*)self)->e_lfanew))->FileHeader.TimeDateStamp;
