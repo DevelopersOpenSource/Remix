@@ -503,7 +503,7 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         int mostra = std::min(total,linhas*cols);
         RxFila fl; fl.fonte=fonte;
         fl.head={mxL,y,mxR,y+SI(30)};
-        if(total>cols&&!todos) fl.verTudo={mxR-(int)S(110),y,mxR,y+SI(28)};
+        if(total>cols&&!todos) fl.verTudo={mxR-(int)S(110)-SI(10),y,mxR-SI(10),y+SI(28)};   // deixa a barrinha de rolagem livre
         g_rxFilas.push_back(fl);
         int fi=(int)g_rxFilas.size()-1;   // fileira vazia nao entra: o cartao guarda a posicao real
         int cy=y+SI(38);

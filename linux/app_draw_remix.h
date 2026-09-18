@@ -324,6 +324,15 @@ static void RxDrawInicio(int w,int h,Color ab,Color white,Color gray){
         std::wstring msg=bus?L"Buscando...":L"Sem novidades agora. Toque alguma música e volte aqui.";
         gfx::TextRect(msg,RectF(main.X,main.Y+S(90),main.Width,S(30)),S(13),gray,false,gfx::Near,true);
     }
+    {   // barrinha de rolagem discreta (so quando tem mais coisa para baixo)
+        int vis=(int)(main.Height);
+        if(g_rxContentH>vis+4){
+            float fr=(float)vis/(float)g_rxContentH, alt=std::max(S(30),main.Height*fr);
+            float pos=main.Y+(main.Height-alt)*((float)g_rxScroll/(float)std::max(1,g_rxContentH-vis));
+            Color sb=Argb(90,255,255,255);
+            DrawRoundRect(RectF(main.X+main.Width-S(5),pos,S(3),alt),S(2),&sb,nullptr);
+        }
+    }
     gfx::PopClip();
     RxBaixarCapasPendentes();
 }

@@ -333,6 +333,15 @@ static void RxDrawInicio(Graphics& g,int w,int h,const Color& ab,const Color& wh
         std::wstring msg=bus?L"Buscando...":L"Sem novidades agora. Toque alguma música e volte aqui.";
         TextTrim(g,msg,RectF(main.X,main.Y+S(90),main.Width,S(30)),S(13),&gb,false,StringTrimmingEllipsisCharacter,true);
     }
+    {   // barrinha de rolagem discreta (so quando tem mais coisa para baixo)
+        REAL vis=main.Height;
+        if((REAL)g_rxContentH>vis+4){
+            REAL fr=vis/(REAL)g_rxContentH, alt=std::max((REAL)S(30),main.Height*fr);
+            REAL pos=main.Y+(main.Height-alt)*((REAL)g_rxScroll/(REAL)std::max(1,g_rxContentH-(int)vis));
+            SolidBrush sb(Color(90,255,255,255));
+            DrawRoundRect(g,RectF(main.X+main.Width-S(5),pos,S(3),alt),(int)S(2),&sb,nullptr);
+        }
+    }
     g.SetClip(&old);
     RxBaixarCapasPendentes();
 }
