@@ -177,6 +177,32 @@ inline std::vector<std::wstring> MaisTocadas(int n) {
     for (auto& x : v) { if ((int)out.size() >= n) break; out.push_back(x.second); }
     return out;
 }
+// Peso de um artista no perfil (0 = nunca ouviu). Usado pela mistura do dia.
+inline double PesoArtista(const std::wstring& artista) {
+    if (artista.empty()) return 0;
+    CarregarPerfil();
+    std::wstring a = artista; size_t corte = a.find_first_of(L",&");
+    std::wstring primeiro = corte == std::wstring::npos ? a : a.substr(0, corte);
+    while (!primeiro.empty() && primeiro.back() == L' ') primeiro.pop_back();
+    Perfil& p = P(); std::lock_guard<std::mutex> lk(p.m);
+    auto it = p.artistas.find(Min(primeiro));
+    if (it == p.artistas.end()) return 0;
+    long long dias = (Agora() - it->second.ultimo) / 86400; if (dias < 0) dias = 0;
+    return it->second.peso * (1.0 + 2.0 / (1.0 + (double)dias));
+}
+inline double PesoFaixa(const std::wstring& chave) {
+    CarregarPerfil();
+    Perfil& p = P(); std::lock_guard<std::mutex> lk(p.m);
+    auto it = p.faixas.find(chave);
+    return it == p.faixas.end() ? 0 : it->second.peso;
+}
+// Sorteio estavel do dia: a mesma mistura durante o dia, outra amanha.
+inline double SorteioDoDia(const std::wstring& chave) {
+    unsigned long long dia = (unsigned long long)(Agora() / 86400);
+    unsigned long long x = 1469598103934665603ULL ^ dia;
+    for (wchar_t c : chave) { x ^= (unsigned long long)c; x *= 1099511628211ULL; }
+    return (double)((x >> 11) % 1000) / 1000.0;
+}
 // Artistas favoritos, do mais forte para o mais fraco (quem tocou faz pouco vale mais).
 inline std::vector<std::wstring> TopArtistas(int n) {
     CarregarPerfil();

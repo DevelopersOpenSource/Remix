@@ -156,9 +156,9 @@ static bool RunMenuAction(int kind,int act,int arg){
 // ---- estilo REMIX: cartoes da tela inicial ---------------------------------------------------
 // Os quadradinhos do "Início" vem do descobrir (so metadados). Tocar uma musica
 // passa pelo mesmo motor online de sempre (yt-dlp), entao vem a musica inteira.
-static void RxTocarRecente(size_t i){
-    if(i>=g_rxRecentesChave.size()) return;
-    std::wstring chave=g_rxRecentesChave[i];
+static void RxTocarLocal(const std::vector<std::wstring>& chaves,size_t i){
+    if(i>=chaves.size()) return;
+    std::wstring chave=chaves[i];
     if(g_view!=0) EnterLibraryView();
     for(size_t k=0;k<g_tracks.size();k++) if(g_tracks[k].path==chave){ PlayIndex((int)k,true); return; }
     SetStatus(L"Essa música não está mais na biblioteca.",2500);
@@ -194,7 +194,8 @@ static void RxClicarCard(size_t ci,bool tocar){
         desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
         BuildLayout(); return;
     }
-    if(fonte==-1){ RxTocarRecente((size_t)k.item); return; }
+    if(fonte==-1){ RxTocarLocal(g_rxRecentesChave,(size_t)k.item); return; }
+    if(fonte==-3){ RxTocarLocal(g_rxMisturaChave,(size_t)k.item); return; }
     desc::Home h;
     if(g_rxPag==RXP_DESCOBRIR){ if(!desc::HomeDoGenero(g_rxGenero,h)) return; }
     else h=desc::Copia();

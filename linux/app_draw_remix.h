@@ -264,6 +264,7 @@ static void RxDrawInicio(int w,int h,Color ab,Color white,Color gray){
         std::wstring titulo,nota;
         if(fl.fonte==-1){ titulo=L"Tocados recentemente"; nota=L"volte de onde parou"; }
         else if(fl.fonte==-2){ titulo=L"Explorar por gênero"; nota=L"as paradas de cada estilo"; }
+        else if(fl.fonte==-3){ titulo=L"Sua mistura"; nota=L"do seu jeito, muda todo dia"; }
         else if((size_t)fl.fonte<home.fileiras.size()){ titulo=home.fileiras[(size_t)fl.fonte].titulo; nota=home.fileiras[(size_t)fl.fonte].nota; }
         RectF hr=RF(fl.head);
         if(hr.Y<main.Y+main.Height&&hr.Y+S(40)>main.Y){
@@ -293,10 +294,11 @@ static void RxDrawInicio(int w,int h,Color ab,Color white,Color gray){
             gfx::TextRect(gI.titulo,RectF(art.X+S(8),art.Y+art.Height-S(34),art.Width-S(16),S(26)),S(13),white,true,gfx::Near,true,gfx::EllipsisChar);
             continue;
         }
-        if(fl.fonte==-1){
-            if((size_t)k.item>=g_rxRecentes.size()) continue;
+        if(fl.fonte==-1||fl.fonte==-3){
+            const std::vector<int>& lista=(fl.fonte==-3)?g_rxMistura:g_rxRecentes;
+            if((size_t)k.item>=lista.size()) continue;
             const std::vector<Track>& fonteT=(g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks;
-            int ti=g_rxRecentes[(size_t)k.item]; if(ti<0||ti>=(int)fonteT.size()) continue;
+            int ti=lista[(size_t)k.item]; if(ti<0||ti>=(int)fonteT.size()) continue;
             const Track* t=&fonteT[(size_t)ti];
             nome=t->title; sub=t->artist.empty()?L"Música":t->artist; capaLocal=t->coverPath;
             redondo=(g_cfg.artShape==L"cd");

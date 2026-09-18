@@ -287,6 +287,8 @@ static std::vector<RxFila> g_rxFilas;
 static std::vector<int> g_rxAbertas;       // fileiras expandidas ("ver tudo")
 static std::vector<int> g_rxRecentes;             // "tocados recentemente": indices na lista em tela
 static std::vector<std::wstring> g_rxRecentesChave;   // ...e o caminho/URL de cada um
+static std::vector<int> g_rxMistura;               // "Sua mistura": faixas escolhidas pelo seu gosto
+static std::vector<std::wstring> g_rxMisturaChave;
 static bool RxOn(){ return g_cfg.uiStyle!=UI_CLASSICO; }
 // Novidades/generos chegam de uma thread: a tela precisa refazer o layout (as
 // fileiras mudam de tamanho), nao so repintar.

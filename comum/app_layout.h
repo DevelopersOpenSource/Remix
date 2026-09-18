@@ -331,6 +331,40 @@ static void BuildLibraryArea(int gx,int gtop,int gright,int gbottom,bool abas=tr
 static int RxFonteFileira(size_t i){ return i<g_rxFilas.size()?g_rxFilas[i].fonte:0; }
 static bool RxFileiraAberta(int fonte){ for(int f:g_rxAbertas) if(f==fonte) return true; return false; }
 // "Tocados recentemente": so o que ainda esta na biblioteca (musica apagada nao vira quadrado vazio).
+// "Sua mistura": escolhe musicas da biblioteca pesando quanto voce ouve o artista,
+// dando uma chance para o que voce nunca tocou e sorteando o desempate uma vez por
+// dia (a mesma mistura durante o dia, outra amanha).
+static void RxMontarMistura(const std::vector<Track>& fonte){
+    g_rxMistura.clear(); g_rxMisturaChave.clear();
+    if(fonte.size()<6) return;
+    std::vector<std::pair<double,int>> v; v.reserve(fonte.size());
+    for(size_t i=0;i<fonte.size();i++){
+        const Track& t=fonte[i];
+        double nota=desc::PesoArtista(t.artist);
+        double vezes=desc::PesoFaixa(t.path);
+        if(vezes<=0) nota+=0.8;                       // ainda nao ouviu: merece aparecer
+        else nota+=std::min(2.0,vezes*0.3);
+        nota+=desc::SorteioDoDia(t.path)*1.6;
+        v.push_back({nota,(int)i});
+    }
+    std::sort(v.begin(),v.end(),[](const std::pair<double,int>& a,const std::pair<double,int>& b){ return a.first>b.first; });
+    // no maximo 3 do mesmo artista (mistura com um artista so nao e mistura) e
+    // sem repetir o que ja esta em "Tocados recentemente"
+    std::map<std::wstring,int> porArtista;
+    std::map<std::wstring,bool> jaEmRecentes;
+    for(auto& ch:g_rxRecentesChave) jaEmRecentes[ch]=true;
+    for(auto& x:v){
+        if(g_rxMistura.size()>=18) break;
+        const Track& t=fonte[(size_t)x.second];
+        if(jaEmRecentes.count(t.path)) continue;
+        std::wstring a=t.artist; size_t corte=a.find_first_of(L",&");   // "A, B feat. C" conta como A
+        if(corte!=std::wstring::npos) a=a.substr(0,corte);
+        while(!a.empty()&&a.back()==L' ') a.pop_back();
+        for(auto& c:a) c=(wchar_t)towlower(c);
+        if(++porArtista[a]>3) continue;
+        g_rxMistura.push_back(x.second); g_rxMisturaChave.push_back(t.path);
+    }
+}
 static void RxMontarRecentes(){
     g_rxRecentes.clear(); g_rxRecentesChave.clear();
     const std::vector<Track>& fonte=(g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks;
@@ -433,7 +467,12 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     int cols=std::max(1,(mw+gapX)/(cardW+gapX));
     int cardH=cardW+SI(56);
     desc::Home home; bool comRecentes=false, comGeneros=false;
-    if(g_rxPag==RXP_INICIO){ desc::Atualizar(false,RxAvisarNovidades); home=desc::Copia(); RxMontarRecentes(); comRecentes=!g_rxRecentes.empty(); }
+    bool comMistura=false;
+    if(g_rxPag==RXP_INICIO){
+        desc::Atualizar(false,RxAvisarNovidades); home=desc::Copia();
+        RxMontarRecentes(); comRecentes=!g_rxRecentes.empty();
+        RxMontarMistura((g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks); comMistura=g_rxMistura.size()>=6;
+    }
     else {
         // Descobrir: grade de generos e, dentro de um, as paradas dele
         desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
@@ -444,13 +483,18 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         if(!g_rxGenero.empty()) R_rxVoltar={(int)R_rxBuscarOn.left-(int)S(118),by,(int)R_rxBuscarOn.left-SI(8),by+SI(32)};
     }
     std::vector<desc::Item> generos = comGeneros?desc::ListaGeneros():std::vector<desc::Item>();
-    int primeira = comRecentes?-1:(comGeneros?-2:0);
-    int nFil=(int)home.fileiras.size()+((comRecentes||comGeneros)?1:0);
+    // fileiras locais (negativas) vem antes das do descobrir
+    std::vector<int> locais;
+    if(comMistura) locais.push_back(-3);
+    if(comRecentes) locais.push_back(-1);
+    if(comGeneros) locais.push_back(-2);
+    int nFil=(int)home.fileiras.size()+(int)locais.size();
     int y=(int)R_rxMain.top+SI(46)-g_rxScroll;        // espaco do titulo da pagina
     for(int f=0; f<nFil; f++){
-        int fonte = (f==0&&primeira<0) ? primeira : (primeira<0 ? f-1 : f);
+        int fonte = f<(int)locais.size() ? locais[(size_t)f] : f-(int)locais.size();
         int total = fonte==-1 ? (int)g_rxRecentes.size()
                   : fonte==-2 ? (int)generos.size()
+                  : fonte==-3 ? (int)g_rxMistura.size()
                               : (int)home.fileiras[(size_t)fonte].itens.size();
         if(total<=0) continue;
         bool todos=(fonte==-2);                       // generos: sempre a grade inteira
