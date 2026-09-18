@@ -180,6 +180,68 @@ static void RxDrawBar(Graphics& g,int w,int h,const Color& ab,const Color& white
     }
 }
 
+// ------------------------------------------------------- lista detalhada ----
+static void RxEqBarras(Graphics& g,const RectF& r,const Color& c,bool animando){
+    SolidBrush b(c);
+    REAL bw=r.Width/5.f;
+    for(int i=0;i<3;i++){
+        REAL f=animando?(REAL)(0.35+0.65*std::fabs(sin((double)NowMs()/(220.0+i*70.0)+i))):0.5f;
+        REAL h=r.Height*f;
+        g.FillRectangle(&b,r.X+i*bw*1.6f,r.Y+r.Height-h,bw,h);
+    }
+}
+static void RxDrawLista(Graphics& g,const Color& ab,const Color& white,const Color& gray){
+    if(R_library.right<=R_library.left) return;
+    REAL fT=S(12.5f), fS=S(10.5f);
+    SolidBrush wb(white), gb(gray), abb(ab);
+    for(size_t vi=0;vi<g_visible.size();++vi){
+        size_t i=(size_t)g_visible[vi];
+        if(i>=R_cardRects.size()||i>=g_tracks.size()) continue;
+        RECT rr=R_cardRects[i]; if(rr.right<=rr.left) continue;
+        const Track& t=g_tracks[i];
+        bool cur=((int)i==g_current), hot=UiHot(rr);
+        RectF row=RF(rr);
+        if(cur||hot){ SolidBrush rb(ToGdi(cur?UI().surfaceHi:UI().surface)); DrawRoundRect(g,row,(int)S(UI_R_CARD),&rb,nullptr); }
+        if(cur) DrawRoundRect(g,RectF(row.X,row.Y+S(6),S(3),row.Height-S(12)),(int)S(2),&abb,nullptr);
+        REAL x=row.X+S(14);
+        {
+            RectF n(x,row.Y,S(26),row.Height);
+            if(hot){ SolidBrush ic(white); IconPlay(g,RectF(n.X+S(6),n.Y+row.Height/2-S(7),S(13),S(14)),&ic); }
+            else if(cur) RxEqBarras(g,RectF(n.X+S(6),n.Y+row.Height/2-S(7),S(14),S(14)),ab,g_player.playing);
+            else TextCenter(g,std::to_wstring(vi+1),n,fS,&gb,false);
+            x=n.X+n.Width+S(8);
+        }
+        REAL cv=row.Height-S(14);
+        RectF art(x,row.Y+S(7),cv,cv);
+        if(g_cfg.artShape==L"cd"){ Pen pn(ToGdi(UI().borderHi),1.f); DrawCoverCircle(g,GetThumb(t.coverPath),Rect((int)art.X,(int)art.Y,(int)art.Width,(int)art.Height),&pn,cur&&g_player.playing?g_rotation:0); }
+        else { SolidBrush plate(ToGdi(UI().bg)); DrawRoundRect(g,art,(int)S(4),&plate,nullptr); Image* im=GetThumb(t.coverPath); if(im) DrawImgCover(g,im,art); }
+        x=art.X+cv+S(12);
+        REAL dirW=S(56), fonteW=row.Width>S(560)?S(120):0;
+        REAL txW=row.Width-(x-row.X)-dirW-fonteW-S(20);
+        if(txW<S(80)) txW=S(80);
+        SolidBrush tb(cur?ab:white);
+        TextTrim(g,t.title,RectF(x,row.Y+S(9),txW,S(19)),fT,&tb,true,StringTrimmingEllipsisCharacter);
+        std::wstring sub=t.artist.empty()?std::wstring(L"Artista desconhecido"):t.artist;
+        TextTrim(g,sub,RectF(x,row.Y+S(27),txW,S(16)),fS,&gb,false,StringTrimmingEllipsisCharacter);
+        if(fonteW>0){
+            bool online=IsOnlineTrack(t);
+            std::wstring de;
+            if(online){ const StreamInfo* c=FindSnap(t.path); de=c?StreamTagLabel(*c,true):std::wstring(L"Online"); }
+            else de=std::filesystem::path(t.path).parent_path().filename().wstring();
+            RectF fr(row.X+row.Width-dirW-fonteW-S(10),row.Y,fonteW,row.Height);
+            if(online){ SolidBrush pill(ToGdi(UI().surfaceHi)); DrawRoundRect(g,RectF(fr.X+S(6),row.Y+row.Height/2-S(9),fonteW-S(12),S(18)),(int)S(9),&pill,nullptr); }
+            SolidBrush fb(online?ab:gray);
+            TextCenter(g,de,fr,S(9.5f),&fb,false);
+        }
+        int dur=DurSegundos(t.path,t.durSec);
+        std::wstring tempo=dur>0?FormatTime((DWORD)dur*1000):std::wstring(L"--:--");
+        StringFormat rf; rf.SetAlignment(StringAlignmentFar); rf.SetLineAlignment(StringAlignmentCenter); rf.SetFormatFlags(StringFormatFlagsNoWrap);
+        g.DrawString(tempo.c_str(),-1,UiFont(fS,false),RectF(row.X+row.Width-dirW-S(10),row.Y,dirW,row.Height),&rf,&gb);
+        DrawOrderArrows(g,i,&abb,&gb);
+        DrawPickMark(g,i,rr);
+    }
+}
+
 // ------------------------------------------------- cabecalho da biblioteca --
 static std::wstring RxNomeDaPagina(){
     if(g_view==2){ const Playlist* p=OpenPlaylistPtr(); if(p) return p->name; return L"Playlist"; }

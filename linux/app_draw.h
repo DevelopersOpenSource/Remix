@@ -315,7 +315,8 @@ static void DrawNormal(int w,int h){
     }
     // ---------------- direita: lista simples ou grade de cards ----------------
     bool libClip=R_library.right>R_library.left; if(libClip) gfx::PushClip(RF(R_library));
-    if(g_cfg.listMode!=0){
+    if(RxOn()&&g_cfg.listMode!=0){ RxDrawLista(ab,white,gray); }
+    else if(g_cfg.listMode!=0){
         float fRowT=S(13);
         for(size_t i=0;i<g_tracks.size() && i<R_cardRects.size();++i){
             RECT rr=R_cardRects[i]; if(rr.right-rr.left<=0) continue;

@@ -264,7 +264,7 @@ static void BuildLibraryArea(int gx,int gtop,int gright,int gbottom,bool abas=tr
         R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardDcBtns.assign(g_tracks.size(),RECT{0,0,0,0});
         R_rowUp.assign(g_tracks.size(),RECT{0,0,0,0}); R_rowDown.assign(g_tracks.size(),RECT{0,0,0,0});
         if(g_cfg.listMode!=0){
-            int rowH=SI(64);
+            int rowH=RxOn()?SI(58):SI(64);
             g_gridCols=1; g_contentH=(int)g_visible.size()*rowH;
             g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
             for(size_t vi=0;vi<g_visible.size();++vi){

@@ -555,7 +555,8 @@ static void DrawNormal(Graphics& g,int w,int h){
         for(int i=1;i<=3;i++) g.DrawLine(&grip,(REAL)(pnl.X+pnl.Width-i*7),(REAL)(pnl.Y+pnl.Height-5),(REAL)(pnl.X+pnl.Width-5),(REAL)(pnl.Y+pnl.Height-i*7));
     }
     Region libOld; bool libClip=R_library.right>R_library.left; if(libClip){ g.GetClip(&libOld); g.SetClip(Rect(R_library.left,R_library.top,R_library.right-R_library.left,R_library.bottom-R_library.top)); }
-    if(g_cfg.listMode!=0){
+    if(RxOn()&&g_cfg.listMode!=0){ RxDrawLista(g,accent,ToGdi(UI().text),ToGdi(UI().textDim)); }
+    else if(g_cfg.listMode!=0){
         const Font& fRowT=*UiFont(S(13),true);
         StringFormat trimL; trimL.SetTrimming(StringTrimmingEllipsisWord); trimL.SetFormatFlags(StringFormatFlagsNoWrap);
         for(size_t i=0;i<g_tracks.size() && i<R_cardRects.size();++i){

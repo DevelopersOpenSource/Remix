@@ -296,6 +296,24 @@ static std::vector<std::wstring> g_rxRecentesChave;   // ...e o caminho/URL de c
 static std::vector<int> g_rxMistura;               // "Sua mistura": faixas escolhidas pelo seu gosto
 static std::vector<std::wstring> g_rxMisturaChave;
 static bool RxOn(){ return g_cfg.uiStyle!=UI_CLASSICO; }
+// ---- duracao das musicas locais (para a lista mostrar o tempo) --------------
+// O arquivo so diz a duracao depois de ser aberto: uma thread vai medindo as
+// faixas que aparecem na tela e guarda o resultado (nao trava o desenho).
+struct DurCache { std::mutex m; std::map<std::wstring,int> pronto; std::vector<std::wstring> fila; std::atomic<bool> rodando{false}; };
+inline DurCache& DUR(){ static DurCache* d=new DurCache(); return *d; }
+static void DurWorker();
+static int DurSegundos(const std::wstring& path,int jaSabe){
+    if(jaSabe>0) return jaSabe;
+    if(path.empty()||IsUrlText(path)) return 0;
+    DurCache& d=DUR();
+    {
+        std::lock_guard<std::mutex> lk(d.m);
+        auto it=d.pronto.find(path); if(it!=d.pronto.end()) return it->second;
+        if(d.fila.size()<400){ for(auto& q:d.fila) if(q==path) return 0; d.fila.push_back(path); }
+    }
+    if(!d.rodando.exchange(true)) std::thread([]{ RemixSafe("medir duracao",[]{ DurWorker(); }); }).detach();
+    return 0;
+}
 // Novidades/generos chegam de uma thread: a tela precisa refazer o layout (as
 // fileiras mudam de tamanho), nao so repintar.
 static std::atomic<bool> g_rxRefazer{false};
@@ -1641,6 +1659,23 @@ static void Tick(float dt){
     UpdateSpecBands(g_player.loaded&&g_player.playing, g_player.loaded?g_player.GetPositionMs():0, dt);
 }
 // Inicializacao comum (depois de carregar config e antes da janela).
+static void DurWorker(){
+    DurCache& d=DUR();
+    for(;;){
+        std::wstring path;
+        { std::lock_guard<std::mutex> lk(d.m); if(d.fila.empty()){ d.rodando.store(false); return; } path=d.fila.back(); d.fila.pop_back(); }
+        int dur=0;
+        ma_decoder_config dc=ma_decoder_config_init(ma_format_unknown,0,0); ma_decoder dec;
+#ifdef _WIN32
+        bool ok=ma_decoder_init_file_w(path.c_str(),&dc,&dec)==MA_SUCCESS;
+#else
+        bool ok=ma_decoder_init_file(WideToUtf8(path).c_str(),&dc,&dec)==MA_SUCCESS;
+#endif
+        if(ok){ ma_uint64 fr=0; if(ma_decoder_get_length_in_pcm_frames(&dec,&fr)==MA_SUCCESS&&dec.outputSampleRate) dur=(int)(fr/dec.outputSampleRate); ma_decoder_uninit(&dec); }
+        { std::lock_guard<std::mutex> lk(d.m); if(d.pronto.size()>8000) d.pronto.clear(); d.pronto[path]=dur; }
+        AppPost(EV_REDRAW);
+    }
+}
 static void CoreInit(){
     art::St().onReady=[](const std::wstring& a,const std::wstring& b){ AppPost(EV_ART_READY,OPack({a,b})); };   // capa embutida pronta
     g_themes=LoadAllThemes(); ApplyTheme(); g_cfg.HealMusicFolder(); MigrateIniAssociations(g_cfg.musicFolder); g_artistMap=LoadCustomArtists();

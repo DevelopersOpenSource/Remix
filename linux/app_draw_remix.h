@@ -169,6 +169,69 @@ static void RxDrawBar(int w,int h,Color ab,Color white,Color gray,Color navB,Col
     }
 }
 
+// ------------------------------------------------------- lista detalhada ----
+// Linha da lista no estilo REMIX: número (ou equalizador quando está tocando,
+// e play ao passar o mouse), capa, título/artista, de onde vem e a duração.
+static void RxEqBarras(const RectF& r,Color c,bool animando){
+    float bw=r.Width/5.f;
+    for(int i=0;i<3;i++){
+        float f=animando?(0.35f+0.65f*std::fabs(sinf((float)NowMs()/(220.f+i*70.f)+i))):0.5f;
+        float h=r.Height*f;
+        gfx::FillRect(r.X+i*bw*1.6f,r.Y+r.Height-h,bw,h,c);
+    }
+}
+static void RxDrawLista(Color ab,Color white,Color gray){
+    if(R_library.right<=R_library.left) return;
+    float fT=S(12.5f), fS=S(10.5f);
+    for(size_t vi=0;vi<g_visible.size();++vi){
+        size_t i=(size_t)g_visible[vi];
+        if(i>=R_cardRects.size()||i>=g_tracks.size()) continue;
+        RECT rr=R_cardRects[i]; if(rr.right<=rr.left) continue;
+        const Track& t=g_tracks[i];
+        bool cur=((int)i==g_current), hot=UiHot(rr);
+        RectF row=RF(rr);
+        if(cur||hot){ Color rb=ToGdi(cur?UI().surfaceHi:UI().surface); DrawRoundRect(row,S(UI_R_CARD),&rb,nullptr); }
+        if(cur){   // fiozinho da cor do tema na borda esquerda
+            Color eb=ab; DrawRoundRect(RectF(row.X,row.Y+S(6),S(3),row.Height-S(12)),S(2),&eb,nullptr);
+        }
+        float x=row.X+S(14);
+        {   // numero / equalizador / play
+            RectF n(x,row.Y,S(26),row.Height);
+            if(hot){ IconPlay(RectF(n.X+S(6),n.Y+row.Height/2-S(7),S(13),S(14)),white); }
+            else if(cur) RxEqBarras(RectF(n.X+S(6),n.Y+row.Height/2-S(7),S(14),S(14)),ab,g_player.playing);
+            else gfx::TextRect(std::to_wstring(vi+1),n,fS,gray,false,gfx::Center,true);
+            x=n.X+n.Width+S(8);
+        }
+        float cv=row.Height-S(14);
+        RectF art(x,row.Y+S(7),cv,cv);
+        Color plate=ToGdi(UI().bg);
+        if(g_cfg.artShape==L"cd") DrawCoverCircle(GetThumb(t.coverPath),art,ToGdi(UI().borderHi),1.f,cur&&g_player.playing?g_rotation:0);
+        else { DrawRoundRect(art,S(4),&plate,nullptr); Img* im=GetThumb(t.coverPath); if(im) gfx::DrawImgCover(im,art); }
+        x=art.X+cv+S(12);
+        // colunas da direita: duração e, se couber, de onde vem
+        float dirW=S(56), fonteW=row.Width>S(560)?S(120):0;
+        float txW=row.Width-(x-row.X)-dirW-fonteW-S(20);
+        if(txW<S(80)) txW=S(80);
+        gfx::TextRect(t.title,RectF(x,row.Y+S(9),txW,S(19)),fT,cur?ab:white,true,gfx::Near,false,gfx::EllipsisChar);
+        std::wstring sub=t.artist.empty()?L"Artista desconhecido":t.artist;
+        gfx::TextRect(sub,RectF(x,row.Y+S(27),txW,S(16)),fS,gray,false,gfx::Near,false,gfx::EllipsisChar);
+        if(fonteW>0){
+            bool online=IsOnlineTrack(t);
+            std::wstring de;
+            if(online){ const StreamInfo* c=FindSnap(t.path); de=c?StreamTagLabel(*c,true):std::wstring(L"Online"); }
+            else de=std::filesystem::path(t.path).parent_path().filename().wstring();
+            RectF fr(row.X+row.Width-dirW-fonteW-S(10),row.Y,fonteW,row.Height);
+            if(online){ Color pill=ToGdi(UI().surfaceHi); DrawRoundRect(RectF(fr.X+S(6),row.Y+row.Height/2-S(9),fonteW-S(12),S(18)),S(9),&pill,nullptr); }
+            gfx::TextRect(de,fr,S(9.5f),online?ab:gray,false,gfx::Center,true,gfx::EllipsisChar);
+        }
+        int dur=DurSegundos(t.path,t.durSec);
+        std::wstring tempo=dur>0?FormatTime((DWORD)dur*1000):std::wstring(L"--:--");
+        gfx::TextRect(tempo,RectF(row.X+row.Width-dirW-S(10),row.Y,dirW,row.Height),fS,gray,false,gfx::Far,true);
+        DrawOrderArrows(i,ab,gray);
+        DrawPickMark(i,rr);
+    }
+}
+
 // ------------------------------------------------- cabecalho da biblioteca --
 static std::wstring RxNomeDaPagina(){
     if(g_view==2){ const Playlist* p=OpenPlaylistPtr(); if(p) return p->name; return L"Playlist"; }
