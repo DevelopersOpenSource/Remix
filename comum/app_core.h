@@ -137,6 +137,7 @@ void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t
 #include "online_play.h"
 #include "stems.h"
 #include "descobrir.h"   // novidades/recomendacoes da tela inicial (Deezer publico + o que voce ouve)
+#include "discord_rpc.h"  // Rich Presence: mostra no Discord o que esta tocando
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
 // Teclas (mapeadas por cada plataforma).
@@ -1096,6 +1097,14 @@ static void CommitArtistEdit(){
         return;
     }
     if(g_editMode==10){ std::wstring v=Config::Trim(s); if(v.size()>100) v.resize(100); CancelArtistEdit(); DcSetDjRole(v); SetStatus(v.empty()?L"Sem cargo DJ: só admins e o dono pulam sem votação.":L"Cargo DJ: "+v,2800); return; }
+    if(g_editMode==11){   // Rich Presence: Application ID (so numero)
+        std::wstring v; for(wchar_t c:Config::Trim(s)) if(c>=L'0'&&c<=L'9') v.push_back(c);
+        CancelArtistEdit();
+        if(!v.empty()&&(v.size()<15||v.size()>25)){ SetStatus(L"Application ID: são uns 18 números (Developer Portal > seu app > Application ID).",4500); return; }
+        g_cfg.rpcAppId=v; g_cfg.Save(); drpc::SetAppId(v);
+        SetStatus(v.empty()?L"Rich Presence desligado.":L"Rich Presence ligado: o Discord vai mostrar o que você está ouvindo.",3800);
+        return;
+    }
     if(g_editMode>=6&&g_editMode<=8){   // host: porta / PIN / nome
         int mode=g_editMode; CancelArtistEdit(); std::wstring v=Config::Trim(s);
         if(mode==6){ int p=_wtoi(v.c_str()); if(p<1024||p>65535){ SetStatus(L"Porta: use um número de 1024 a 65535.",3200); return; } g_cfg.hostPort=p; }
@@ -1615,6 +1624,11 @@ static void Tick(float dt){
         }
     }
     PublishStreamWave();
+    {   // Rich Presence do Discord: o que esta tocando (so com o Application ID preenchido)
+        const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+        int pos=g_player.loaded?(int)(g_player.GetPositionMs()/1000):0, len=g_player.loaded?(int)(g_player.GetLengthMs()/1000):0;
+        drpc::Atualizar(ct?ct->title:L"",ct?ct->artist:L"",g_player.playing,pos,len);
+    }
     UpdateSpecBands(g_player.loaded&&g_player.playing, g_player.loaded?g_player.GetPositionMs():0, dt);
 }
 // Inicializacao comum (depois de carregar config e antes da janela).
@@ -1635,6 +1649,7 @@ static void CoreInit(){
     if(dc::AutoStartWanted()) dc::StartAsync();                     // bot do Discord ligado na ultima vez
     spad::Load();
     if(spad::GetView().on) spad::SetOnAsync(true,[]{ AppPost(EV_REDRAW); });   // microfone virtual ligado na ultima vez
+    drpc::SetAppId(g_cfg.rpcAppId);   // Rich Presence do Discord (so liga com o Application ID preenchido)
 }
 static void CoreShutdown(){
     g_cfg.Save();

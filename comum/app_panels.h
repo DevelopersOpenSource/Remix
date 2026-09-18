@@ -6,7 +6,7 @@
 enum : int {
     Z_SP_CLOSE = 24010, Z_SP_ONOFF, Z_SP_VOICE, Z_SP_MON, Z_SP_VOL, Z_SP_STOPALL, Z_SP_ADD, Z_SP_OUT, Z_SP_IN, Z_SP_FOLDER, Z_SP_CABLE,
     Z_SP_TILE_BASE = 24100, Z_SP_TVOL_BASE = 24600, Z_SP_DEL_BASE = 25100,   // +500 sons (ate 25600)
-    Z_DC_CLOSE = 26010, Z_DC_ONOFF, Z_DC_TOKEN, Z_DC_INVITE, Z_DC_INSTALL, Z_DC_PORTAL, Z_DC_QUEUE, Z_DC_PLS, Z_DC_ONLINE, Z_DC_VOTE, Z_DC_DJ, Z_DC_LIMIT, Z_DC_CLEARTOKEN,
+    Z_DC_CLOSE = 26010, Z_DC_ONOFF, Z_DC_TOKEN, Z_DC_INVITE, Z_DC_INSTALL, Z_DC_PORTAL, Z_DC_QUEUE, Z_DC_PLS, Z_DC_ONLINE, Z_DC_VOTE, Z_DC_DJ, Z_DC_LIMIT, Z_DC_CLEARTOKEN, Z_DC_RPC,
     Z_DC_G_PAUSE_BASE = 26100, Z_DC_G_SKIP_BASE = 26150, Z_DC_G_STOP_BASE = 26200, Z_DC_G_LOOP_BASE = 26250,   // +50 servidores
     Z_DC_PL_BASE = 26300                                                                                    // +500 playlists (ate 26800)
 };
@@ -115,9 +115,9 @@ static void OnSpadAdded(const std::wstring& err,int n){
 
 // ---- DISCORD ------------------------------------------------------------------------------------
 static bool DcCardsOn(){ return dc::Ready(); }
-static void StartDcEdit(int mode){   // 9 = token (mascarado), 10 = cargo DJ
+static void StartDcEdit(int mode){   // 9 = token (mascarado), 10 = cargo DJ, 11 = Application ID do Rich Presence
     g_editArtist=true; g_editMode=mode; g_editTrack=-1;
-    g_editBuf=mode==10?dc::GetView().cfg.djRole:L"";
+    g_editBuf=mode==10?dc::GetView().cfg.djRole:(mode==11?g_cfg.rpcAppId:L"");
 }
 static void BuildDcPanel(int w,int h){
     Panel& p=g_dcP; dc::ProbeTools(false); dc::View v=dc::GetView();
@@ -140,6 +140,15 @@ static void BuildDcPanel(int w,int h){
     p.Pill(cell(0,3),v.cfg.votePct>0?L"VOTAÇÃO: "+std::to_wstring(v.cfg.votePct)+L"% DA CHAMADA":std::wstring(L"VOTAÇÃO: DESLIGADA (SÓ DJ)"),v.cfg.votePct>0,Z_DC_VOTE);
     p.Pill(cell(1,3),L"CARGO DJ: "+(v.cfg.djRole.empty()?std::wstring(L"(NENHUM)"):v.cfg.djRole),false,Z_DC_DJ);
     p.Pill(cell(2,3),L"LIMITE: "+std::to_wstring(v.cfg.maxPerUser)+L" MÚSICAS POR PESSOA",false,Z_DC_LIMIT);
+    y+=bh+g;
+    {   // Rich Presence: mostra no SEU perfil do Discord o que esta tocando (nao precisa do bot)
+        bool temId=!g_cfg.rpcAppId.empty();
+        p.Pill(cell(0,2),temId?(drpc::Ligado()?L"RICH PRESENCE: LIGADO ●":L"RICH PRESENCE: ESPERANDO O DISCORD"):L"RICH PRESENCE: DEFINIR APPLICATION ID...",temId&&drpc::Ligado(),Z_DC_RPC);
+        std::wstring nota=drpc::Erro();
+        if(nota.empty()) nota=temId?L"O seu perfil mostra \"Ouvindo <música>\" enquanto o Remix toca."
+                                   :L"Cole o Application ID do seu app (o mesmo do bot serve) para aparecer no seu perfil.";
+        p.Text({x+(cw-g)/2+g,y+SI(6),x+cw,y+SI(26)},nota,S(10),PCL_GRAY);
+    }
     y+=bh+SI(10);
     // estado + ferramentas
     std::wstring l1=v.status.empty()?(v.hasToken?L"Desligado.":L"Sem token: toque em DEFINIR TOKEN (Developer Portal > seu app > Bot > Reset Token)."):v.status;
@@ -202,6 +211,7 @@ static void DcClick(int z){
     }
     if(z==Z_DC_TOKEN){ StartDcEdit(9); return; }
     if(z==Z_DC_CLEARTOKEN){ dc::ClearToken(); SetStatus(L"Token apagado deste PC.",2500); return; }
+    if(z==Z_DC_RPC){ StartDcEdit(11); return; }
     if(z==Z_DC_INVITE){
         std::string u=dc::InviteUrl();
         if(u.empty()){ SetStatus(L"Ligue o bot uma vez: o convite usa o ID do seu app.",3200); return; }

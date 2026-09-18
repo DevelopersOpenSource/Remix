@@ -249,7 +249,7 @@ static void DrawArtistEditor(int w,int h){
     DrawRoundRect(box,14,&pb,&apn,2);
     const float lab=S(13), sm=S(10), txt=S(14);
     Color abr=ToGdi(g_theme.accent), white=C_WHITE, gray=C_GRAY2;
-    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":g_editMode==9?L"TOKEN DO BOT DO DISCORD":g_editMode==10?L"CARGO DJ DO DISCORD":L"EDITAR NOME DO ARTISTA";
+    const wchar_t* etitle=g_editMode==1?L"RENOMEAR ARQUIVO (no disco)":g_editMode==2?L"NOVA PLAYLIST":g_editMode==4?L"COLAR LINK NA PLAYLIST":g_editMode==5?L"NOVA PLAYLIST A PARTIR DE UM LINK":g_editMode==3?L"RENOMEAR PLAYLIST":g_editMode==6?L"PORTA DO HOST":g_editMode==7?L"PIN DO HOST":g_editMode==8?L"NOME DO PC NO CELULAR":g_editMode==9?L"TOKEN DO BOT DO DISCORD":g_editMode==10?L"CARGO DJ DO DISCORD":g_editMode==11?L"APPLICATION ID (RICH PRESENCE)":L"EDITAR NOME DO ARTISTA";
     gfx::Text(etitle,(float)(bx+22),(float)(by+18),lab,abr,true);
     std::wstring t;
     if(g_editMode==6) t=L"Porta TCP de 1024 a 65535 (padrão 49875). Só números.";
@@ -257,6 +257,7 @@ static void DrawArtistEditor(int w,int h){
     else if(g_editMode==8) t=L"Como o seu PC aparece no celular.";
     else if(g_editMode==9) t=L"Developer Portal > seu app > Bot > Reset Token > Copy. Cole com Ctrl+V (fica só neste PC, nunca aparece).";
     else if(g_editMode==10) t=L"Nome do cargo (igual no servidor). Quem tem ele controla a música sem votação.";
+    else if(g_editMode==11) t=L"Developer Portal > seu app > Application ID > Copy (uns 18 números). Vazio desliga. É o nome desse app que aparece no seu perfil.";
     else if(g_editMode==2) t=L"Nome da playlist (as músicas ficam onde estão; só o caminho é guardado)";
     else if(g_editMode==4||g_editMode==5) t=L"Música, álbum ou playlist do Spotify, YouTube / YouTube Music, Deezer, Apple Music ou SoundCloud  (Ctrl+V cola)";
     else if(g_editMode==3) t=L"Playlist: "+(g_editTrack>=0&&g_editTrack<(int)g_playlists.size()?g_playlists[(size_t)g_editTrack].name:L"");

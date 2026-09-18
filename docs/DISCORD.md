@@ -133,6 +133,27 @@ Discord  <->  node bot.mjs (discord.js + @discordjs/voice)  <-- JSON por stdin/s
 - Aviso: tocar YouTube por bot pode ir contra os termos do YouTube (bots grandes já foram
   derrubados por isso). Use por sua conta; as playlists com arquivos do seu PC não têm esse problema.
 
+## Rich Presence: aparecer no seu perfil (1.6)
+
+Isso é **outra coisa** do bot: não entra em servidor nenhum, não precisa de token e não toca
+nada. É só o seu perfil do Discord mostrando **"Ouvindo \<música\> — \<artista\>"** enquanto o
+Remix toca, com a barrinha de tempo.
+
+1. Em <https://discord.com/developers/applications>, **New Application** e dê o nome que você
+   quer que apareça no perfil (por exemplo `Remix`). Se você já criou o app do bot, serve o mesmo.
+2. Copie o **Application ID** (uns 18 números) da página **General Information**.
+3. No Remix: **DISCORD** > **RICH PRESENCE: DEFINIR APPLICATION ID...**, cole e dê Enter.
+
+Pronto. O campo vazio desliga. O ID fica no `config.ini` (`RpcAppId=`).
+
+- Funciona no **Windows** (`\\.\pipe\discord-ipc-0`) e no **Linux em qualquer distro**: o Remix
+  procura o soquete do Discord no `XDG_RUNTIME_DIR`, no `/tmp` e também nas pastas do **Flatpak**
+  (`app/com.discordapp.Discord`) e do **Snap** (`snap.discord`), inclusive Canary e PTB.
+- Só fala com o Discord que já está aberto no seu PC; nada vai para a internet. Com o Discord
+  fechado, o Remix tenta de novo de tempos em tempos, sem incomodar.
+- Para aparecer uma **imagem** junto, suba uma arte chamada `remix` em Rich Presence > Art Assets
+  do seu app (o Remix já pede essa imagem pelo nome).
+
 ## Problemas comuns
 
 - **"Token inválido"**: gere outro (Reset Token) e cole de novo.
@@ -143,6 +164,9 @@ Discord  <->  node bot.mjs (discord.js + @discordjs/voice)  <-- JSON por stdin/s
 - **"Não tenho permissão para entrar/falar"**: dê ao cargo do bot as permissões Conectar e Falar no
   canal de voz.
 - **O registro** (fim do painel) mostra o que o bot está fazendo, sem o token.
+- **Rich Presence não aparece**: confira se o Discord está aberto, se o Application ID é o do
+  **seu** app e se o Discord está com "Exibir atividade atual como mensagem de status" ligado
+  (Configurações > Atividade). O painel mostra `RICH PRESENCE: LIGADO ●` quando conectou.
 
 ## Testes (para quem mexe no código)
 
