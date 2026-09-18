@@ -478,7 +478,8 @@ static void DrawNormal(int w,int h){
     if(RxOn()){
         RxDrawSide(ab,white,gray);
         RxDrawBusca(ab,white,gray);
-        if(g_rxPag==RXP_INICIO) RxDrawInicio(w,h,ab,white,gray);
+        if(g_rxPag==RXP_LISTA) RxDrawCabecalho(ab,white,gray);
+        else RxDrawInicio(w,h,ab,white,gray);
         RxDrawBar(w,h,ab,white,gray,navB,playP,playB);
     }
     if(g_showSettings) DrawSettings(w,h);

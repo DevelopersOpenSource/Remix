@@ -76,7 +76,7 @@ static void RxDrawSide(Graphics& g,const Color& ab,const Color& white,const Colo
     const wchar_t* nomes[3]={L"Início",L"Descobrir",L"Sua biblioteca"};
     for(int i=0;i<3;i++){
         RECT r=R_rxNav[i]; if(r.right<=r.left) continue;
-        bool sel=(i==0&&g_rxPag==RXP_INICIO)||(i==2&&g_rxPag!=RXP_INICIO);
+        bool sel=(i==0&&g_rxPag==RXP_INICIO)||(i==1&&g_rxPag==RXP_DESCOBRIR)||(i==2&&g_rxPag==RXP_LISTA);
         bool hot=UiHot(r);
         RectF b=RF(r);
         if(sel||hot){ SolidBrush bg(ToGdi(sel?UI().surfaceHi:UI().surface)); DrawRoundRect(g,b,(int)S(UI_R_CARD),&bg,nullptr); }
@@ -95,8 +95,8 @@ static void RxDrawSide(Graphics& g,const Color& ab,const Color& white,const Colo
     }
     for(size_t i=0;i<R_rxSidePl.size();i++){
         RECT r=R_rxSidePl[i]; RectF b=RF(r);
-        bool sel = i==0 ? (g_rxPag!=RXP_INICIO&&g_view==0)
-                        : (g_rxPag!=RXP_INICIO&&g_view==2&&g_openPl==(int)i-1);
+        bool sel = i==0 ? (g_rxPag==RXP_LISTA&&g_view==0)
+                        : (g_rxPag==RXP_LISTA&&g_view==2&&g_openPl==(int)i-1);
         if(sel||UiHot(r)){ SolidBrush bg(ToGdi(sel?UI().surfaceHi:UI().surface)); DrawRoundRect(g,b,(int)S(UI_R_CARD),&bg,nullptr); }
         float cv=b.Height-S(10);
         RectF art(b.X+S(6),b.Y+S(5),cv,cv);
@@ -180,6 +180,32 @@ static void RxDrawBar(Graphics& g,int w,int h,const Color& ab,const Color& white
     }
 }
 
+// ------------------------------------------------- cabecalho da biblioteca --
+static std::wstring RxNomeDaPagina(){
+    if(g_view==2){ const Playlist* p=OpenPlaylistPtr(); if(p) return p->name; return L"Playlist"; }
+    if(g_view==1) return L"Playlists";
+    return L"Todas as músicas";
+}
+static void RxDrawCabecalho(Graphics& g,const Color& ab,const Color& white,const Color& gray){
+    if(R_rxCab.right<=R_rxCab.left) return;
+    RectF b=RF(R_rxCab);
+    SolidBrush wb(white), gb(gray);
+    TextTrim(g,RxNomeDaPagina(),RectF(b.X,b.Y,b.Width-S(250),S(32)),S(24),&wb,true,StringTrimmingEllipsisCharacter,true);
+    size_t n=g_visible.size();
+    std::wstring sub=std::to_wstring(n)+(n==1?L" música":L" músicas");
+    if(!g_searchBuf.empty()) sub+=L"  ·  filtrando por \""+g_searchBuf+L"\"";
+    TextTrim(g,sub,RectF(b.X,b.Y+S(38),b.Width-S(250),S(18)),S(11),&gb,false,StringTrimmingEllipsisCharacter,true);
+    if(R_rxTocar.right>R_rxTocar.left){
+        RectF t=RF(R_rxTocar);
+        SolidBrush tb(ab); DrawRoundRect(g,t,(int)(t.Height/2.f),&tb,nullptr);
+        SolidBrush tt(ToGdi(UI().bg)); TextCenter(g,L"TOCAR",t,S(11),&tt,true);
+        RECT ra=R_rxAleat; RectF a=RF(ra);
+        SolidBrush abg(ToGdi(UiHot(ra)?UI().surfaceHi:UI().surface));
+        DrawRoundRect(g,a,(int)(a.Height/2.f),&abg,nullptr);
+        SolidBrush at(g_cfg.shuffle?ab:white); TextCenter(g,L"ALEATÓRIO",a,S(11),&at,true);
+    }
+}
+
 // ---------------------------------------------------------- tela inicial ---
 static std::wstring RxSaudacao(){
     time_t tt=time(nullptr); struct tm lt{};
@@ -215,16 +241,36 @@ static void RxDrawBusca(Graphics& g,const Color& white,const Color& gray){
 }
 static void RxDrawInicio(Graphics& g,int w,int h,const Color& ab,const Color& white,const Color& gray){
     (void)w; (void)h;
-    desc::Atualizar(false,[]{ AppPost(EV_REDRAW); });
+    if(g_rxPag==RXP_INICIO) desc::Atualizar(false,RxAvisarNovidades);
     RectF main=RF(R_rxMain);
     Region old; g.GetClip(&old); g.SetClip(main);
     SolidBrush wb(white), gb(gray);
-    TextAt(g,RxSaudacao(),main.X,main.Y-(REAL)g_rxScroll+S(2),S(22),&wb,true);
-    desc::Home home=desc::Copia();
+    std::wstring tituloPag = g_rxPag==RXP_INICIO?RxSaudacao():(g_rxGenero.empty()?std::wstring(L"Descobrir"):g_rxGeneroNome);
+    TextAt(g,tituloPag,main.X,main.Y-(REAL)g_rxScroll+S(2),S(22),&wb,true);
+    if(R_rxBuscarOn.right>R_rxBuscarOn.left){
+        RECT rb=R_rxBuscarOn; RectF b=RF(rb);
+        SolidBrush bg(ToGdi(UiHot(rb)?UI().surfaceHi:UI().surface));
+        DrawRoundRect(g,b,(int)(b.Height/2.f),&bg,nullptr);
+        TextCenter(g,L"BUSCAR ONLINE",b,S(10),&wb,true);
+    }
+    if(R_rxVoltar.right>R_rxVoltar.left){
+        RECT rv=R_rxVoltar; RectF b=RF(rv);
+        SolidBrush bg(ToGdi(UiHot(rv)?UI().surfaceHi:UI().surface));
+        DrawRoundRect(g,b,(int)(b.Height/2.f),&bg,nullptr);
+        TextCenter(g,L"← GÊNEROS",b,S(10),&wb,true);
+    }
+    desc::Home home; std::vector<desc::Item> generos;
+    if(g_rxPag==RXP_INICIO) home=desc::Copia();
+    else {
+        desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
+        if(!g_rxGenero.empty()) desc::HomeDoGenero(g_rxGenero,home);
+        else generos=desc::ListaGeneros();
+    }
     for(size_t f=0;f<g_rxFilas.size();f++){
         const RxFila& fl=g_rxFilas[f];
         std::wstring titulo,nota;
-        if(fl.fonte<0){ titulo=L"Tocados recentemente"; nota=L"volte de onde parou"; }
+        if(fl.fonte==-1){ titulo=L"Tocados recentemente"; nota=L"volte de onde parou"; }
+        else if(fl.fonte==-2){ titulo=L"Explorar por gênero"; nota=L"as paradas de cada estilo"; }
         else if((size_t)fl.fonte<home.fileiras.size()){ titulo=home.fileiras[(size_t)fl.fonte].titulo; nota=home.fileiras[(size_t)fl.fonte].nota; }
         RectF hr=RF(fl.head);
         if(hr.Y<main.Y+main.Height&&hr.Y+S(40)>main.Y){
@@ -247,7 +293,15 @@ static void RxDrawInicio(Graphics& g,int w,int h,const Color& ab,const Color& wh
         std::wstring nome,sub,capaUrl,capaLocal; bool redondo=false;
         if((size_t)k.fila>=g_rxFilas.size()) continue;
         const RxFila& fl=g_rxFilas[(size_t)k.fila];
-        if(fl.fonte<0){
+        if(fl.fonte==-2){
+            if((size_t)k.item>=generos.size()) continue;
+            const desc::Item& gI=generos[(size_t)k.item];
+            RxCapa(g,art,gI.capa,L"",false,ToGdi(UI().surfaceHi));
+            SolidBrush veu(Color(120,0,0,0)); DrawRoundRect(g,art,(int)S(UI_R_CARD),&veu,nullptr);
+            TextTrim(g,gI.titulo,RectF(art.X+S(8),art.Y+art.Height-S(34),art.Width-S(16),S(26)),S(13),&wb,true,StringTrimmingEllipsisCharacter,true);
+            continue;
+        }
+        if(fl.fonte==-1){
             if((size_t)k.item>=g_rxRecentes.size()) continue;
             const std::vector<Track>& fonteT=(g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks;
             int ti=g_rxRecentes[(size_t)k.item]; if(ti<0||ti>=(int)fonteT.size()) continue;
@@ -273,7 +327,8 @@ static void RxDrawInicio(Graphics& g,int w,int h,const Color& ab,const Color& wh
         TextTrim(g,sub,RectF(b.X,b.Y+cv+S(26),b.Width,S(16)),S(10),&gb,false,StringTrimmingEllipsisCharacter);
     }
     if(g_rxFilas.empty()){
-        std::wstring msg=desc::Carregando()?L"Buscando as novidades...":L"Sem novidades agora. Toque alguma música e volte aqui.";
+        bool bus=(g_rxPag==RXP_INICIO?desc::Carregando():desc::CarregandoGeneros());
+        std::wstring msg=bus?L"Buscando...":L"Sem novidades agora. Toque alguma música e volte aqui.";
         TextTrim(g,msg,RectF(main.X,main.Y+S(90),main.Width,S(30)),S(13),&gb,false,StringTrimmingEllipsisCharacter,true);
     }
     g.SetClip(&old);

@@ -186,8 +186,18 @@ static void RxClicarCard(size_t ci,bool tocar){
     const RxCard& k=g_rxCards[ci];
     if((size_t)k.fila>=g_rxFilas.size()) return;
     int fonte=g_rxFilas[(size_t)k.fila].fonte;
-    if(fonte<0){ RxTocarRecente((size_t)k.item); return; }
-    desc::Home h=desc::Copia();
+    if(fonte==-2){   // gênero: abre as paradas dele
+        std::vector<desc::Item> gs=desc::ListaGeneros();
+        if((size_t)k.item>=gs.size()) return;
+        g_rxGenero=gs[(size_t)k.item].id; g_rxGeneroNome=gs[(size_t)k.item].titulo;
+        g_rxScroll=0;
+        desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
+        BuildLayout(); return;
+    }
+    if(fonte==-1){ RxTocarRecente((size_t)k.item); return; }
+    desc::Home h;
+    if(g_rxPag==RXP_DESCOBRIR){ if(!desc::HomeDoGenero(g_rxGenero,h)) return; }
+    else h=desc::Copia();
     if((size_t)fonte>=h.fileiras.size()) return;
     const desc::Shelf& s=h.fileiras[(size_t)fonte];
     if((size_t)k.item>=s.itens.size()) return;

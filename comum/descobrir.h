@@ -403,4 +403,57 @@ inline void Atualizar(bool forcar, void (*avisar)()) {
 inline Home Copia() { Estado& e = St(); std::lock_guard<std::mutex> lk(e.m); return e.home; }
 inline bool Carregando() { return St().carregando.load(); }
 
+// ------------------------------------------------------------- generos ----
+// A aba "Descobrir": os generos do Deezer e, ao entrar em um, as paradas dele.
+struct GenEstado {
+    std::mutex m;
+    std::vector<Item> lista;                 // generos (com imagem)
+    std::map<std::wstring, Home> porId;      // id do genero -> fileiras
+    std::atomic<bool> carregando{ false };
+    std::atomic<bool> pediuLista{ false };
+};
+inline GenEstado& G() { static GenEstado* g = new GenEstado(); return *g; }
+
+inline std::vector<Item> ListaGeneros() { GenEstado& g = G(); std::lock_guard<std::mutex> lk(g.m); return g.lista; }
+inline bool HomeDoGenero(const std::wstring& id, Home& out) {
+    GenEstado& g = G(); std::lock_guard<std::mutex> lk(g.m);
+    auto it = g.porId.find(id); if (it == g.porId.end()) return false;
+    out = it->second; return true;
+}
+inline Home MontarGenero(const std::wstring& id, const std::wstring& nome) {
+    Home h; h.at = Agora();
+    std::string sid = WideToUtf8(id);
+    auto add = [&](const std::wstring& titulo, Kind k, std::vector<Item> itens) {
+        if (itens.empty()) return;
+        Shelf s; s.titulo = titulo; s.kind = k; s.chave = L"gen-" + id; s.itens = itens;
+        h.fileiras.push_back(s);
+    };
+    add(L"Bombando em " + nome, K_FAIXA, DzLista("https://api.deezer.com/chart/" + sid + "/tracks?limit=24", K_FAIXA, 24));
+    add(L"Playlists de " + nome, K_PLAYLIST, DzLista("https://api.deezer.com/chart/" + sid + "/playlists?limit=20", K_PLAYLIST, 20));
+    add(L"Álbuns de " + nome, K_ALBUM, DzLista("https://api.deezer.com/chart/" + sid + "/albums?limit=20", K_ALBUM, 20));
+    add(L"Artistas de " + nome, K_ARTISTA, DzLista("https://api.deezer.com/chart/" + sid + "/artists?limit=20", K_ARTISTA, 20));
+    if (h.fileiras.empty()) h.err = L"Não consegui buscar esse gênero agora.";
+    return h;
+}
+// Busca a lista de generos (uma vez) e, com id != "", as paradas daquele genero.
+inline void AtualizarGeneros(const std::wstring& id, const std::wstring& nome, void (*avisar)()) {
+    GenEstado& g = G();
+    bool precisaLista = !g.pediuLista.load();
+    bool precisaGen = false;
+    if (!id.empty()) { std::lock_guard<std::mutex> lk(g.m); precisaGen = !g.porId.count(id); }
+    if (!precisaLista && !precisaGen) return;
+    if (g.carregando.exchange(true)) return;
+    g.pediuLista.store(true);
+    std::thread([id, nome, avisar, precisaLista, precisaGen] {
+        GenEstado& g2 = G();
+        RemixSafe("descobrir generos", [&] {
+            if (precisaLista) { std::vector<Item> l = Generos(); std::lock_guard<std::mutex> lk(g2.m); g2.lista = l; }
+            if (precisaGen) { Home h = MontarGenero(id, nome); std::lock_guard<std::mutex> lk(g2.m); g2.porId[id] = h; }
+        });
+        g2.carregando.store(false);
+        if (avisar) avisar();
+    }).detach();
+}
+inline bool CarregandoGeneros() { return G().carregando.load(); }
+
 } // namespace desc

@@ -144,8 +144,12 @@ static int HitTest(int x,int y){
     if(RxOn()){   // estilo REMIX: lateral, cartoes da tela inicial e "ver tudo"
         for(int i=0;i<3;i++) if(R_rxNav[i].right>R_rxNav[i].left&&PtIn(R_rxNav[i],x,y)) return Z_RX_NAV_BASE+i;
         if(R_rxNovaPl.right>R_rxNovaPl.left&&PtIn(R_rxNovaPl,x,y)) return Z_RX_NOVAPL;
+        if(R_rxTocar.right>R_rxTocar.left&&PtIn(R_rxTocar,x,y)) return Z_RX_TOCAR;
+        if(R_rxVoltar.right>R_rxVoltar.left&&PtIn(R_rxVoltar,x,y)) return Z_RX_VOLTAR;
+        if(R_rxBuscarOn.right>R_rxBuscarOn.left&&PtIn(R_rxBuscarOn,x,y)) return Z_RX_BUSCARON;
+        if(R_rxAleat.right>R_rxAleat.left&&PtIn(R_rxAleat,x,y)) return Z_RX_ALEATORIO;
         for(size_t i=0;i<R_rxSidePl.size();i++) if(PtIn(R_rxSidePl[i],x,y)) return Z_RX_SIDE_BASE+(int)i;
-        if(g_rxPag==RXP_INICIO&&PtIn(R_rxMain,x,y)){
+        if(g_rxPag!=RXP_LISTA&&PtIn(R_rxMain,x,y)){
             for(size_t i=0;i<g_rxFilas.size();i++){ const RECT& v=g_rxFilas[i].verTudo; if(v.right>v.left&&PtIn(v,x,y)) return Z_RX_VERTUDO_BASE+(int)i; }
             for(size_t i=0;i<g_rxCards.size();i++){
                 if(!PtIn(g_rxCards[i].r,x,y)) continue;
@@ -388,12 +392,21 @@ static void OnLButtonDown(int x,int y){
     if(id==Z_CLOSE){RequestClose();return;} if(id==Z_MIN){PlatformMinimize();return;} if(id==Z_GEAR){g_showSettings=!g_showSettings;g_hkCapture=-1;if(g_showSettings)EnsureToolsAsync();return;}
     if(id>=Z_RX_NAV_BASE&&id<Z_RX_NAV_BASE+3){
         int n=id-Z_RX_NAV_BASE;
-        if(n==0){ g_rxPag=RXP_INICIO; g_searchFocus=false; BuildLayout(); }
-        else if(n==1){ OpenOnlineSearch(-1,L""); }
+        if(n==0){ g_rxPag=RXP_INICIO; g_searchFocus=false; g_rxScroll=0; BuildLayout(); }
+        else if(n==1){ g_rxPag=RXP_DESCOBRIR; g_searchFocus=false; g_rxScroll=0; EnsureToolsAsync(); BuildLayout(); }
         else { g_rxPag=RXP_LISTA; EnterLibraryView(); }
         return;
     }
     if(id==Z_RX_NOVAPL){ OpenNewPlaylistMenu(R_rxNovaPl.left,R_rxNovaPl.bottom+4); return; }
+    if(id==Z_RX_VOLTAR){ g_rxGenero.clear(); g_rxGeneroNome.clear(); g_rxScroll=0; BuildLayout(); return; }
+    if(id==Z_RX_BUSCARON){ OpenOnlineSearch(-1,L""); return; }
+    if(id==Z_RX_TOCAR||id==Z_RX_ALEATORIO){
+        bool al=(id==Z_RX_ALEATORIO);
+        if(g_tracks.empty()){ SetStatus(g_view==2?L"Playlist vazia.":L"Biblioteca vazia.",2500); return; }
+        if(g_cfg.shuffle!=al){ g_cfg.shuffle=al; g_cfg.Save(); }
+        int start=0; if(al){ RebuildShuffleQueue(-1); start=g_shufQueue.empty()?0:g_shufQueue[0]; }
+        PlayIndex(start,true); return;
+    }
     if(id>=Z_RX_SIDE_BASE&&id<Z_RX_SIDE_BASE+500){
         int i=id-Z_RX_SIDE_BASE;
         g_rxPag=RXP_LISTA;
@@ -539,7 +552,7 @@ static void OnWheel(int d){ // d = notches (>0 = pra cima)
     if(OU().open){ OU().scroll-=d*SI(116); if(OU().scroll<0) OU().scroll=0; return; }   // LayoutOnline limita o maximo
     if(g_showSettings){g_setScroll-=d*(int)S(56);int maxSc=std::max(0,(int)(g_setContentH-(R_settingsPanel.bottom-R_settingsPanel.top-76)));g_setScroll=std::max(0,std::min(g_setScroll,maxSc));return;}
     if(g_showSplash||g_cfg.displayMode==L"vertical")return;
-    if(RxOn()&&g_rxPag==RXP_INICIO){   // tela inicial: rola as fileiras
+    if(RxOn()&&g_rxPag!=RXP_LISTA){   // tela inicial/descobrir: rola as fileiras
         g_rxScroll-=d*SI(110);
         if(g_rxScroll<0) g_rxScroll=0;
         BuildLayout();
@@ -655,10 +668,11 @@ static void RunAction(const std::string& a){
     else if(a=="hosthtml"){host::WriteConnectHtml();}
     else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
     else if(a.rfind("hostlib:",0)==0){ int i=atoi(a.c_str()+8); host::View v=host::GetView(); if(i>=0&&i<(int)v.devs.size()) host::SetDeviceLib(v.devs[(size_t)i].id,a.back()!='0'); }   // hostlib:<aparelho>:<0|1>
-    else if(a.rfind("rxpag:",0)==0){ int n=atoi(a.c_str()+6); if(n==0){ g_rxPag=RXP_INICIO; BuildLayout(); } else { g_rxPag=RXP_LISTA; EnterLibraryView(); } }
+    else if(a.rfind("rxpag:",0)==0){ int n=atoi(a.c_str()+6); if(n==0){ g_rxPag=RXP_INICIO; BuildLayout(); } else if(n==2){ g_rxPag=RXP_DESCOBRIR; g_rxScroll=0; BuildLayout(); } else { g_rxPag=RXP_LISTA; EnterLibraryView(); } }
+    else if(a.rfind("rxgen:",0)==0){ int n=atoi(a.c_str()+6); auto gs=desc::ListaGeneros(); if(n>=0&&n<(int)gs.size()){ g_rxGenero=gs[(size_t)n].id; g_rxGeneroNome=gs[(size_t)n].titulo; g_rxScroll=0; desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades); BuildLayout(); } }
     else if(a.rfind("rxpl:",0)==0){ int n=atoi(a.c_str()+5); g_rxPag=RXP_LISTA; if(n>=0&&n<(int)g_playlists.size()) OpenPlaylistView(n); }
     else if(a=="descobrir"||a=="descobrir:forcar"){   // teste: monta as fileiras da tela inicial e imprime
-        desc::Atualizar(a!="descobrir",[]{ AppPost(EV_REDRAW); });
+        desc::Atualizar(a!="descobrir",RxAvisarNovidades);
         std::thread([]{
             for(int i=0;i<120&&desc::Carregando();i++) Sleep(500);
             desc::Home h=desc::Copia();

@@ -204,7 +204,7 @@ enum : int {
     Z_HOST_DEVLINK_BASE=21600,   // +100: link permanente de cada aparelho (religar em qualquer endereco)
     // Estilo REMIX (1.6): lateral, tela inicial com fileiras e player embaixo.
     Z_RX_NAV_BASE=30000,          // +3: Início / Buscar / Sua biblioteca
-    Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS,
+    Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS, Z_RX_TOCAR, Z_RX_ALEATORIO, Z_RX_VOLTAR, Z_RX_BUSCARON,
     Z_RX_SIDE_BASE=31000,         // +500: itens da lateral (0 = todas as músicas, depois as playlists)
     Z_RX_CARD_BASE=32000,         // +4000: cartões da tela inicial
     Z_RX_CARDPLAY_BASE=37000,     // +4000: play sobre a capa do cartão
@@ -269,12 +269,15 @@ static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_DEVLINK_BASE && Z_HOST_DEVLINK_BASE
 static_assert(Z_RX_NAV_BASE>Z_SPAD_BTN+2800 && Z_RX_NAV_BASE+3<=Z_RX_NOVAPL && Z_RX_VERTODAS<Z_RX_SIDE_BASE && Z_RX_SIDE_BASE+500<=Z_RX_CARD_BASE && Z_RX_CARD_BASE+4000<=Z_RX_CARDPLAY_BASE && Z_RX_CARDPLAY_BASE+4000<=Z_RX_VERTUDO_BASE && Z_RX_VERTUDO_BASE+100<Z_COVER_BASE, "faixa do estilo REMIX invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 // ---- estilo REMIX (1.6): lateral com a biblioteca, tela inicial com fileiras, player embaixo ----
-enum { RXP_INICIO=0, RXP_LISTA=1 };        // LISTA = biblioteca/playlists/playlist aberta (usa g_view)
+enum { RXP_INICIO=0, RXP_LISTA=1, RXP_DESCOBRIR=2 };   // LISTA = biblioteca/playlists/playlist aberta (usa g_view)
 static int g_rxPag=RXP_INICIO;             // pagina da area principal
 static int g_rxScroll=0, g_rxContentH=0;   // rolagem da tela inicial
 static RECT R_rxTop{0,0,0,0}, R_rxSide{0,0,0,0}, R_rxMain{0,0,0,0}, R_rxBar{0,0,0,0};
 static RECT R_rxNav[3];                    // Início / Descobrir / Sua biblioteca
 static RECT R_rxNovaPl{0,0,0,0}, R_rxAtualizar{0,0,0,0}, R_rxVerTodas{0,0,0,0};
+static RECT R_rxCab{0,0,0,0}, R_rxTocar{0,0,0,0}, R_rxAleat{0,0,0,0};   // cabecalho da pagina da biblioteca/playlist
+static RECT R_rxVoltar{0,0,0,0}, R_rxBuscarOn{0,0,0,0};   // cabecalho da pagina Descobrir
+static std::wstring g_rxGenero, g_rxGeneroNome;           // genero aberto na pagina Descobrir (vazio = grade de generos)
 static std::vector<RECT> R_rxSidePl;       // 0 = "Todas as músicas", depois uma por playlist
 struct RxCard { RECT r{0,0,0,0}, play{0,0,0,0}; int fila=0, item=0; };
 static std::vector<RxCard> g_rxCards;      // cartoes visiveis da tela inicial
@@ -284,6 +287,10 @@ static std::vector<int> g_rxAbertas;       // fileiras expandidas ("ver tudo")
 static std::vector<int> g_rxRecentes;             // "tocados recentemente": indices na lista em tela
 static std::vector<std::wstring> g_rxRecentesChave;   // ...e o caminho/URL de cada um
 static bool RxOn(){ return g_cfg.uiStyle!=UI_CLASSICO; }
+// Novidades/generos chegam de uma thread: a tela precisa refazer o layout (as
+// fileiras mudam de tamanho), nao so repintar.
+static std::atomic<bool> g_rxRefazer{false};
+static void RxAvisarNovidades(){ g_rxRefazer.store(true); AppPost(EV_REDRAW); }
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
 static std::vector<RECT> R_rowUp, R_rowDown;
 static RECT R_setAutoplay, R_setSort, R_setSortDir, R_setEqOn, R_setEqReset;
@@ -1525,6 +1532,7 @@ static void HandleCommand(const std::wstring& cmd){
     }
 }
 static void HandleEvent(int type,const std::wstring& s,int n){
+    if(g_rxRefazer.exchange(false)&&RxOn()) BuildLayout();   // fileiras novas: refaz a geometria
     switch(type){
     case EV_NEXT_TRACK: NextTrack(); break;
     case EV_WEB_DOWNLOAD_DONE: ConsumeWebDownload(); break;

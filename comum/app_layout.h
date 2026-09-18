@@ -362,7 +362,7 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     int minBusca=bx+SI(150);                       // a busca tem prioridade: pilula so entra se sobrar espaco
     auto pilula=[&](RECT& r,float wid){ int x1=rx, x0=rx-(int)S(wid); if(x0<minBusca){ r={0,0,0,0}; return; } r={x0,SI(10),x1,SI(46)}; rx=x0-SI(8); };
     pilula(R_dcBtn,100); pilula(R_spadBtn,110); pilula(R_fxBtn,96); pilula(R_hostBtn,78);
-    if(g_rxPag!=RXP_INICIO){ pilula(R_folderBtn,g_view==2?160.f:100.f); pilula(R_sortBtn,160); }
+    if(g_rxPag==RXP_LISTA){ pilula(R_folderBtn,g_view==2?160.f:100.f); pilula(R_sortBtn,160); }
     else { R_folderBtn={0,0,0,0}; R_sortBtn={0,0,0,0}; }
     R_shapeTgl={0,0,0,0}; R_autoTgl={0,0,0,0};
     {   // busca do topo: e a busca da biblioteca (o mesmo texto e o mesmo X)
@@ -406,8 +406,17 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     }
     // ---- area principal
     g_rxCards.clear(); g_rxFilas.clear();
-    if(g_rxPag!=RXP_INICIO){
-        BuildLibraryArea((int)R_rxMain.left,(int)R_rxMain.top,(int)R_rxMain.right,(int)R_rxMain.bottom,false);
+    R_rxCab={0,0,0,0}; R_rxTocar={0,0,0,0}; R_rxAleat={0,0,0,0}; R_rxVoltar={0,0,0,0}; R_rxBuscarOn={0,0,0,0};
+    if(g_rxPag==RXP_LISTA){
+        // cabecalho da pagina: nome da lista, quantas musicas e os botoes de tocar
+        int cabH=SI(74);
+        if(!g_pickMode&&R_rxMain.bottom-R_rxMain.top>cabH+SI(120)){
+            R_rxCab={(int)R_rxMain.left,(int)R_rxMain.top+SI(6),(int)R_rxMain.right,(int)R_rxMain.top+SI(6)+cabH};
+            int by=(int)R_rxCab.top+SI(26), bw2=(int)S(112);
+            R_rxTocar={(int)R_rxMain.right-bw2*2-SI(8),by,(int)R_rxMain.right-bw2-SI(8),by+SI(34)};
+            R_rxAleat={(int)R_rxMain.right-bw2,by,(int)R_rxMain.right,by+SI(34)};
+            BuildLibraryArea((int)R_rxMain.left,(int)R_rxCab.bottom+SI(4),(int)R_rxMain.right,(int)R_rxMain.bottom,false);
+        } else BuildLibraryArea((int)R_rxMain.left,(int)R_rxMain.top,(int)R_rxMain.right,(int)R_rxMain.bottom,false);
         return;
     }
     R_library={0,0,0,0};
@@ -418,33 +427,47 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     int gapX=SI(16), cardW=std::max(SI(120),std::min((int)S(168),(mw-gapX*4)/5));
     int cols=std::max(1,(mw+gapX)/(cardW+gapX));
     int cardH=cardW+SI(56);
-    desc::Home home=desc::Copia();
-    RxMontarRecentes();
-    int nFil=(int)home.fileiras.size()+1;             // +1 = "Tocados recentemente" (local)
-    int y=(int)R_rxMain.top+SI(46)-g_rxScroll;        // espaco do titulo "Boa noite"
+    desc::Home home; bool comRecentes=false, comGeneros=false;
+    if(g_rxPag==RXP_INICIO){ desc::Atualizar(false,RxAvisarNovidades); home=desc::Copia(); RxMontarRecentes(); comRecentes=!g_rxRecentes.empty(); }
+    else {
+        // Descobrir: grade de generos e, dentro de um, as paradas dele
+        desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
+        if(!g_rxGenero.empty()) desc::HomeDoGenero(g_rxGenero,home);
+        else comGeneros=true;
+        int by=(int)R_rxMain.top+SI(8);
+        R_rxBuscarOn={mxR-(int)S(150),by,mxR,by+SI(32)};
+        if(!g_rxGenero.empty()) R_rxVoltar={(int)R_rxBuscarOn.left-(int)S(118),by,(int)R_rxBuscarOn.left-SI(8),by+SI(32)};
+    }
+    std::vector<desc::Item> generos = comGeneros?desc::ListaGeneros():std::vector<desc::Item>();
+    int primeira = comRecentes?-1:(comGeneros?-2:0);
+    int nFil=(int)home.fileiras.size()+((comRecentes||comGeneros)?1:0);
+    int y=(int)R_rxMain.top+SI(46)-g_rxScroll;        // espaco do titulo da pagina
     for(int f=0; f<nFil; f++){
-        int fonte=f-1;                                 // -1 = local
-        int total = fonte<0 ? (int)g_rxRecentes.size()
-                            : (int)home.fileiras[(size_t)fonte].itens.size();
+        int fonte = (f==0&&primeira<0) ? primeira : (primeira<0 ? f-1 : f);
+        int total = fonte==-1 ? (int)g_rxRecentes.size()
+                  : fonte==-2 ? (int)generos.size()
+                              : (int)home.fileiras[(size_t)fonte].itens.size();
         if(total<=0) continue;
-        int linhas = RxFileiraAberta(fonte) ? (total+cols-1)/cols : 1;
+        bool todos=(fonte==-2);                       // generos: sempre a grade inteira
+        int altura = todos?cardW:cardH;               // o quadrado do genero nao tem texto embaixo
+        int linhas = (todos||RxFileiraAberta(fonte)) ? (total+cols-1)/cols : 1;
         int mostra = std::min(total,linhas*cols);
         RxFila fl; fl.fonte=fonte;
         fl.head={mxL,y,mxR,y+SI(30)};
-        if(total>cols) fl.verTudo={mxR-(int)S(110),y,mxR,y+SI(28)};
+        if(total>cols&&!todos) fl.verTudo={mxR-(int)S(110),y,mxR,y+SI(28)};
         g_rxFilas.push_back(fl);
         int fi=(int)g_rxFilas.size()-1;   // fileira vazia nao entra: o cartao guarda a posicao real
         int cy=y+SI(38);
         for(int i=0;i<mostra;i++){
             int r=i/cols, c=i%cols;
-            int cxp=mxL+c*(cardW+gapX), cyp=cy+r*(cardH+SI(14));
-            if(cyp>(int)R_rxMain.bottom||cyp+cardH<(int)R_rxMain.top){ continue; }
+            int cxp=mxL+c*(cardW+gapX), cyp=cy+r*(altura+SI(14));
+            if(cyp>(int)R_rxMain.bottom||cyp+altura<(int)R_rxMain.top){ continue; }
             RxCard k; k.fila=fi; k.item=i;
-            k.r={cxp,cyp,cxp+cardW,cyp+cardH};
+            k.r={cxp,cyp,cxp+cardW,cyp+altura};
             k.play={cxp+cardW-SI(46),cyp+cardW-SI(46),cxp+cardW-SI(10),cyp+cardW-SI(10)};
             g_rxCards.push_back(k);
         }
-        y=cy+linhas*(cardH+SI(14))+SI(10);
+        y=cy+linhas*(altura+SI(14))+SI(10);
     }
     g_rxContentH=y+g_rxScroll-(int)R_rxMain.top+SI(20);
     int maxSc=std::max(0,g_rxContentH-((int)R_rxMain.bottom-(int)R_rxMain.top));
