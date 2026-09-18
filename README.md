@@ -7,16 +7,24 @@ Spotify, Deezer and Apple Music** links.
 > The interface is currently in Brazilian Portuguese. Documentação em português: [README.pt-BR.md](README.pt-BR.md).
 
 <p align="center">
-  <img src="docs/screenshots/biblioteca.png" alt="Library grid (Linux)" width="32%">
-  <img src="docs/screenshots/busca-online.png" alt="Online search (Linux)" width="32%">
-  <img src="docs/screenshots/windows-lista.png" alt="List view (Windows)" width="32%">
+  <img src="docs/screenshots/inicio.png" alt="Home screen with what is new (Linux)" width="49%">
+  <img src="docs/screenshots/biblioteca.png" alt="Library with the Now playing panel (Linux)" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/descobrir.png" alt="Discover: browse by genre" width="32%">
+  <img src="docs/screenshots/letra.png" alt="Synced lyrics" width="32%">
+  <img src="docs/screenshots/busca-online.png" alt="Searching ready-made playlists online" width="32%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/windows-inicio.png" alt="Same screen on Windows" width="49%">
+  <img src="docs/screenshots/classico.png" alt="Classic style, still there" width="49%">
 </p>
 
 ## Credits
 
 <p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: author of Remix, original idea and Windows version" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): co-developer, playlists, streaming, Linux version and Host for iOS" width="48%"></a>
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/DevelopersOpenSource/Remix/main/docs/creditos/nero-2077.en.svg" alt="Nero-2077: author of Remix, original idea and Windows version" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/DevelopersOpenSource/Remix/main/docs/creditos/sodre.en.svg" alt="Sodre (NinjaZinS2): co-developer, playlists, streaming, Linux version and Host for iOS" width="48%"></a>
 </p>
 
 **[Nero-2077](https://github.com/Nero-2077)** created Remix: the original idea and the Windows version.
@@ -26,7 +34,7 @@ the PC acting as a server for the phone — so Remix reaches the **iPhone (iOS) 
 
 ## Download
 
-Portable builds are on the [Releases page](https://github.com/EchoGroupStudio/Remix/releases), nothing to install:
+Portable builds are on the [Releases page](https://github.com/DevelopersOpenSource/Remix/releases), nothing to install:
 
 | System | File |
 |---|---|
@@ -110,7 +118,12 @@ inside the `.zip`) and that your antivirus did not quarantine it.
 
 **Look and feel**
 - Two interface styles (Settings > INTERFACE STYLE): **Classic** (the original look: theme-colored outlines, LED glow, transport on every card) and **REMIX** (1.6, replacing the old Clean and Spotify + LED): sidebar with Home / Discover / Your library and your playlists, search in the top bar, and the player in a full-width bar at the bottom. The choice is saved as `Style=` in config.ini.
-- Home screen with what is new (1.6): rows built from what you actually listen to ("Best of <artist>", "Similar to <artist>", "From the artists you listen to") next to the country charts, week playlists, hot albums and artists; **Discover** browses by genre. Metadata comes from Deezer's public API (no login, no key); playback still goes through Remix's own online engine (yt-dlp), so you get the full song. Your listening profile stays on your PC (`gostos.ini`).
+- Home screen with what is new (1.6): a featured banner, shortcuts to what you played most, **Your mix** (picked from your own library by what you listen to, reshuffled once a day) and rows like "Best of \<artist\>", "Similar to \<artist\>", "From the artists you listen to", plus the country charts, week playlists, hot albums and artists. **Discover** browses by genre. Metadata comes from Deezer's public API (no login, no key); playback still goes through Remix's own online engine (yt-dlp), so you get the full song. Your listening profile stays on your PC (`gostos.ini`).
+- **Now playing panel** (right side): big cover, about the artist (photo, fans, similar artists) and what comes next in the queue. How the recommendations are built: [docs/DESCOBRIR.md](docs/DESCOBRIR.md) (Portuguese).
+- **Synced lyrics**: the current line is highlighted and follows the song, clicking a line jumps there. Lyrics come from LRCLIB (public, no account) and are kept on disk forever, so they work offline afterwards. Also on the phone.
+- **Detailed lists**: track number that turns into an animated equalizer on the song that is playing (play button on hover), cover, where the song comes from (folder or an ONLINE pill with the channel state) and the duration.
+- **Pick where the sound goes** (headphones, speakers, HDMI) from the player bar, without losing your place.
+- Resizable sidebar, and the playlists you open most come first.
 - Square, CD or compact vertical layout; grid or list; themes; LED glow, particles and glitch effects (with a light mode for slower PCs); 8-band equalizer.
 
 **Desktop integration**
@@ -122,7 +135,7 @@ inside the `.zip`) and that your antivirus did not quarantine it.
 ## Building from source
 
 ```bash
-git clone https://github.com/EchoGroupStudio/Remix.git
+git clone https://github.com/DevelopersOpenSource/Remix.git
 cd Remix
 ```
 

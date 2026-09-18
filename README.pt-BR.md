@@ -3,13 +3,27 @@
 Player C++ com nucleo compartilhado entre Windows (WinAPI + GDI+) e Linux (raylib), audio
 miniaudio nos dois sistemas.
 
-English version: [README.md](README.md). Programa pronto para baixar: [Releases](https://github.com/EchoGroupStudio/Remix/releases).
+English version: [README.md](README.md). Programa pronto para baixar: [Releases](https://github.com/DevelopersOpenSource/Remix/releases).
+
+<p align="center">
+  <img src="docs/screenshots/inicio.png" alt="Tela inicial com as novidades (Linux)" width="49%">
+  <img src="docs/screenshots/biblioteca.png" alt="Biblioteca com o painel Tocando agora (Linux)" width="49%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/descobrir.png" alt="Descobrir: navegar por gênero" width="32%">
+  <img src="docs/screenshots/letra.png" alt="Letra sincronizada" width="32%">
+  <img src="docs/screenshots/busca-online.png" alt="Procurar playlists prontas online" width="32%">
+</p>
+<p align="center">
+  <img src="docs/screenshots/windows-inicio.png" alt="A mesma tela no Windows" width="49%">
+  <img src="docs/screenshots/classico.png" alt="Estilo clássico, que continua" width="49%">
+</p>
 
 ## Créditos
 
 <p align="center">
-  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: autor do Remix, ideia original e versão Windows" width="48%"></a>
-  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/EchoGroupStudio/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming, versão Linux e Host para iOS" width="48%"></a>
+  <a href="https://github.com/Nero-2077"><img src="https://raw.githubusercontent.com/DevelopersOpenSource/Remix/main/docs/creditos/nero-2077.pt-BR.svg" alt="Nero-2077: autor do Remix, ideia original e versão Windows" width="48%"></a>
+  <a href="https://github.com/NinjaZinS2"><img src="https://raw.githubusercontent.com/DevelopersOpenSource/Remix/main/docs/creditos/sodre.pt-BR.svg" alt="Sodre (NinjaZinS2): co-desenvolvedor, playlists, streaming, versão Linux e Host para iOS" width="48%"></a>
 </p>
 
 **[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows.
@@ -26,7 +40,7 @@ do **Host** — o PC vira servidor para o celular — para o Remix chegar ao **i
 | `comum/` | codigo igual nos dois: `app_core.h` (logica), `app_layout.h`, `app_input.h`, `app_keys.h` (atalhos), `app_playlists.h`, `config.h`, `playlist.h`, `player_ma.h` + `audio_backend.c` (miniaudio), `cover_art.h` (capas embutidas), `app_proc.h` (processos), `online_resolve.h` / `online_play.h` / `app_online_*.h` (musica online) |
 | `assets/` | imagens, fontes e temas |
 | raiz | `config.ini`, `covers.ini`, `artists.ini`, `playlists/`, `Musica/` = a "casa" do app (criados na primeira execucao, fora do git) quando roda de `windows\` ou `linux/` |
-| `dist/` | pacotes gerados pelos scripts (zips portateis, .deb, .rpm, AppImage); os prontos ficam nas [Releases](https://github.com/EchoGroupStudio/Remix/releases) |
+| `dist/` | pacotes gerados pelos scripts (zips portateis, .deb, .rpm, AppImage); os prontos ficam nas [Releases](https://github.com/DevelopersOpenSource/Remix/releases) |
 | `docs/`, `build/`, `third_party/` | documentacao extra e telas; saida de build e compiladores/bibliotecas baixados pelos scripts (esses dois ficam fora do git) |
 
 Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na mesma pasta).
@@ -40,12 +54,26 @@ Os zips de `dist/` continuam autossuficientes (exe/binario + assets + config na 
   area principal com a tela inicial de novidades ou a grade/lista da biblioteca; e o player numa
   barra embaixo, da largura toda (capa, titulo, transporte, tempo e volume). A escolha vale para
   Windows e Linux (`Style=` no config.ini).
-- **Tela inicial com novidades** (1.6): fileiras montadas pelo que voce ouve — "O melhor de
-  <artista>", "Parecido com <artista>", "Dos artistas que voce ouve" — junto com "Bombando agora",
-  "Playlists da semana", "Albuns em alta" e "Artistas do momento". Em **Descobrir** da para
-  navegar por genero e ver as paradas de cada estilo. Tudo vem da API publica do Deezer (sem
-  login e sem chave) e so traz metadados: quem toca e baixa continua sendo o motor online do
-  Remix (yt-dlp), entao vem a musica inteira. O que voce ouve fica em `gostos.ini`, so no seu PC.
+- **Tela inicial com novidades** (1.6): destaque no topo, atalhos para o que voce mais ouviu,
+  **Sua mistura** (escolhida da sua propria biblioteca pelo que voce ouve, sorteada uma vez por dia)
+  e fileiras como "O melhor de \<artista\>", "Parecido com \<artista\>" e "Dos artistas que voce
+  ouve", junto com "Bombando agora", "Playlists da semana", "Albuns em alta" e "Artistas do
+  momento". Em **Descobrir** da para navegar por genero e ver as paradas de cada estilo. Tudo vem
+  da API publica do Deezer (sem login e sem chave) e so traz metadados: quem toca e baixa continua
+  sendo o motor online do Remix (yt-dlp), entao vem a musica inteira. O que voce ouve fica em
+  `gostos.ini`, so no seu PC.
+- **Painel Tocando agora** (direita): capa grande, sobre o artista (foto, fas e parecidos) e o que
+  vem depois na fila. Como as recomendacoes sao montadas: [docs/DESCOBRIR.md](docs/DESCOBRIR.md).
+- **Letra sincronizada**: a linha atual fica em destaque acompanhando a musica e tocar numa linha
+  pula para aquele ponto. Vem do LRCLIB (publico, sem conta) e fica guardada no disco para sempre,
+  entao depois funciona ate sem internet. No celular tambem.
+- **Listas com detalhe**: numero da faixa que vira equalizador animado na que esta tocando (play ao
+  passar o mouse), capa, de onde vem a musica (pasta ou pilula ONLINE com o estado do canal) e a
+  duracao.
+- **Escolher onde o som sai** (fone, caixa, HDMI) pela barra do player, sem perder o ponto da musica.
+- Barra lateral com largura ajustavel, e as playlists que voce mais abre aparecem primeiro.
+- **Procurar playlists e albuns prontos** na busca online (abas MUSICAS / PLAYLISTS / ALBUNS), sem
+  precisar sair do app.
 - Modo **normal** redesenhado seguindo a referencia enviada: painel superior com Quadrado/CD e temas, seguido por cards de musica em grade.
 - Modo **vertical** minimalista, focado somente na musica, com CD/capa menor, onda, seek, controles e engrenagem.
 - O modo vertical pode voltar para **Quadrado** ou **CD** em Configuracoes.
@@ -246,7 +274,7 @@ e `--exit-after <ms>`.
 
 ## Compilacao
 
-Baixe o codigo com `git clone https://github.com/EchoGroupStudio/Remix.git`.
+Baixe o codigo com `git clone https://github.com/DevelopersOpenSource/Remix.git`.
 
 Windows: clique 2x em `windows\COMPILAR.bat`. Ele compila com o **MinGW-w64 (GCC)** do MSYS2
 (ou WinLibs/scoop/choco). Se nao achar nenhum, explica como instalar e, se voce confirmar,

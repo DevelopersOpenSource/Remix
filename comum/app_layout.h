@@ -490,9 +490,16 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         int vx=w-SI(20)-chrome;
         R_vol={vx-SI(96),bt+barH/2-SI(3),vx,bt+barH/2+SI(3)};
         R_volIcon={(int)R_vol.left-SI(28),bt+barH/2-SI(12),(int)R_vol.left-SI(6),bt+barH/2+SI(12)};
-        {   // botoes: letra, fila/painel e onde tocar (somem se a janela ficar estreita)
-            int bx2=(int)R_volIcon.left-SI(10), by2=bt+barH/2-SI(14), d=SI(28);
-            auto bt2=[&](RECT& r){ if(bx2-d<(int)R_seek.right+SI(20)){ r={0,0,0,0}; return; } r={bx2-d,by2,bx2,by2+d}; bx2=bx2-d-SI(6); };
+        {   // botoes: letra, fila/painel e onde tocar. Se faltar espaco, a barra de
+            // tempo encolhe um pouco antes de algum botao sumir (no Windows os botoes
+            // de fechar/minimizar comem 72 px da direita).
+            int d=SI(28), precisa=3*d+2*SI(6)+SI(16);
+            int bx2=(int)R_volIcon.left-SI(10), by2=bt+barH/2-SI(14);
+            if(bx2-precisa<(int)R_seek.right+SI(8)){
+                int novo=std::max((int)R_seek.left+SI(120),bx2-precisa-SI(8));
+                if(novo<(int)R_seek.right) R_seek.right=novo;
+            }
+            auto bt2=[&](RECT& r){ if(bx2-d<(int)R_seek.right+SI(8)){ r={0,0,0,0}; return; } r={bx2-d,by2,bx2,by2+d}; bx2=bx2-d-SI(6); };
             bt2(R_rxSaida); bt2(R_rxPainel); bt2(R_rxLetra);
         }
         R_playerPanel={0,0,0,0};
