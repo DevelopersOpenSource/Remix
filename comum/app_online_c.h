@@ -152,3 +152,50 @@ static bool RunMenuAction(int kind,int act,int arg){
     if(act>=CA_PLF_RECENT_BASE&&act<CA_PLF_RECENT_BASE+(int)g_menuPaths.size()){ LinkPlaylistFolder(pl,g_menuPaths[(size_t)(act-CA_PLF_RECENT_BASE)]); return true; }
     return false;
 }
+
+// ---- estilo REMIX: cartoes da tela inicial ---------------------------------------------------
+// Os quadradinhos do "Início" vem do descobrir (so metadados). Tocar uma musica
+// passa pelo mesmo motor online de sempre (yt-dlp), entao vem a musica inteira.
+static void RxTocarRecente(size_t i){
+    if(i>=g_rxRecentesChave.size()) return;
+    std::wstring chave=g_rxRecentesChave[i];
+    if(g_view!=0) EnterLibraryView();
+    for(size_t k=0;k<g_tracks.size();k++) if(g_tracks[k].path==chave){ PlayIndex((int)k,true); return; }
+    SetStatus(L"Essa música não está mais na biblioteca.",2500);
+}
+static void RxAbrirItem(const desc::Item& it,bool tocar){
+    if(it.kind==desc::K_FAIXA){
+        OTrack t; t.src=DetectSource(it.link); t.url=it.link; t.title=it.titulo; t.artist=it.sub; t.thumb=it.capa; t.dur=it.dur;
+        if(t.url.empty()){ SetStatus(L"Sem link para essa música.",2500); return; }
+        g_onlineInfo[t.url]=t;
+        int idx=-1; for(size_t k=0;k<g_tracks.size();++k) if(g_tracks[k].path==t.url){ idx=(int)k; break; }
+        if(idx<0){ g_tracks.push_back(TrackFromOTrack(t)); idx=(int)g_tracks.size()-1; BuildLayout(); }
+        EnsureToolsAsync();
+        PlayIndex(idx,true);
+        if(!t.thumb.empty()) FetchThumbsAsync({{t.url,t.thumb}});
+        return;
+    }
+    (void)tocar;
+    // album/playlist: abre o link na busca online (a mesma tela do "colar link").
+    // artista: procura pelo nome, porque link de artista nao e uma lista de musicas.
+    if(it.kind==desc::K_ARTISTA) OpenOnlineSearch(-1,it.titulo);
+    else OpenOnlineSearch(-1,it.link);
+}
+static void RxClicarCard(size_t ci,bool tocar){
+    if(ci>=g_rxCards.size()) return;
+    const RxCard& k=g_rxCards[ci];
+    if((size_t)k.fila>=g_rxFilas.size()) return;
+    int fonte=g_rxFilas[(size_t)k.fila].fonte;
+    if(fonte<0){ RxTocarRecente((size_t)k.item); return; }
+    desc::Home h=desc::Copia();
+    if((size_t)fonte>=h.fileiras.size()) return;
+    const desc::Shelf& s=h.fileiras[(size_t)fonte];
+    if((size_t)k.item>=s.itens.size()) return;
+    RxAbrirItem(s.itens[(size_t)k.item],tocar);
+}
+static void RxVerTudo(size_t fi){
+    if(fi>=g_rxFilas.size()) return;
+    int fonte=g_rxFilas[fi].fonte;
+    for(size_t i=0;i<g_rxAbertas.size();i++) if(g_rxAbertas[i]==fonte){ g_rxAbertas.erase(g_rxAbertas.begin()+(long)i); BuildLayout(); return; }
+    g_rxAbertas.push_back(fonte); BuildLayout();
+}

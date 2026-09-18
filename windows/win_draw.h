@@ -412,6 +412,8 @@ static void DrawOnlineTag(Graphics& g,const RectF& art,const std::wstring& url){
     SolidBrush ac(lc); TextCenter(g,c?StreamTagLabel(*c,art.Width>=S(90)):std::wstring(L"ONLINE"),tag,std::max((REAL)S(7),hh*(c?0.5f:0.62f)),&ac,true);
     if(c&&c->phase!=5){ REAL fr=StreamBufFrac(*c); SolidBrush tb(Cs(Color(255,40,44,65),UI().border)); g.FillRectangle(&tb,tag.X,tag.Y+tag.Height-S(2),tag.Width,(REAL)S(2)); g.FillRectangle(&ac,tag.X,tag.Y+tag.Height-S(2),tag.Width*fr,(REAL)S(2)); }
 }
+#include "win_draw_remix.h"   // estilo REMIX: lateral, tela inicial e barra do player
+
 static void DrawNormal(Graphics& g,int w,int h){
     g_streamSnap=StreamSnapshot();
     DrawAppBackground(g,w,h,Cs(Color(255,5,7,18),UI().bg));
@@ -422,6 +424,7 @@ static void DrawNormal(Graphics& g,int w,int h){
         g.FillRectangle(&barB,0,0,w,g_headerH);
         g.DrawLine(&divP,0,g_headerH,w,g_headerH);
         if(g_sideW>0) g.DrawLine(&divP,g_sideW,g_headerH,g_sideW,h);
+        if(RxOn()) RxDrawMainBg(g);   // chapa da area principal (o papel de parede continua por baixo)
     }
     const Font &fBrand=*UiFont(S(17),true),&fTitleBase=*UiFont(TextScale(20,g_cfg.titleScale),true),&fArtistBase=*UiFont(TextScale(13,g_cfg.artistScale),false),&fLabel=*UiFont(S(12),true),&fSmall=*UiFont(S(10),false);
     g.DrawString(L"REMIX",-1,&fBrand,PointF(S(18),S(14)),&ab);
@@ -449,7 +452,7 @@ static void DrawNormal(Graphics& g,int w,int h){
     SolidBrush navB(ToGdi(cNav)); Pen playP(ToGdi(cPlay),2.4f); SolidBrush playB(UiClassic()?ToGdi(cPlay):ToGdi(UI().bg)), playFill(ToGdi(cPlay));   // novos: play cheio, simbolo escuro
     StringFormat cf; cf.SetAlignment(StringAlignmentCenter); cf.SetLineAlignment(StringAlignmentCenter);
     StringFormat noWrapF; noWrapF.SetFormatFlags(StringFormatFlagsNoWrap); noWrapF.SetTrimming(StringTrimmingEllipsisCharacter);
-    {
+    if(!RxOn()){   // painel grande do player: so no CLASSICO (no REMIX ele virou a barra de baixo)
         RectF pnl=RF(R_playerPanel);
         int pr_=UiClassic()?18:(int)S(UI_R_CARD);
         if(UiClassic()){ SolidBrush pb(Cs(Color(255,8,11,24),UI().surface)); DrawRoundRect(g,pnl,18,&pb,nullptr); }
@@ -690,6 +693,12 @@ static void DrawNormal(Graphics& g,int w,int h){
         if(R_onlineInfo.right>R_onlineInfo.left&&(g_view==2||!SS().busy)) DrawPill(g,R_onlineInfo,g_view==2?L"+ ADICIONAR MÚSICAS":L"ESCOLHER PASTA",true,S(12));
         (void)fLabel;
     }
+    if(RxOn()){
+        RxDrawSide(g,accent,ToGdi(UI().text),ToGdi(UI().textDim));
+        RxDrawBusca(g,ToGdi(UI().text),ToGdi(UI().textDim));
+        if(g_rxPag==RXP_INICIO) RxDrawInicio(g,w,h,accent,ToGdi(UI().text),ToGdi(UI().textDim));
+        RxDrawBar(g,w,h,accent,ToGdi(UI().text),ToGdi(UI().textDim),ToGdi(cNav),ToGdi(cPlay),UiClassic()?ToGdi(cPlay):ToGdi(UI().bg));
+    }
     if(g_showSettings) DrawSettings(g,w,h);
 }
 
@@ -817,7 +826,7 @@ static void DrawSettings(Graphics& g,int w,int h){
     for(auto&lp:g_setLabels) g.DrawString(lp.second.c_str(),-1,lab,PointF((REAL)lp.first.left,(REAL)lp.first.top),UiClassic()?(Brush*)&ab:(Brush*)&gray);
     // estilo da interface
     for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
-    g.DrawString(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",-1,sm,PointF((REAL)R_settingsStyle[0].left,(REAL)(R_settingsStyle[0].bottom+10)),&gray);
+    g.DrawString(L"Clássico: o visual original, com LED e cards.   Remix: barra lateral com a biblioteca, início com novidades e o player embaixo.",-1,sm,PointF((REAL)R_settingsStyle[0].left,(REAL)(R_settingsStyle[0].bottom+10)),&gray);
     {   // SOUNDPAD e DISCORD
         bool sp=spad::Running(), dr=dc::Ready();
         btn(R_setSpad,sp?L"ABRIR SOUNDPAD (MICROFONE LIGADO)":L"ABRIR SOUNDPAD",sp);

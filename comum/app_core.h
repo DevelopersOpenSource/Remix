@@ -65,7 +65,7 @@ static Config g_cfg;
 // Estilo ativo (configuracoes > ESTILO). O LED e o corredor so existem no classico e no spotify.
 static inline const UiPal& UI(){ return UiPalFor(g_cfg.uiStyle); }
 static inline bool UiClassic(){ return g_cfg.uiStyle==UI_CLASSICO; }
-static inline bool UiGlow(){ return g_cfg.uiStyle!=UI_LIMPO; }
+static inline bool UiGlow(){ return true; }   // LED/corredor: agora ligam e desligam nas EFEITOS, nao no estilo
 static inline int  UiLed(){ return UiGlow()?g_cfg.ledBrightness:0; }
 static inline bool UiRunner(){ return UiGlow()&&g_cfg.runnerOn; }
 // Posicao do mouse (cada casca atualiza no seu laco): destaque do card/linha sob o
@@ -136,6 +136,7 @@ struct StreamJob;
 void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t absFirstFrame);
 #include "online_play.h"
 #include "stems.h"
+#include "descobrir.h"   // novidades/recomendacoes da tela inicial (Deezer publico + o que voce ouve)
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
 // Teclas (mapeadas por cada plataforma).
@@ -201,6 +202,13 @@ enum : int {
     Z_DC_PLCARD_BASE=16500, Z_DC_CARD_BASE=6000000,      // botao ▶ DISCORD sobre a capa: playlist (+500) e faixa (+1 milhao)
     Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo (ate 21500)
     Z_HOST_DEVLINK_BASE=21600,   // +100: link permanente de cada aparelho (religar em qualquer endereco)
+    // Estilo REMIX (1.6): lateral, tela inicial com fileiras e player embaixo.
+    Z_RX_NAV_BASE=30000,          // +3: Início / Buscar / Sua biblioteca
+    Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS,
+    Z_RX_SIDE_BASE=31000,         // +500: itens da lateral (0 = todas as músicas, depois as playlists)
+    Z_RX_CARD_BASE=32000,         // +4000: cartões da tela inicial
+    Z_RX_CARDPLAY_BASE=37000,     // +4000: play sobre a capa do cartão
+    Z_RX_VERTUDO_BASE=42000,      // +100: "ver tudo" de cada fileira
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
     Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
@@ -216,7 +224,7 @@ static std::vector<RECT> R_cardCoverButtons;
 static std::vector<RECT> R_cardSeekRects;
 static RECT R_settingsPanel, R_settingsDefault, R_settingsCustom, R_settingsClose;
 static RECT R_settingsModeSquare, R_settingsModeCd, R_settingsModeVertical;
-static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: classico / limpo / spotify
+static RECT R_settingsStyle[UI_STYLE_COUNT];   // ESTILO: clássico / remix
 static RECT R_setHostCopyTun, R_setHostCopyLan, R_setHostOnline, R_setHostQrConf, R_setHostIpv6;
 static RECT R_setHostOn, R_setHostPort, R_setHostPin, R_setHostName, R_setHostTunnel, R_setHostLan, R_setHostPanel, R_hostBtn;   // HOST (docs/HOST.md)
 static RECT R_fxBtn;   // EFEITOS (cabecalho)
@@ -258,7 +266,24 @@ static_assert(Z_HOST_DPLOK_BASE+500<=Z_FX_BTN && Z_FX_CANCEL<Z_FX_BASE && Z_FX_B
 static_assert(Z_STEM_BASE+10<=Z_SPAD_BTN && Z_ON_ADD_BASE+500<=Z_DC_PLCARD_BASE && Z_DC_PLCARD_BASE+500<=Z_HOST_ACCEPT_BASE && Z_CARD_NEXT_BASE+1000000<=Z_DC_CARD_BASE && Z_DC_CARD_BASE+1000000<=Z_ROW_UP_BASE, "botoes do discord invadem outra faixa");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_DEVLINK_BASE && Z_HOST_DEVLINK_BASE+100<=Z_HOST_BTN, "faixa do link do aparelho invade outra");
+static_assert(Z_RX_NAV_BASE>Z_SPAD_BTN+2800 && Z_RX_NAV_BASE+3<=Z_RX_NOVAPL && Z_RX_VERTODAS<Z_RX_SIDE_BASE && Z_RX_SIDE_BASE+500<=Z_RX_CARD_BASE && Z_RX_CARD_BASE+4000<=Z_RX_CARDPLAY_BASE && Z_RX_CARDPLAY_BASE+4000<=Z_RX_VERTUDO_BASE && Z_RX_VERTUDO_BASE+100<Z_COVER_BASE, "faixa do estilo REMIX invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
+// ---- estilo REMIX (1.6): lateral com a biblioteca, tela inicial com fileiras, player embaixo ----
+enum { RXP_INICIO=0, RXP_LISTA=1 };        // LISTA = biblioteca/playlists/playlist aberta (usa g_view)
+static int g_rxPag=RXP_INICIO;             // pagina da area principal
+static int g_rxScroll=0, g_rxContentH=0;   // rolagem da tela inicial
+static RECT R_rxTop{0,0,0,0}, R_rxSide{0,0,0,0}, R_rxMain{0,0,0,0}, R_rxBar{0,0,0,0};
+static RECT R_rxNav[3];                    // Início / Descobrir / Sua biblioteca
+static RECT R_rxNovaPl{0,0,0,0}, R_rxAtualizar{0,0,0,0}, R_rxVerTodas{0,0,0,0};
+static std::vector<RECT> R_rxSidePl;       // 0 = "Todas as músicas", depois uma por playlist
+struct RxCard { RECT r{0,0,0,0}, play{0,0,0,0}; int fila=0, item=0; };
+static std::vector<RxCard> g_rxCards;      // cartoes visiveis da tela inicial
+struct RxFila { RECT head{0,0,0,0}, verTudo{0,0,0,0}; int fonte=0; };   // fonte: -1 = local (recentes), >=0 = fileira do descobrir
+static std::vector<RxFila> g_rxFilas;
+static std::vector<int> g_rxAbertas;       // fileiras expandidas ("ver tudo")
+static std::vector<int> g_rxRecentes;             // "tocados recentemente": indices na lista em tela
+static std::vector<std::wstring> g_rxRecentesChave;   // ...e o caminho/URL de cada um
+static bool RxOn(){ return g_cfg.uiStyle!=UI_CLASSICO; }
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
 static std::vector<RECT> R_rowUp, R_rowDown;
 static RECT R_setAutoplay, R_setSort, R_setSortDir, R_setEqOn, R_setEqReset;
@@ -794,6 +819,7 @@ static void PlayIndex(int idx,bool autoplay=true){
     if(g_cfg.shuffle&&(g_shufQueue.size()!=g_tracks.size()||g_shufPos<0||g_shufPos>=(int)g_shufQueue.size()||g_shufQueue[(size_t)g_shufPos]!=idx)) RebuildShuffleQueue(idx);
     g_current=idx; g_nowPlaying=g_tracks[(size_t)idx]; g_nowPlayingValid=true;
     const std::wstring path=g_tracks[idx].path;
+    if(autoplay) desc::Registrar(g_tracks[(size_t)idx].artist,path);   // o que voce ouve alimenta as recomendacoes (so no seu PC)
     PlatformLoadCover(g_tracks[idx].coverPath);
     unsigned gen=++g_openGen;
     g_currentSource.clear();

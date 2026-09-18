@@ -55,8 +55,8 @@ static void LayoutSettings(int w,int h){
     // ESTILO: classico / limpo / spotify+LED (3 botoes iguais + uma linha de explicacao)
     auto sectStyle=[&](int x,int& y,int cw){
         sect(x,y,cw,124,L"ESTILO DA INTERFACE");
-        int bw=(cw-60)/3;
-        for(int k=0;k<UI_STYLE_COUNT;k++){ int bx=x+20+k*(bw+10); R_settingsStyle[k]={bx,y+52,bx+bw,y+88}; }
+        int bw=(cw-50)/UI_STYLE_COUNT;
+        for(int k=0;k<UI_STYLE_COUNT;k++){ int bx=x+20+k*(bw+10); R_settingsStyle[k]={bx,y+52,bx+bw,y+88}; }   // dois botoes: CLÁSSICO e REMIX
         y+=144;
     };
     // secoes comuns as duas larguras
@@ -203,6 +203,255 @@ static void LayoutSettings(int w,int h){
     if(g_setScroll<0) g_setScroll=0;
 }
 
+// Area da biblioteca (barra de abas + grade/lista/cards). Usada pelos dois estilos: o
+// CLASSICO passa a area a direita do painel do player; o REMIX passa a area principal.
+// abas = false (estilo REMIX): quem navega e a barra lateral e a busca fica no topo,
+// entao a barra so aparece quando tem algo proprio da tela (marcar musicas, playlist aberta).
+static void BuildLibraryArea(int gx,int gtop,int gright,int gbottom,bool abas=true){
+    int gw=gright-gx, h=gbottom, w=g_winW;
+    (void)w;
+    bool manual=(g_cfg.sortMode==L"manual");
+    if(gw<SI(280)){ R_library={0,0,0,0}; return; }
+
+    // barra da biblioteca: abas MUSICAS/PLAYLISTS (ou voltar + nome da playlist) e a busca
+    bool temBarra=abas||(g_pickMode&&g_view==0)||g_view==2||g_view==1;
+    int top=gtop, barH=temBarra?SI(40):0;
+    R_libBar=temBarra?RECT{gx,top,gright,top+barH}:RECT{0,0,0,0};
+    int by0=top+SI(4), by1=top+barH-SI(4);
+    int sx=gx;
+    if(g_pickMode&&g_view==0){   // marcando musicas da biblioteca para uma playlist
+        int dw=std::min((int)S(190),gw/3), cw2=std::min((int)S(120),gw/4);
+        R_pickDone={gx,by0,gx+dw,by1}; R_pickCancel={R_pickDone.right+SI(8),by0,R_pickDone.right+SI(8)+cw2,by1};
+        sx=(int)R_pickCancel.right+SI(12);
+    } else if(g_view==2){        // playlist aberta: voltar, + ADICIONAR, busca e (se tiver online) o modo
+        int bw=std::min((int)S(140),gw/4), aw=std::min((int)S(130),gw/4);
+        R_plBack={gx,by0,gx+bw,by1}; R_plAdd={R_plBack.right+SI(8),by0,R_plBack.right+SI(8)+aw,by1};
+        sx=(int)R_plAdd.right+SI(12);
+        bool hasOnline=false;
+        if(const Playlist* op=OpenPlaylistPtr()){ hasOnline=!op->link.empty(); for(auto& e:op->entries) if(!e.url.empty()){ hasOnline=true; break; } }
+        if(hasOnline&&gright-sx>=SI(320)){ int mw=(int)S(124); R_plMode={gright-mw,by0,gright,by1}; }
+    } else if(abas){             // abas MUSICAS / PLAYLISTS / ONLINE (encolhem se faltar espaco)
+        int tabW=(int)S(104), onW=(int)S(92), gap=SI(8);
+        int need=tabW*2+onW+gap*2;
+        if(need>gw-SI(60)){ float k=(float)std::max(SI(150),gw-SI(60))/(float)need; tabW=(int)(tabW*k); onW=(int)(onW*k); }
+        R_tabTracks={gx,by0,gx+tabW,by1}; R_tabPlaylists={R_tabTracks.right+gap,by0,R_tabTracks.right+gap+tabW,by1};
+        R_tabOnline={R_tabPlaylists.right+gap,by0,R_tabPlaylists.right+gap+onW,by1};
+        sx=(int)R_tabOnline.right+SI(12);
+    }
+    int sEnd=(R_plMode.right>R_plMode.left)?(int)R_plMode.left-SI(8):gright;
+    if(g_view==1){ R_plNew={std::max(sx,gright-(int)S(180)),by0,gright,by1}; }
+    else if(abas&&sEnd-sx>=SI(140)){ R_searchBox={sx,by0,sEnd,by1}; R_searchClear={R_searchBox.right-SI(34),by0,R_searchBox.right,by1}; }
+    int gridTop=top+barH+(temBarra?SI(8):0);
+    R_library={gx,gridTop,gright,gbottom};
+    int libH=R_library.bottom-R_library.top;
+    if(g_view==1){
+        // cards de playlists: "Todas as musicas" + cada playlist + "nova"
+        int cols=gw>=SI(760)?3:(gw>=SI(500)?2:1); g_gridCols=cols;
+        int gapX=SI(20),gapY=SI(18),cardH=SI(190); int cardW=(gw-(cols-1)*gapX)/cols;
+        int n=(int)g_playlists.size()+2;
+        g_contentH=((n+cols-1)/cols)*(cardH+gapY);
+        g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
+        for(int k=0;k<n;k++){
+            int row=k/cols,col=k%cols; int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
+            if(y>gbottom||y+cardH<gridTop-SI(40)){ R_plCards.push_back({0,0,0,0}); R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); R_plDcBtns.push_back({0,0,0,0}); continue; }
+            R_plCards.push_back({x,y,x+cardW,y+cardH});
+            // ▶ DC em cima do quadrado da capa (so playlists de verdade; "Todas as musicas" e "nova" nao)
+            if(k>0&&k<n-1){ int cv=SI(96), ax=x+SI(16), ay=y+SI(16); R_plDcBtns.push_back({ax+SI(6),ay+cv-SI(30),ax+cv-SI(6),ay+cv-SI(6)}); } else R_plDcBtns.push_back({0,0,0,0});
+            if(k==n-1){ R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); }
+            else { int bw2=(cardW-SI(40))/2; R_plPlay.push_back({x+SI(16),y+cardH-SI(50),x+SI(16)+bw2,y+cardH-SI(16)}); R_plShuf.push_back({x+SI(24)+bw2,y+cardH-SI(50),x+cardW-SI(16),y+cardH-SI(16)}); }
+        }
+    } else {
+        R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardDcBtns.assign(g_tracks.size(),RECT{0,0,0,0});
+        R_rowUp.assign(g_tracks.size(),RECT{0,0,0,0}); R_rowDown.assign(g_tracks.size(),RECT{0,0,0,0});
+        if(g_cfg.listMode!=0){
+            int rowH=SI(64);
+            g_gridCols=1; g_contentH=(int)g_visible.size()*rowH;
+            g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
+            for(size_t vi=0;vi<g_visible.size();++vi){
+                size_t i=(size_t)g_visible[vi];
+                int y=gridTop+(int)vi*rowH-g_listScroll;
+                if(y>gbottom||y+rowH<gridTop) continue;
+                RECT rr={gx,y,R_library.right,y+rowH-SI(8)};
+                R_cardRects[i]=rr;
+                if(manual){ R_rowUp[i]={rr.right-SI(74),rr.top+SI(6),rr.right-SI(44),rr.top+SI(28)}; R_rowDown[i]={rr.right-SI(74),rr.top+SI(30),rr.right-SI(44),rr.top+SI(52)}; }
+            }
+        } else if(UiClassic()){
+            int cols=gw>=SI(760)?3:(gw>=SI(500)?2:1);
+            g_gridCols=cols;
+            int gapX=SI(20),gapY=SI(18),cardH=SI(225);
+            int cardW=(gw-(cols-1)*gapX)/cols;
+            g_contentH=(int)(((int)g_visible.size()+cols-1)/cols)*(cardH+gapY);
+            g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
+            for(size_t vi=0;vi<g_visible.size();++vi){
+                size_t i=(size_t)g_visible[vi];
+                int row=(int)vi/cols,col=(int)vi%cols;
+                int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
+                if(y>gbottom||y+cardH<gridTop-SI(40)) continue;
+                R_cardRects[i]={x,y,x+cardW,y+cardH};
+                R_cardCoverButtons[i]={x+cardW-SI(42),y+SI(16),x+cardW-SI(14),y+SI(44)};
+                // so a linha da barra de seek (nao invade os botoes de transporte)
+                R_cardSeekRects[i]={x+SI(180),y+SI(140),x+cardW-SI(22),y+SI(160)};
+                if(manual){ R_rowUp[i]={x+cardW-SI(42),y+SI(50),x+cardW-SI(14),y+SI(72)}; R_rowDown[i]={x+cardW-SI(42),y+SI(76),x+cardW-SI(14),y+SI(98)}; }
+            }
+        } else {
+            // Estilos novos: card em pe (capa grande, nome e artista embaixo). O transporte
+            // fica so no player; sobre a capa aparece um botao de play quando o mouse passa.
+            int gapX=SI(18),gapY=SI(20);
+            int cols=std::max(1,(gw+gapX)/(SI(190)+gapX)); if(cols>6) cols=6;
+            g_gridCols=cols;
+            int cardW=(gw-(cols-1)*gapX)/cols;
+            int cover=cardW-SI(20);
+            int cardH=cover+SI(74);
+            g_contentH=(int)(((int)g_visible.size()+cols-1)/cols)*(cardH+gapY);
+            g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
+            for(size_t vi=0;vi<g_visible.size();++vi){
+                size_t i=(size_t)g_visible[vi];
+                int row=(int)vi/cols,col=(int)vi%cols;
+                int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
+                if(y>gbottom||y+cardH<gridTop-SI(40)) continue;
+                R_cardRects[i]={x,y,x+cardW,y+cardH};
+                R_cardCoverButtons[i]={x+cardW-SI(44),y+SI(14),x+cardW-SI(18),y+SI(40)};
+                R_cardSeekRects[i]={0,0,0,0};   // sem seek no card: quem arrasta e a barra do player
+                R_cardPlayBtns[i]={x+SI(10)+cover-SI(52),y+SI(10)+cover-SI(52),x+SI(10)+cover-SI(8),y+SI(10)+cover-SI(8)};
+                R_cardDcBtns[i]={x+SI(18),y+SI(18),x+SI(18)+std::min(SI(104),cover-SI(56)),y+SI(46)};   // ▶ DISCORD em cima do quadrado da capa
+                if(manual){ R_rowUp[i]={x+SI(10),y+cover-SI(40),x+SI(38),y+cover-SI(16)}; R_rowDown[i]={x+SI(42),y+cover-SI(40),x+SI(70),y+cover-SI(16)}; }
+            }
+        }
+    }
+    // lista vazia: texto + botao no meio da area da lista (antes o texto ficava por cima da barra)
+    if(g_view!=1&&g_tracks.empty()){ int cx=(gx+gright)/2, bw2=std::min((int)S(300),gw-SI(20)); int ey=gridTop+std::min(SI(150),libH/3); R_onlineInfo={cx-bw2/2,ey,cx+bw2/2,ey+SI(40)}; }
+}
+
+// ------------------------------------------------------------ estilo REMIX --
+// Moldura: barra de cima (marca + busca + atalhos), barra lateral (navegacao e
+// biblioteca), area principal (inicio com fileiras OU a grade da biblioteca) e
+// o player numa barra embaixo, da largura toda. Os RECTs do transporte sao os
+// mesmos do estilo classico (R_play, R_seek...), so que colocados na barra de
+// baixo: assim o clique e os atalhos continuam funcionando sem nenhuma mudanca.
+static int RxFonteFileira(size_t i){ return i<g_rxFilas.size()?g_rxFilas[i].fonte:0; }
+static bool RxFileiraAberta(int fonte){ for(int f:g_rxAbertas) if(f==fonte) return true; return false; }
+// "Tocados recentemente": so o que ainda esta na biblioteca (musica apagada nao vira quadrado vazio).
+static void RxMontarRecentes(){
+    g_rxRecentes.clear(); g_rxRecentesChave.clear();
+    const std::vector<Track>& fonte=(g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks;
+    std::map<std::wstring,int> idx;
+    for(size_t i=0;i<fonte.size();i++) idx[fonte[i].path]=(int)i;
+    for(auto& ch:desc::Recentes(60)){
+        auto it=idx.find(ch); if(it==idx.end()) continue;
+        g_rxRecentes.push_back(it->second); g_rxRecentesChave.push_back(ch);
+        if(g_rxRecentes.size()>=40) break;
+    }
+}
+
+static void BuildLayoutRemix(int w,int h,int chrome){
+    const int topH=SI(56), barH=SI(96), gap=SI(14);
+    g_headerH=topH;
+    R_rxTop={0,0,w,topH};
+    int sideW = w>=SI(1040)?SI(250) : (w>=SI(840)?SI(206) : 0);
+    g_sideW=sideW;
+    R_rxSide = sideW? RECT{0,topH,sideW,h-barH} : RECT{0,0,0,0};
+    R_rxBar={0,h-barH,w,h};
+    int mx = sideW? sideW+gap : gap;
+    R_rxMain={mx,topH+SI(8),w-gap,h-barH-SI(6)};
+
+    // ---- barra de cima: marca a esquerda, busca no meio, atalhos a direita
+    int rx=w-SI(12)-chrome;
+    R_gear={rx-SI(40),SI(9),rx,SI(47)}; rx=(int)R_gear.left-SI(8);
+    R_listBtn={rx-SI(46),SI(9),rx,SI(47)}; rx=(int)R_listBtn.left-SI(10);
+    int bx=(sideW?sideW:SI(112))+SI(12);
+    int minBusca=bx+SI(150);                       // a busca tem prioridade: pilula so entra se sobrar espaco
+    auto pilula=[&](RECT& r,float wid){ int x1=rx, x0=rx-(int)S(wid); if(x0<minBusca){ r={0,0,0,0}; return; } r={x0,SI(10),x1,SI(46)}; rx=x0-SI(8); };
+    pilula(R_dcBtn,100); pilula(R_spadBtn,110); pilula(R_fxBtn,96); pilula(R_hostBtn,78);
+    if(g_rxPag!=RXP_INICIO){ pilula(R_folderBtn,g_view==2?160.f:100.f); pilula(R_sortBtn,160); }
+    else { R_folderBtn={0,0,0,0}; R_sortBtn={0,0,0,0}; }
+    R_shapeTgl={0,0,0,0}; R_autoTgl={0,0,0,0};
+    {   // busca do topo: e a busca da biblioteca (o mesmo texto e o mesmo X)
+        int bw2=std::min((int)S(420),rx-SI(12)-bx);
+        if(bw2>=SI(150)){ R_searchBox={bx,SI(10),bx+bw2,SI(46)}; R_searchClear={R_searchBox.right-SI(34),SI(10),R_searchBox.right,SI(46)}; }
+        else { R_searchBox={0,0,0,0}; R_searchClear={0,0,0,0}; }
+    }
+    // ---- barra lateral: Início / Descobrir / Sua biblioteca + playlists
+    R_rxSidePl.clear();
+    R_rxNav[0]=R_rxNav[1]=R_rxNav[2]=RECT{0,0,0,0};
+    R_rxNovaPl={0,0,0,0}; R_rxVerTodas={0,0,0,0};
+    if(sideW){
+        int x0=SI(10), x1=sideW-SI(10), y=topH+SI(12), ih=SI(38);
+        for(int i=0;i<3;i++){ R_rxNav[i]={x0,y,x1,y+ih}; y+=ih+SI(2); }
+        y+=SI(14);
+        R_rxNovaPl={x0,y,x1,y+SI(34)}; y+=SI(34)+SI(10);
+        int fim=(int)R_rxSide.bottom-SI(8), ph=SI(46);
+        int n=(int)g_playlists.size()+1;              // 0 = todas as musicas
+        for(int i=0;i<n;i++){ if(y+ph>fim) break; R_rxSidePl.push_back({x0,y,x1,y+ph-SI(4)}); y+=ph; }
+    }
+    // ---- barra de baixo: capa + titulo | transporte + seek | volume
+    {
+        int bt=(int)R_rxBar.top, cv=barH-SI(30);
+        R_art={SI(14),bt+SI(15),SI(14)+cv,bt+SI(15)+cv};
+        int cx=w/2, sw=std::min((int)S(520),std::max(SI(220),w-SI(560)));
+        int ty=bt+SI(24);
+        R_play={cx-SI(19),ty-SI(19),cx+SI(19),ty+SI(19)};
+        R_prev={cx-SI(58)-SI(15),ty-SI(15),cx-SI(58)+SI(15),ty+SI(15)};
+        R_next={cx+SI(58)-SI(15),ty-SI(15),cx+SI(58)+SI(15),ty+SI(15)};
+        R_shuffle={cx-SI(104)-SI(14),ty-SI(14),cx-SI(104)+SI(14),ty+SI(14)};
+        R_repeat={cx+SI(104)-SI(14),ty-SI(14),cx+SI(104)+SI(14),ty+SI(14)};
+        int sy=bt+SI(62);
+        R_seek={cx-sw/2,sy-SI(9),cx+sw/2,sy+SI(9)};
+        R_wavePanel={0,0,0,0};
+        int vx=w-SI(20)-chrome;
+        R_vol={vx-SI(110),bt+barH/2-SI(3),vx,bt+barH/2+SI(3)};
+        R_volIcon={(int)R_vol.left-SI(30),bt+barH/2-SI(12),(int)R_vol.left-SI(6),bt+barH/2+SI(12)};
+        R_playerPanel={0,0,0,0};
+        R_runnerSlider={0,0,0,0};
+        R_pencilPanel={0,0,0,0};
+    }
+    // ---- area principal
+    g_rxCards.clear(); g_rxFilas.clear();
+    if(g_rxPag!=RXP_INICIO){
+        BuildLibraryArea((int)R_rxMain.left,(int)R_rxMain.top,(int)R_rxMain.right,(int)R_rxMain.bottom,false);
+        return;
+    }
+    R_library={0,0,0,0};
+    // Tela inicial: fileiras de cartoes. Cada fileira mostra o que couber numa
+    // linha; "ver tudo" abre as outras linhas ali mesmo (sem rolagem horizontal,
+    // que no mouse e no touch do celular so atrapalha).
+    int mxL=(int)R_rxMain.left, mxR=(int)R_rxMain.right, mw=mxR-mxL;
+    int gapX=SI(16), cardW=std::max(SI(120),std::min((int)S(168),(mw-gapX*4)/5));
+    int cols=std::max(1,(mw+gapX)/(cardW+gapX));
+    int cardH=cardW+SI(56);
+    desc::Home home=desc::Copia();
+    RxMontarRecentes();
+    int nFil=(int)home.fileiras.size()+1;             // +1 = "Tocados recentemente" (local)
+    int y=(int)R_rxMain.top+SI(46)-g_rxScroll;        // espaco do titulo "Boa noite"
+    for(int f=0; f<nFil; f++){
+        int fonte=f-1;                                 // -1 = local
+        int total = fonte<0 ? (int)g_rxRecentes.size()
+                            : (int)home.fileiras[(size_t)fonte].itens.size();
+        if(total<=0) continue;
+        int linhas = RxFileiraAberta(fonte) ? (total+cols-1)/cols : 1;
+        int mostra = std::min(total,linhas*cols);
+        RxFila fl; fl.fonte=fonte;
+        fl.head={mxL,y,mxR,y+SI(30)};
+        if(total>cols) fl.verTudo={mxR-(int)S(110),y,mxR,y+SI(28)};
+        g_rxFilas.push_back(fl);
+        int fi=(int)g_rxFilas.size()-1;   // fileira vazia nao entra: o cartao guarda a posicao real
+        int cy=y+SI(38);
+        for(int i=0;i<mostra;i++){
+            int r=i/cols, c=i%cols;
+            int cxp=mxL+c*(cardW+gapX), cyp=cy+r*(cardH+SI(14));
+            if(cyp>(int)R_rxMain.bottom||cyp+cardH<(int)R_rxMain.top){ continue; }
+            RxCard k; k.fila=fi; k.item=i;
+            k.r={cxp,cyp,cxp+cardW,cyp+cardH};
+            k.play={cxp+cardW-SI(46),cyp+cardW-SI(46),cxp+cardW-SI(10),cyp+cardW-SI(10)};
+            g_rxCards.push_back(k);
+        }
+        y=cy+linhas*(cardH+SI(14))+SI(10);
+    }
+    g_rxContentH=y+g_rxScroll-(int)R_rxMain.top+SI(20);
+    int maxSc=std::max(0,g_rxContentH-((int)R_rxMain.bottom-(int)R_rxMain.top));
+    if(g_rxScroll>maxSc) g_rxScroll=maxSc;
+    if(g_rxScroll<0) g_rxScroll=0;
+}
+
 static void BuildLayout(){
     int w=g_winW,h=g_winH;
     R_titlebar={0,0,w,44}; R_close={0,0,0,0}; R_min={0,0,0,0};
@@ -251,6 +500,9 @@ static void BuildLayout(){
         }
         R_library={0,0,0,0}; R_modeSquare=R_modeCd=R_modeVertical={0,0,0,0};
         g_listScroll=0;
+    } else if(RxOn()){
+        R_modeSquare=R_modeCd=R_modeVertical={0,0,0,0}; R_themeCircles.clear();
+        BuildLayoutRemix(w,h,chrome);
     } else {
         int headerH=SI(56), margin=SI(24);
         g_headerH=headerH;
@@ -305,114 +557,7 @@ static void BuildLayout(){
         int gx=R_playerPanel.right+SI(18);
         if(!UiClassic()){ g_sideW=R_playerPanel.right+margin; gx=g_sideW+SI(20); }   // coluna solida + divisoria
         int gw=w-margin-gx;
-        if(gw>=SI(280)){
-            // barra da biblioteca: abas MUSICAS/PLAYLISTS (ou voltar + nome da playlist) e a busca
-            int top=headerH+SI(6), barH=SI(40);
-            R_libBar={gx,top,w-margin,top+barH};
-            int by0=top+SI(4), by1=top+barH-SI(4);
-            int sx;
-            if(g_pickMode&&g_view==0){   // marcando musicas da biblioteca para uma playlist
-                int dw=std::min((int)S(190),gw/3), cw2=std::min((int)S(120),gw/4);
-                R_pickDone={gx,by0,gx+dw,by1}; R_pickCancel={R_pickDone.right+SI(8),by0,R_pickDone.right+SI(8)+cw2,by1};
-                sx=(int)R_pickCancel.right+SI(12);
-            } else if(g_view==2){        // playlist aberta: voltar, + ADICIONAR, busca e (se tiver online) o modo
-                int bw=std::min((int)S(140),gw/4), aw=std::min((int)S(130),gw/4);
-                R_plBack={gx,by0,gx+bw,by1}; R_plAdd={R_plBack.right+SI(8),by0,R_plBack.right+SI(8)+aw,by1};
-                sx=(int)R_plAdd.right+SI(12);
-                bool hasOnline=false;
-                if(const Playlist* op=OpenPlaylistPtr()){ hasOnline=!op->link.empty(); for(auto& e:op->entries) if(!e.url.empty()){ hasOnline=true; break; } }
-                if(hasOnline&&w-margin-sx>=SI(320)){ int mw=(int)S(124); R_plMode={w-margin-mw,by0,w-margin,by1}; }
-            } else {                     // abas MUSICAS / PLAYLISTS / ONLINE (encolhem se faltar espaco)
-                int tabW=(int)S(104), onW=(int)S(92), gap=SI(8);
-                int need=tabW*2+onW+gap*2;
-                if(need>gw-SI(60)){ float k=(float)std::max(SI(150),gw-SI(60))/(float)need; tabW=(int)(tabW*k); onW=(int)(onW*k); }
-                R_tabTracks={gx,by0,gx+tabW,by1}; R_tabPlaylists={R_tabTracks.right+gap,by0,R_tabTracks.right+gap+tabW,by1};
-                R_tabOnline={R_tabPlaylists.right+gap,by0,R_tabPlaylists.right+gap+onW,by1};
-                sx=(int)R_tabOnline.right+SI(12);
-            }
-            int sEnd=(R_plMode.right>R_plMode.left)?(int)R_plMode.left-SI(8):w-margin;
-            if(g_view==1){ R_plNew={std::max(sx,w-margin-(int)S(180)),by0,w-margin,by1}; }
-            else if(sEnd-sx>=SI(140)){ R_searchBox={sx,by0,sEnd,by1}; R_searchClear={R_searchBox.right-SI(34),by0,R_searchBox.right,by1}; }
-            int gridTop=top+barH+SI(8);
-            R_library={gx,gridTop,w-margin,h-margin};
-            int libH=R_library.bottom-R_library.top;
-            if(g_view==1){
-                // cards de playlists: "Todas as musicas" + cada playlist + "nova"
-                int cols=gw>=SI(760)?3:(gw>=SI(500)?2:1); g_gridCols=cols;
-                int gapX=SI(20),gapY=SI(18),cardH=SI(190); int cardW=(gw-(cols-1)*gapX)/cols;
-                int n=(int)g_playlists.size()+2;
-                g_contentH=((n+cols-1)/cols)*(cardH+gapY);
-                g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
-                for(int k=0;k<n;k++){
-                    int row=k/cols,col=k%cols; int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
-                    if(y>h||y+cardH<gridTop-SI(40)){ R_plCards.push_back({0,0,0,0}); R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); R_plDcBtns.push_back({0,0,0,0}); continue; }
-                    R_plCards.push_back({x,y,x+cardW,y+cardH});
-                    // ▶ DC em cima do quadrado da capa (so playlists de verdade; "Todas as musicas" e "nova" nao)
-                    if(k>0&&k<n-1){ int cv=SI(96), ax=x+SI(16), ay=y+SI(16); R_plDcBtns.push_back({ax+SI(6),ay+cv-SI(30),ax+cv-SI(6),ay+cv-SI(6)}); } else R_plDcBtns.push_back({0,0,0,0});
-                    if(k==n-1){ R_plPlay.push_back({0,0,0,0}); R_plShuf.push_back({0,0,0,0}); }
-                    else { int bw2=(cardW-SI(40))/2; R_plPlay.push_back({x+SI(16),y+cardH-SI(50),x+SI(16)+bw2,y+cardH-SI(16)}); R_plShuf.push_back({x+SI(24)+bw2,y+cardH-SI(50),x+cardW-SI(16),y+cardH-SI(16)}); }
-                }
-            } else {
-                R_cardRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardCoverButtons.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardSeekRects.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardPlayBtns.assign(g_tracks.size(),RECT{0,0,0,0}); R_cardDcBtns.assign(g_tracks.size(),RECT{0,0,0,0});
-                R_rowUp.assign(g_tracks.size(),RECT{0,0,0,0}); R_rowDown.assign(g_tracks.size(),RECT{0,0,0,0});
-                if(g_cfg.listMode!=0){
-                    int rowH=SI(64);
-                    g_gridCols=1; g_contentH=(int)g_visible.size()*rowH;
-                    g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
-                    for(size_t vi=0;vi<g_visible.size();++vi){
-                        size_t i=(size_t)g_visible[vi];
-                        int y=gridTop+(int)vi*rowH-g_listScroll;
-                        if(y>h||y+rowH<gridTop) continue;
-                        RECT rr={gx,y,R_library.right,y+rowH-SI(8)};
-                        R_cardRects[i]=rr;
-                        if(manual){ R_rowUp[i]={rr.right-SI(74),rr.top+SI(6),rr.right-SI(44),rr.top+SI(28)}; R_rowDown[i]={rr.right-SI(74),rr.top+SI(30),rr.right-SI(44),rr.top+SI(52)}; }
-                    }
-                } else if(UiClassic()){
-                    int cols=gw>=SI(760)?3:(gw>=SI(500)?2:1);
-                    g_gridCols=cols;
-                    int gapX=SI(20),gapY=SI(18),cardH=SI(225);
-                    int cardW=(gw-(cols-1)*gapX)/cols;
-                    g_contentH=(int)(((int)g_visible.size()+cols-1)/cols)*(cardH+gapY);
-                    g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
-                    for(size_t vi=0;vi<g_visible.size();++vi){
-                        size_t i=(size_t)g_visible[vi];
-                        int row=(int)vi/cols,col=(int)vi%cols;
-                        int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
-                        if(y>h||y+cardH<gridTop-SI(40)) continue;
-                        R_cardRects[i]={x,y,x+cardW,y+cardH};
-                        R_cardCoverButtons[i]={x+cardW-SI(42),y+SI(16),x+cardW-SI(14),y+SI(44)};
-                        // so a linha da barra de seek (nao invade os botoes de transporte)
-                        R_cardSeekRects[i]={x+SI(180),y+SI(140),x+cardW-SI(22),y+SI(160)};
-                        if(manual){ R_rowUp[i]={x+cardW-SI(42),y+SI(50),x+cardW-SI(14),y+SI(72)}; R_rowDown[i]={x+cardW-SI(42),y+SI(76),x+cardW-SI(14),y+SI(98)}; }
-                    }
-                } else {
-                    // Estilos novos: card em pe (capa grande, nome e artista embaixo). O transporte
-                    // fica so no player; sobre a capa aparece um botao de play quando o mouse passa.
-                    int gapX=SI(18),gapY=SI(20);
-                    int cols=std::max(1,(gw+gapX)/(SI(190)+gapX)); if(cols>6) cols=6;
-                    g_gridCols=cols;
-                    int cardW=(gw-(cols-1)*gapX)/cols;
-                    int cover=cardW-SI(20);
-                    int cardH=cover+SI(74);
-                    g_contentH=(int)(((int)g_visible.size()+cols-1)/cols)*(cardH+gapY);
-                    g_listScroll=std::max(0,std::min(g_listScroll,std::max(0,g_contentH-libH)));
-                    for(size_t vi=0;vi<g_visible.size();++vi){
-                        size_t i=(size_t)g_visible[vi];
-                        int row=(int)vi/cols,col=(int)vi%cols;
-                        int x=gx+col*(cardW+gapX),y=gridTop+row*(cardH+gapY)-g_listScroll;
-                        if(y>h||y+cardH<gridTop-SI(40)) continue;
-                        R_cardRects[i]={x,y,x+cardW,y+cardH};
-                        R_cardCoverButtons[i]={x+cardW-SI(44),y+SI(14),x+cardW-SI(18),y+SI(40)};
-                        R_cardSeekRects[i]={0,0,0,0};   // sem seek no card: quem arrasta e a barra do player
-                        R_cardPlayBtns[i]={x+SI(10)+cover-SI(52),y+SI(10)+cover-SI(52),x+SI(10)+cover-SI(8),y+SI(10)+cover-SI(8)};
-                        R_cardDcBtns[i]={x+SI(18),y+SI(18),x+SI(18)+std::min(SI(104),cover-SI(56)),y+SI(46)};   // ▶ DISCORD em cima do quadrado da capa
-                        if(manual){ R_rowUp[i]={x+SI(10),y+cover-SI(40),x+SI(38),y+cover-SI(16)}; R_rowDown[i]={x+SI(42),y+cover-SI(40),x+SI(70),y+cover-SI(16)}; }
-                    }
-                }
-            }
-            // lista vazia: texto + botao no meio da area da lista (antes o texto ficava por cima da barra)
-            if(g_view!=1&&g_tracks.empty()){ int cx=(gx+w-margin)/2, bw2=std::min((int)S(300),gw-SI(20)); int ey=gridTop+std::min(SI(150),libH/3); R_onlineInfo={cx-bw2/2,ey,cx+bw2/2,ey+SI(40)}; }
-        } else { R_library={0,0,0,0}; }
+        BuildLibraryArea(gx,headerH+SI(6),w-margin,h-margin);
     }
     LayoutSettings(w,h);
 }

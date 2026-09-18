@@ -98,7 +98,7 @@ inline bool WriteAllUtf8Lines(const std::wstring& path, const std::vector<std::w
 struct Config {
     std::wstring musicFolder;
     std::wstring theme = L"azul";
-    int uiStyle = 1;                      // estilo da interface: 0 classico, 1 limpo, 2 spotify+LED (app_ui.h)
+    int uiStyle = 1;                      // estilo da interface: 0 classico, 1 remix (app_ui.h)
     // Host (docs/HOST.md): o Remix vira um servidor para o celular.
     bool hostOn = false;                  // liga o servidor ao abrir
     int hostPort = 49875;                 // porta TCP (1024..65535); 49875 = fora do que os servicos comuns usam
@@ -496,7 +496,7 @@ struct Config {
         }
         if (!hkNovo) MigrateHotkeys();
         // Migracao do formato antigo: "square"/"cd"/"vertical" viviam num campo so.
-        uiStyle = std::max(0, std::min(2, uiStyle));
+        uiStyle = std::max(0, std::min(1, uiStyle));   // 1.6: o antigo 2 (Spotify + LED) virou o estilo REMIX
         if (hostPort < 1024 || hostPort > 65535) hostPort = 49875;
         { bool okPin = hostPin.size() >= 4 && hostPin.size() <= 12; for (wchar_t c : hostPin) if (c < L'0' || c > L'9') okPin = false; if (!okPin) hostPin.clear(); }
         if (displayMode == L"square") { displayMode = L"normal"; artShape = L"square"; }

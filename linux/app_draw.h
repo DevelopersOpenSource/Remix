@@ -177,6 +177,8 @@ static void DrawOnlineTag(const RectF& art,const std::wstring& url){   // faixa 
     gfx::TextRect(c?StreamTagLabel(*c,art.Width>=S(90)):std::wstring(L"ONLINE"),tag,std::max(S(7),hh*(c?0.5f:0.62f)),lc,true,gfx::Center,true,gfx::EllipsisChar);
     if(c&&c->phase!=5){ float fr=StreamBufFrac(*c); gfx::FillRect(RectF(tag.X,tag.Y+tag.Height-S(2),tag.Width,S(2)),Argb(255,40,44,65)); gfx::FillRect(RectF(tag.X,tag.Y+tag.Height-S(2),tag.Width*fr,S(2)),lc); }
 }
+#include "app_draw_remix.h"   // estilo REMIX: lateral, tela inicial e barra do player
+
 static void DrawNormal(int w,int h){
     g_streamSnap=StreamSnapshot();
     DrawAppBackground(w,h,Cs(Argb(255,5,7,18),UI().bg));
@@ -187,6 +189,7 @@ static void DrawNormal(int w,int h){
         gfx::FillRect(0,0,(float)w,(float)g_headerH,barC);
         gfx::Line(0,(float)g_headerH+.5f,(float)w,(float)g_headerH+.5f,1,divC);
         if(g_sideW>0) gfx::Line((float)g_sideW+.5f,(float)g_headerH,(float)g_sideW+.5f,(float)h,1,divC);
+        if(RxOn()) RxDrawMainBg();   // chapa da area principal (o papel de parede continua aparecendo por baixo)
     }
     const float fBrand=S(17), fTitleBase=TextScale(20,g_cfg.titleScale), fArtistBase=TextScale(13,g_cfg.artistScale);
     const float fLabel=S(12), fSmall=S(10);
@@ -216,8 +219,8 @@ static void DrawNormal(int w,int h){
     float tSec=NowMs()/1000.0f;
     COLORREF cNav=(!UiClassic()&&g_cfg.btnNavColor.empty())?UI().text:ResolveCustom(g_cfg.btnNavColor), cPlay=ResolveCustom(g_cfg.btnPlayColor);
     Color navB=ToGdi(cNav), playP=ToGdi(cPlay), playB=UiClassic()?ToGdi(cPlay):ToGdi(UI().bg);   // novos: play cheio, simbolo escuro
-    // ---------------- painel grande do player ----------------
-    {
+    // ---------------- painel grande do player (so no CLASSICO: no REMIX ele virou a barra de baixo) --
+    if(!RxOn()){
         RectF pnl=RF(R_playerPanel);
         float pr_=UiClassic()?18.f:S(UI_R_CARD);
         if(UiClassic()){ Color pb=Argb(255,8,11,24); DrawRoundRect(pnl,18,&pb,nullptr); }
@@ -471,6 +474,12 @@ static void DrawNormal(int w,int h){
         gfx::TextRect(t2,RectF(lib.X+S(20),ty+S(30),lib.Width-S(40),S(20)),S(11),gray,false,gfx::Center,true,gfx::EllipsisChar);
         if(R_onlineInfo.right>R_onlineInfo.left&&(g_view==2||!SS().busy)) DrawPill(R_onlineInfo,g_view==2?L"+ ADICIONAR MÚSICAS":L"ESCOLHER PASTA",true,S(12));
         (void)fLabel;
+    }
+    if(RxOn()){
+        RxDrawSide(ab,white,gray);
+        RxDrawBusca(ab,white,gray);
+        if(g_rxPag==RXP_INICIO) RxDrawInicio(w,h,ab,white,gray);
+        RxDrawBar(w,h,ab,white,gray,navB,playP,playB);
     }
     if(g_showSettings) DrawSettings(w,h);
 }

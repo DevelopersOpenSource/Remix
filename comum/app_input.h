@@ -141,6 +141,18 @@ static int HitTest(int x,int y){
         if(PtIn(R_vol,x,y))return Z_VOLBAR;
         return -1;
     }
+    if(RxOn()){   // estilo REMIX: lateral, cartoes da tela inicial e "ver tudo"
+        for(int i=0;i<3;i++) if(R_rxNav[i].right>R_rxNav[i].left&&PtIn(R_rxNav[i],x,y)) return Z_RX_NAV_BASE+i;
+        if(R_rxNovaPl.right>R_rxNovaPl.left&&PtIn(R_rxNovaPl,x,y)) return Z_RX_NOVAPL;
+        for(size_t i=0;i<R_rxSidePl.size();i++) if(PtIn(R_rxSidePl[i],x,y)) return Z_RX_SIDE_BASE+(int)i;
+        if(g_rxPag==RXP_INICIO&&PtIn(R_rxMain,x,y)){
+            for(size_t i=0;i<g_rxFilas.size();i++){ const RECT& v=g_rxFilas[i].verTudo; if(v.right>v.left&&PtIn(v,x,y)) return Z_RX_VERTUDO_BASE+(int)i; }
+            for(size_t i=0;i<g_rxCards.size();i++){
+                if(!PtIn(g_rxCards[i].r,x,y)) continue;
+                return (PtIn(g_rxCards[i].play,x,y)?Z_RX_CARDPLAY_BASE:Z_RX_CARD_BASE)+(int)i;
+            }
+        }
+    }
     if(g_current>=0&&PtIn(R_pencilPanel,x,y))return Z_ARTIST_EDIT;
     if(PtIn(R_runnerSlider,x,y))return Z_PLAYER_RESIZE;
     if(PtIn(R_shapeTgl,x,y))return Z_SHAPE_TOGGLE;
@@ -374,6 +386,23 @@ static void OnLButtonDown(int x,int y){
     }
     int id=HitTest(x,y);
     if(id==Z_CLOSE){RequestClose();return;} if(id==Z_MIN){PlatformMinimize();return;} if(id==Z_GEAR){g_showSettings=!g_showSettings;g_hkCapture=-1;if(g_showSettings)EnsureToolsAsync();return;}
+    if(id>=Z_RX_NAV_BASE&&id<Z_RX_NAV_BASE+3){
+        int n=id-Z_RX_NAV_BASE;
+        if(n==0){ g_rxPag=RXP_INICIO; g_searchFocus=false; BuildLayout(); }
+        else if(n==1){ OpenOnlineSearch(-1,L""); }
+        else { g_rxPag=RXP_LISTA; EnterLibraryView(); }
+        return;
+    }
+    if(id==Z_RX_NOVAPL){ OpenNewPlaylistMenu(R_rxNovaPl.left,R_rxNovaPl.bottom+4); return; }
+    if(id>=Z_RX_SIDE_BASE&&id<Z_RX_SIDE_BASE+500){
+        int i=id-Z_RX_SIDE_BASE;
+        g_rxPag=RXP_LISTA;
+        if(i==0) EnterLibraryView(); else if(i-1<(int)g_playlists.size()) OpenPlaylistView(i-1);
+        return;
+    }
+    if(id>=Z_RX_VERTUDO_BASE&&id<Z_RX_VERTUDO_BASE+100){ RxVerTudo((size_t)(id-Z_RX_VERTUDO_BASE)); return; }
+    if(id>=Z_RX_CARDPLAY_BASE&&id<Z_RX_CARDPLAY_BASE+4000){ RxClicarCard((size_t)(id-Z_RX_CARDPLAY_BASE),true); return; }
+    if(id>=Z_RX_CARD_BASE&&id<Z_RX_CARD_BASE+4000){ RxClicarCard((size_t)(id-Z_RX_CARD_BASE),false); return; }
     if(id==Z_TAB_TRACKS){ EnterLibraryView(); return; }
     if(id==Z_TAB_PLAYLISTS){ ShowPlaylistCards(); return; }
     if(id==Z_PL_BACK){ ShowPlaylistCards(); return; }
@@ -510,6 +539,12 @@ static void OnWheel(int d){ // d = notches (>0 = pra cima)
     if(OU().open){ OU().scroll-=d*SI(116); if(OU().scroll<0) OU().scroll=0; return; }   // LayoutOnline limita o maximo
     if(g_showSettings){g_setScroll-=d*(int)S(56);int maxSc=std::max(0,(int)(g_setContentH-(R_settingsPanel.bottom-R_settingsPanel.top-76)));g_setScroll=std::max(0,std::min(g_setScroll,maxSc));return;}
     if(g_showSplash||g_cfg.displayMode==L"vertical")return;
+    if(RxOn()&&g_rxPag==RXP_INICIO){   // tela inicial: rola as fileiras
+        g_rxScroll-=d*SI(110);
+        if(g_rxScroll<0) g_rxScroll=0;
+        BuildLayout();
+        return;
+    }
     g_listScroll-=d*SI(g_cfg.listMode?64:120);
     g_listScroll=std::max(0,std::min(g_listScroll,MaxScroll()));
     BuildLayout();
@@ -620,6 +655,22 @@ static void RunAction(const std::string& a){
     else if(a=="hosthtml"){host::WriteConnectHtml();}
     else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
     else if(a.rfind("hostlib:",0)==0){ int i=atoi(a.c_str()+8); host::View v=host::GetView(); if(i>=0&&i<(int)v.devs.size()) host::SetDeviceLib(v.devs[(size_t)i].id,a.back()!='0'); }   // hostlib:<aparelho>:<0|1>
+    else if(a.rfind("rxpag:",0)==0){ int n=atoi(a.c_str()+6); if(n==0){ g_rxPag=RXP_INICIO; BuildLayout(); } else { g_rxPag=RXP_LISTA; EnterLibraryView(); } }
+    else if(a.rfind("rxpl:",0)==0){ int n=atoi(a.c_str()+5); g_rxPag=RXP_LISTA; if(n>=0&&n<(int)g_playlists.size()) OpenPlaylistView(n); }
+    else if(a=="descobrir"||a=="descobrir:forcar"){   // teste: monta as fileiras da tela inicial e imprime
+        desc::Atualizar(a!="descobrir",[]{ AppPost(EV_REDRAW); });
+        std::thread([]{
+            for(int i=0;i<120&&desc::Carregando();i++) Sleep(500);
+            desc::Home h=desc::Copia();
+            fprintf(stderr,"[remix] descobrir: %d fileiras (at=%lld) %s\n",(int)h.fileiras.size(),(long long)h.at,WideToUtf8(h.err).c_str());
+            for(auto& s:h.fileiras){
+                fprintf(stderr,"[remix]   %-34s tipo=%d itens=%d\n",WideToUtf8(s.titulo).c_str(),(int)s.kind,(int)s.itens.size());
+                for(size_t i=0;i<s.itens.size()&&i<2;i++) fprintf(stderr,"[remix]       %s - %s | %s\n",WideToUtf8(s.itens[i].titulo).c_str(),WideToUtf8(s.itens[i].sub).c_str(),WideToUtf8(s.itens[i].link).c_str());
+            }
+        }).detach();
+    }
+    else if(a.rfind("gosto:",0)==0){ desc::Registrar(Utf8ToWide(a.substr(6)),L"teste"); desc::SalvarPerfil(); }
+    else if(a=="gostos"){ auto v=desc::TopArtistas(10); fprintf(stderr,"[remix] top artistas: "); for(auto& x:v) fprintf(stderr,"%s; ",WideToUtf8(x).c_str()); fprintf(stderr,"\n"); }
     else if(a.rfind("hostdevlink:",0)==0){ host::PU().v=host::GetView(); HostCopyDeviceLink((size_t)atoi(a.c_str()+12)); bool t=false; host::View v=host::GetView(); int i=atoi(a.c_str()+12); fprintf(stderr,"[remix] link do aparelho: %s\n",(i>=0&&i<(int)v.devs.size())?host::DeviceLinkUrl(v.devs[(size_t)i].id,host::PU().qrTunnel,t).c_str():"(sem aparelho)"); }
     else if(a=="hostqr"){ bool t=false; std::string u=host::QrUrl(false,t); fprintf(stderr,"[remix] qr: %s\n",u.c_str()); }
     else if(a.rfind("hostdplok:",0)==0){ int i=atoi(a.c_str()+10); host::View v=host::GetView(); if(i>=0&&i<(int)v.dpls.size()) host::SetDevPlaylistOk(v.dpls[(size_t)i].dev,v.dpls[(size_t)i].slug,true); }

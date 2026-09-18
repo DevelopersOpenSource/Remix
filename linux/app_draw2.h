@@ -66,7 +66,7 @@ static void DrawSettings(int w,int h){
     for(auto&lp:g_setLabels) gfx::Text(lp.second,(float)lp.first.left,(float)lp.first.top,lab,UiClassic()?ab:gray,true);
     // estilo da interface
     for(int k=0;k<UI_STYLE_COUNT;k++) btn(R_settingsStyle[k],UiStyleName(k),g_cfg.uiStyle==k);
-    gfx::Text(L"Clássico: o visual original.   Limpo: sóbrio, sem LED.   Spotify + LED: o limpo com o LED e o corredor de luz ligados.",(float)R_settingsStyle[0].left,(float)R_settingsStyle[0].bottom+10,sm,gray);
+    gfx::Text(L"Clássico: o visual original, com LED e cards.   Remix: barra lateral com a biblioteca, início com novidades e o player embaixo.",(float)R_settingsStyle[0].left,(float)R_settingsStyle[0].bottom+10,sm,gray);
     {   // SOUNDPAD e DISCORD
         bool sp=spad::Running(), dr=dc::Ready();
         btn(R_setSpad,sp?L"ABRIR SOUNDPAD (MICROFONE LIGADO)":L"ABRIR SOUNDPAD",sp);
