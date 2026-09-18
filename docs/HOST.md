@@ -206,6 +206,19 @@ o estado do host.
   **TOCAR TUDO** e **SALVAR COMO PLAYLIST** (playlist do próprio aparelho, criada com todas de uma vez pela
   ação `addvarios` de `/api/minhas`). Link de fora dessas fontes é recusado (o yt-dlp do PC não vira leitor
   de URL qualquer).
+- **O vínculo agora mora no PC, não no navegador.** Cada aparelho ganha uma **chave permanente** (32
+  caracteres aleatórios, guardada em `host.ini` ao lado do token). O cookie continua sendo o atalho do
+  dia a dia, mas ele vale só naquele endereço: trocar o link do túnel, abrir pela rede local ou instalar
+  na tela de início fazia o celular aparecer como desconhecido de novo. Com a chave isso acabou:
+  - no painel HOST, cada aparelho tem o botão **LINK**: ele copia `<endereço>/#a=<chave>` e joga esse
+    mesmo link no QR grande ("QR para religar"). **NOVO QR** volta o quadrado para o QR normal de vincular;
+  - no celular, **Aparelho > Copiar link deste aparelho** dá o mesmo link;
+  - abrindo esse link em **qualquer** endereço do PC, o aparelho entra direto, sem PIN e sem aparecer
+    pedido novo no PC (`POST /api/entrar {chave}`, com a mesma trava de tentativas do PIN);
+  - a página guarda a chave no aparelho e, se o cookie sumir sozinho (o Safari limpa dados de sites que
+    você não abre há um tempo), ela **religa sem você perceber** em vez de voltar para a tela de PIN;
+  - aparelhos vinculados antes da 1.5.6 ganham a chave na primeira vez que o Host liga, sem precisar
+    vincular de novo. **REMOVER** continua apagando tudo: aí a chave antiga não vale mais.
 
 ## O que mudou na 1.5.2
 

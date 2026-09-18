@@ -200,6 +200,7 @@ enum : int {
     Z_SPAD_BTN=24000, Z_DC_BTN, Z_SET_SPAD, Z_SET_DC,   // SOUNDPAD e DISCORD (os paineis usam 24010..26800, app_panels.h)
     Z_DC_PLCARD_BASE=16500, Z_DC_CARD_BASE=6000000,      // botao ▶ DISCORD sobre a capa: playlist (+500) e faixa (+1 milhao)
     Z_HOST_ACCEPT_BASE=17000, Z_HOST_DENY_BASE=17100, Z_HOST_REVOKE_BASE=17200, Z_HOST_PL_BASE=17300, Z_HOST_PLDEV_BASE=17500,   // playlist*20+dispositivo (ate 21500)
+    Z_HOST_DEVLINK_BASE=21600,   // +100: link permanente de cada aparelho (religar em qualquer endereco)
     Z_COVER_BASE=2000000, Z_CARD_SEEK_BASE=3000000,
     Z_CARD_PREV_BASE=4000000, Z_CARD_NEXT_BASE=5000000, Z_WEB_CELL_BASE=7000,
     Z_ROW_UP_BASE=8000000, Z_ROW_DOWN_BASE=9000000, Z_FOLDER_ITEM_BASE=10000, Z_CTX_ITEM_BASE=11000,
@@ -256,6 +257,7 @@ static_assert(Z_SETTINGS_STYLE_BASE+UI_STYLE_COUNT<=Z_ON_SRC_BASE+100 && Z_HOST_
 static_assert(Z_HOST_DPLOK_BASE+500<=Z_FX_BTN && Z_FX_CANCEL<Z_FX_BASE && Z_FX_BASE+5<=Z_STEM_BASE && Z_STEM_BASE+10<Z_COVER_BASE, "faixa dos efeitos invade outra");
 static_assert(Z_STEM_BASE+10<=Z_SPAD_BTN && Z_ON_ADD_BASE+500<=Z_DC_PLCARD_BASE && Z_DC_PLCARD_BASE+500<=Z_HOST_ACCEPT_BASE && Z_CARD_NEXT_BASE+1000000<=Z_DC_CARD_BASE && Z_DC_CARD_BASE+1000000<=Z_ROW_UP_BASE, "botoes do discord invadem outra faixa");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
+static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_DEVLINK_BASE && Z_HOST_DEVLINK_BASE+100<=Z_HOST_BTN, "faixa do link do aparelho invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 static RECT R_autoTgl, R_sortBtn, R_folderBtn, R_volIcon;
 static std::vector<RECT> R_rowUp, R_rowDown;
@@ -1393,6 +1395,17 @@ static void HostCopy(bool tunnel){
     std::string u=tunnel?host::TunnelUrl():host::LanUrl();
     if(u.empty()){ SetStatus(tunnel?(host::Running()?L"O link do túnel ainda não está pronto (ele é testado antes de aparecer).":L"Ligue o Host primeiro."):(host::Running()?L"Sem link de rede local (ligue REDE LOCAL).":L"Ligue o Host primeiro."),3500); return; }
     if(PlatformSetClipboardText(Utf8ToWide(u))) SetStatus(L"Link copiado: "+Utf8ToWide(u),3500); else SetStatus(L"Não consegui copiar. Link: "+Utf8ToWide(u),6000);
+}
+// Link permanente do aparelho: copia e joga no QR grande. Com ele o celular volta a ser reconhecido
+// em qualquer endereco (o vinculo mora aqui no PC; o cookie do navegador e so um atalho).
+static void HostCopyDeviceLink(size_t i){
+    host::PanelUI& p=host::PU(); if(i>=p.v.devs.size()) return;
+    const std::string id=p.v.devs[i].id; const std::wstring nome=Utf8ToWide(p.v.devs[i].name);
+    bool isTun=false; std::string u=host::DeviceLinkUrl(id,p.qrTunnel,isTun);
+    if(u.empty()){ SetStatus(host::Running()?L"Sem link ainda (ligue REDE LOCAL ou espere o túnel).":L"Ligue o Host primeiro.",3500); return; }
+    p.qrDev=id;
+    if(PlatformSetClipboardText(Utf8ToWide(u))) SetStatus(L"Link de \""+nome+L"\" copiado (e no QR ao lado). Abrindo nele, o aparelho volta sem PIN.",5000);
+    else SetStatus(L"Não consegui copiar; o QR ao lado agora é o link de \""+nome+L"\".",5000);
 }
 static void HostSetOnline(bool on){ g_cfg.hostOnline=on; g_cfg.Save(); host::SetOptions(g_cfg.hostOnline,g_cfg.hostQrConfirm); SetStatus(on?L"O celular pode buscar e ouvir online (o PC faz o trabalho).":L"Online no celular desligado.",2800); }
 static void HostSetQrConfirm(bool on){ g_cfg.hostQrConfirm=on; g_cfg.Save(); host::SetOptions(g_cfg.hostOnline,g_cfg.hostQrConfirm); SetStatus(on?L"Vincular pelo QR agora também pede ACEITAR aqui no PC.":L"Vincular pelo QR não pede confirmação no PC (o QR só aparece na sua tela e vale uma vez).",3500); }

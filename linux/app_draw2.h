@@ -573,8 +573,10 @@ static void DrawHostPanel(int w,int h){
     }
     {   // estado ao lado do QR
         RectF inf=RF(p.info); bool viaTun=p.qrText.rfind("https://",0)==0; long long left=host::QrSecondsLeft();
+        std::wstring dnome; if(!p.qrDev.empty()) for(auto& dd:v.devs) if(dd.id==p.qrDev) dnome=Utf8ToWide(dd.name);
         std::wstring l1=!on?L"Desligado"+std::wstring(v.lastError.empty()?L"":L"  ·  "+Utf8ToWide(v.lastError))
                         :p.qrText.empty()?L"Sem link para o QR ainda (ligue REDE LOCAL ou espere o túnel)."
+                        :!p.qrDev.empty()?L"QR para religar \""+dnome+L"\"  ·  "+(viaTun?L"pela internet":L"rede local")+L"  ·  vale sempre (NOVO QR volta ao normal)"
                         :std::wstring(L"Escaneie com a câmera do celular  ·  ")+(viaTun?L"pela internet":L"rede local")+L"  ·  uso único, vale "+std::to_wstring(left/60)+L" min";
         std::wstring l2=L"Local: "+(v.lanUrls.empty()?std::wstring(g_cfg.hostLan?L"nenhum IP de rede local":L"desligada"):Utf8ToWide(v.lanUrls[0]))+(v.lan6Urls.empty()?L"":L"  ·  IPv6 ligado");
         std::wstring l3=L"Túnel: "+(v.tunUrl.empty()?Utf8ToWide(v.tunStatus):Utf8ToWide(v.tunUrl));
@@ -604,7 +606,8 @@ static void DrawHostPanel(int w,int h){
     if(v.devs.empty()){ gfx::Text(L"Nenhum ainda. Escaneie o QR code com o celular.",x+S(10),y+S(6),S(11),gray); y+=rowH; }
     for(size_t i=0;i<v.devs.size()&&i<p.revoke.size();i++){
         rowBg(y); const host::Device& d=v.devs[i]; long long ago=host::NowSec()-d.lastSeen; std::wstring seen=ago<120?L"agora":ago<3600?std::to_wstring(ago/60)+L" min atrás":ago<86400?std::to_wstring(ago/3600)+L" h atrás":std::to_wstring(ago/86400)+L" d atrás";
-        gfx::TextRect(Utf8ToWide(d.name)+(d.persist?L"":L" (temporário)")+L"   ·   "+Utf8ToWide(d.ip)+L"   ·   visto "+seen,RectF(x+S(10),y,iw-S(290),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        gfx::TextRect(Utf8ToWide(d.name)+(d.persist?L"":L" (temporário)")+L"   ·   "+Utf8ToWide(d.ip)+L"   ·   visto "+seen,RectF(x+S(10),y,iw-S(390),rowH-S(6)),S(11),white,false,gfx::Near,true,gfx::EllipsisChar);
+        if(i<p.devLink.size()) DrawPill(p.devLink[i],L"LINK",p.qrDev==d.id,S(10));
         if(i<p.devLib.size()) DrawPill(p.devLib[i],d.lib?L"BIBLIOTECA: SIM":L"BIBLIOTECA: NÃO",d.lib,S(10));
         DrawPill(p.revoke[i],L"REMOVER",false,S(10)); y+=rowH;
     }

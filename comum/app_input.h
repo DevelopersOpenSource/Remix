@@ -34,7 +34,7 @@ static int HitTest(int x,int y){
         if(PtIn(p.btnOnline,x,y)) return Z_HOST_ONLINE; if(PtIn(p.btnQrConfirm,x,y)) return Z_HOST_QRCONF;
         if(PtIn(p.list,x,y)){
             for(size_t i=0;i<p.accept.size();i++){ if(PtIn(p.accept[i],x,y)) return Z_HOST_ACCEPT_BASE+(int)i; if(PtIn(p.deny[i],x,y)) return Z_HOST_DENY_BASE+(int)i; }
-            for(size_t i=0;i<p.revoke.size();i++){ if(PtIn(p.revoke[i],x,y)) return Z_HOST_REVOKE_BASE+(int)i; if(i<p.devLib.size()&&PtIn(p.devLib[i],x,y)) return Z_HOST_DEVLIB_BASE+(int)i; }
+            for(size_t i=0;i<p.revoke.size();i++){ if(PtIn(p.revoke[i],x,y)) return Z_HOST_REVOKE_BASE+(int)i; if(i<p.devLib.size()&&PtIn(p.devLib[i],x,y)) return Z_HOST_DEVLIB_BASE+(int)i; if(i<p.devLink.size()&&PtIn(p.devLink[i],x,y)) return Z_HOST_DEVLINK_BASE+(int)i; }
             for(size_t i=0;i<p.dplOk.size();i++) if(p.dplOk[i].right>p.dplOk[i].left&&PtIn(p.dplOk[i],x,y)) return Z_HOST_DPLOK_BASE+(int)i;
             for(size_t i=0;i<p.plHost.size();i++){ if(PtIn(p.plHost[i],x,y)) return Z_HOST_PL_BASE+(int)i; for(size_t j=0;j<p.plDev[i].size();j++) if(PtIn(p.plDev[i][j],x,y)) return Z_HOST_PLDEV_BASE+(int)i*20+(int)j; }
         }
@@ -340,10 +340,11 @@ static void OnLButtonDown(int x,int y){
         if(hid==Z_HOST_NEWLINK){ if(!host::Running()){ SetStatus(L"Ligue o Host primeiro.",2500); return; } g_cfg.hostTunnel=true; g_cfg.Save(); host::TunnelRestart(g_cfg.hostPort); SetStatus(L"Gerando um link novo do túnel (ele é testado antes de aparecer)...",3500); return; }
         if(hid==Z_HOST_COPYTUN){ HostCopy(true); return; } if(hid==Z_HOST_COPYLAN){ HostCopy(false); return; }
         if(hid==Z_HOST_QRMODE){ p.qrTunnel=!p.qrTunnel; SetStatus(p.qrTunnel?L"QR pela internet (túnel), quando o link estiver pronto.":L"QR pela rede local (mesmo roteador).",2600); return; }
-        if(hid==Z_HOST_QRNEW){ host::RotateQr(); SetStatus(L"QR novo: o anterior não vale mais.",2400); return; }
+        if(hid==Z_HOST_QRNEW){ p.qrDev.clear(); host::RotateQr(); SetStatus(L"QR novo: o anterior não vale mais.",2400); return; }
         if(hid==Z_HOST_ONLINE){ HostSetOnline(!g_cfg.hostOnline); return; }
         if(hid==Z_HOST_QRCONF){ HostSetQrConfirm(!g_cfg.hostQrConfirm); return; }
         if(hid==Z_HOST_IPV6){ HostSetIpv6(!g_cfg.hostIPv6); return; }
+        if(hid>=Z_HOST_DEVLINK_BASE&&hid<Z_HOST_DEVLINK_BASE+100){ HostCopyDeviceLink((size_t)(hid-Z_HOST_DEVLINK_BASE)); return; }
         if(hid>=Z_HOST_DEVLIB_BASE&&hid<Z_HOST_DEVLIB_BASE+100){ size_t i=(size_t)(hid-Z_HOST_DEVLIB_BASE); if(i<p.v.devs.size()){ bool on=!p.v.devs[i].lib; host::SetDeviceLib(p.v.devs[i].id,on); SetStatus(on?L"\""+Utf8ToWide(p.v.devs[i].name)+L"\" agora vê a biblioteca inteira do PC.":L"\""+Utf8ToWide(p.v.devs[i].name)+L"\" não vê mais a biblioteca (só playlists hosteadas).",3200); } return; }
         if(hid>=Z_HOST_DPLOK_BASE&&hid<Z_HOST_DPLOK_BASE+500){ size_t i=(size_t)(hid-Z_HOST_DPLOK_BASE); if(i<p.v.dpls.size()){ bool ok=!p.v.dpls[i].pcOk; host::SetDevPlaylistOk(p.v.dpls[i].dev,p.v.dpls[i].slug,ok); SetStatus(ok?L"Playlist liberada para os outros aparelhos.":L"Playlist voltou a ser só do aparelho dono.",3000); } return; }
         if(hid==Z_HOST_HTML){ HostMakeHtml(); return; }
@@ -352,7 +353,7 @@ static void OnLButtonDown(int x,int y){
         if(hid==Z_HOST_LAN){ g_cfg.hostLan=!g_cfg.hostLan; g_cfg.Save(); if(host::Running()){ HostStopNow(); HostStartFromCfg(); } SetStatus(g_cfg.hostLan?L"Rede local liberada (mesmo roteador).":L"Só pelo túnel (127.0.0.1).",2600); return; }
         if(hid>=Z_HOST_ACCEPT_BASE&&hid<Z_HOST_ACCEPT_BASE+100){ size_t i=(size_t)(hid-Z_HOST_ACCEPT_BASE); if(i<p.v.pending.size()){ bool ok=host::Approve(p.v.pending[i].id,true); if(g_hostReq==Utf8ToWide(p.v.pending[i].id)){ g_hostReq.clear(); g_confirmOpen=false; g_confirmKind=0; } SetStatus(ok?L"Dispositivo aceito.":L"Esse pedido expirou: peça para o celular tentar de novo.",2800); } return; }
         if(hid>=Z_HOST_DENY_BASE&&hid<Z_HOST_DENY_BASE+100){ size_t i=(size_t)(hid-Z_HOST_DENY_BASE); if(i<p.v.pending.size()){ bool ok=host::Approve(p.v.pending[i].id,false); if(g_hostReq==Utf8ToWide(p.v.pending[i].id)){ g_hostReq.clear(); g_confirmOpen=false; g_confirmKind=0; } SetStatus(ok?L"Pedido recusado.":L"Esse pedido já tinha expirado.",2500); } return; }
-        if(hid>=Z_HOST_REVOKE_BASE&&hid<Z_HOST_REVOKE_BASE+100){ size_t i=(size_t)(hid-Z_HOST_REVOKE_BASE); if(i<p.v.devs.size()){ host::Revoke(p.v.devs[i].id); SetStatus(L"Aparelho removido: ele precisa vincular de novo.",3000); } return; }
+        if(hid>=Z_HOST_REVOKE_BASE&&hid<Z_HOST_REVOKE_BASE+100){ size_t i=(size_t)(hid-Z_HOST_REVOKE_BASE); if(i<p.v.devs.size()){ if(p.qrDev==p.v.devs[i].id) p.qrDev.clear(); host::Revoke(p.v.devs[i].id); SetStatus(L"Aparelho removido: ele precisa vincular de novo.",3000); } return; }
         if(hid>=Z_HOST_PL_BASE&&hid<Z_HOST_PL_BASE+200){ HostTogglePlaylist(hid-Z_HOST_PL_BASE); return; }
         if(hid>=Z_HOST_PLDEV_BASE&&hid<Z_HOST_PLDEV_BASE+4000){ int k=hid-Z_HOST_PLDEV_BASE; int pl=k/20, dv=k%20; if(pl<(int)g_playlists.size()&&dv<(int)p.v.devs.size()) host::ToggleTargetDevice(g_playlists[(size_t)pl].slug,p.v.devs[(size_t)dv].id); return; }
         return;
@@ -619,6 +620,7 @@ static void RunAction(const std::string& a){
     else if(a=="hosthtml"){host::WriteConnectHtml();}
     else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
     else if(a.rfind("hostlib:",0)==0){ int i=atoi(a.c_str()+8); host::View v=host::GetView(); if(i>=0&&i<(int)v.devs.size()) host::SetDeviceLib(v.devs[(size_t)i].id,a.back()!='0'); }   // hostlib:<aparelho>:<0|1>
+    else if(a.rfind("hostdevlink:",0)==0){ host::PU().v=host::GetView(); HostCopyDeviceLink((size_t)atoi(a.c_str()+12)); bool t=false; host::View v=host::GetView(); int i=atoi(a.c_str()+12); fprintf(stderr,"[remix] link do aparelho: %s\n",(i>=0&&i<(int)v.devs.size())?host::DeviceLinkUrl(v.devs[(size_t)i].id,host::PU().qrTunnel,t).c_str():"(sem aparelho)"); }
     else if(a=="hostqr"){ bool t=false; std::string u=host::QrUrl(false,t); fprintf(stderr,"[remix] qr: %s\n",u.c_str()); }
     else if(a.rfind("hostdplok:",0)==0){ int i=atoi(a.c_str()+10); host::View v=host::GetView(); if(i>=0&&i<(int)v.dpls.size()) host::SetDevPlaylistOk(v.dpls[(size_t)i].dev,v.dpls[(size_t)i].slug,true); }
     else if(a.rfind("hostplall:",0)==0){ int i=atoi(a.c_str()+10); if(i>=0&&i<(int)g_playlists.size()){ host::SetTargets(g_playlists[(size_t)i].slug,"ALL"); HostPublishNow(); } }

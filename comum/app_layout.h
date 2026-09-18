@@ -515,12 +515,12 @@ static void LayoutHostPanel(int w,int h){
     p.list={bx+SI(8),y,bx+bw-SI(8),by+bh-SI(12)};
     int listTop=p.list.top, ly=listTop-p.scroll, rowH=SI(34);
     auto row=[&](){ RECT r={x,ly,x+cw,ly+rowH-SI(6)}; ly+=rowH; return r; };
-    p.accept.clear(); p.deny.clear(); p.revoke.clear(); p.devLib.clear(); p.plHost.clear(); p.plDev.clear(); p.dplOk.clear();
+    p.accept.clear(); p.deny.clear(); p.revoke.clear(); p.devLib.clear(); p.devLink.clear(); p.plHost.clear(); p.plDev.clear(); p.dplOk.clear();
     ly+=SI(26);                                                        // titulo "pedidos"
     for(size_t i=0;i<p.v.pending.size();i++){ RECT r=row(); p.deny.push_back({r.right-SI(90),r.top,r.right,r.bottom}); p.accept.push_back({r.right-SI(190),r.top,r.right-SI(98),r.bottom}); }
     ly+=SI(26);                                                        // titulo "aparelhos"
     if(p.v.devs.empty()) ly+=rowH;
-    for(size_t i=0;i<p.v.devs.size()&&i<100;i++){ RECT r=row(); p.revoke.push_back({r.right-SI(96),r.top,r.right,r.bottom}); p.devLib.push_back({r.right-SI(96)-SI(8)-SI(150),r.top,r.right-SI(104),r.bottom}); }
+    for(size_t i=0;i<p.v.devs.size()&&i<100;i++){ RECT r=row(); p.revoke.push_back({r.right-SI(96),r.top,r.right,r.bottom}); p.devLib.push_back({r.right-SI(96)-SI(8)-SI(150),r.top,r.right-SI(104),r.bottom}); p.devLink.push_back({r.right-SI(262)-SI(96),r.top,r.right-SI(262),r.bottom}); }
     ly+=SI(26);                                                        // titulo "playlists do PC"
     if(g_playlists.empty()) ly+=rowH;
     for(size_t i=0;i<g_playlists.size()&&i<200;i++){
@@ -535,7 +535,9 @@ static void LayoutHostPanel(int w,int h){
     p.contentH=ly+p.scroll-listTop;
     int maxSc=std::max(0,p.contentH-(int)(p.list.bottom-p.list.top)); if(p.scroll>maxSc) p.scroll=maxSc; if(p.scroll<0) p.scroll=0;
     // QR: texto atual (tunel testado ou rede local) -> so recodifica quando muda
-    bool isTun=false; std::string txt=p.v.running?host::QrUrl(p.qrTunnel,isTun):std::string();
+    bool isTun=false; std::string txt;
+    if(!p.qrDev.empty()){ txt=p.v.running?host::DeviceLinkUrl(p.qrDev,p.qrTunnel,isTun):std::string(); if(txt.empty()) p.qrDev.clear(); }
+    if(p.qrDev.empty()) txt=p.v.running?host::QrUrl(p.qrTunnel,isTun):std::string();
     if(txt!=p.qrText){ p.qrText=txt; p.qr=qr::Code(); if(!txt.empty()&&!qr::Encode(txt,p.qr,1,1,20)){ p.qr=qr::Code(); } }
 }
 static void LayoutOnline(int w,int h){

@@ -676,7 +676,8 @@ const ERR={pin:'PIN errado.',qr:'Este QR code expirou ou já foi usado. Gere out
   origem:'O PC recusou o pedido.',rota:'O PC não entendeu o pedido (versões diferentes do Remix?).',rede:'Sem conexão com o PC.',
   buscando:'O PC ainda está terminando a busca anterior. Espere alguns segundos.',
   link:'Isso não parece um link.',link_nao_suportado:'Link não suportado. Use YouTube, YouTube Music, SoundCloud, Spotify, Deezer, Apple Music ou Bandcamp.',
-  link_vazio:'Não achei músicas nesse link.'};
+  link_vazio:'Não achei músicas nesse link.',
+  chave:'Esse link de aparelho não vale mais neste PC. Peça um novo no painel HOST.'};
 function errTxt(c){return c&&Object.prototype.hasOwnProperty.call(ERR,c)?ERR[c]:'';}
 class ApiErr extends Error{constructor(st,code,msg){super(msg||errTxt(code)||('Algo deu errado ('+st+').'));this.st=st;this.code=code||'';this.msg=msg||'';}}
 // O PC limita pedidos por aparelho (tudo conta: API, capas e audio). As capas esperam a vez.
@@ -887,7 +888,7 @@ function clear(el){
 }
 
 // --------------------------------------------------------- pareamento --
-const PAIR={mode:'pin',token:'',host:'',busy:false,waiting:false,gen:0};
+const PAIR={mode:'pin',token:'',chave:'',host:'',busy:false,waiting:false,gen:0};
 function setPairMsg(t,kind){const m=$('pairMsg');m.textContent=t||'';m.className='pairMsg'+(kind?' '+kind:'');}
 function pairTexts(){
   const q=PAIR.mode==='qr',off=PAIR.mode==='off';
@@ -909,8 +910,17 @@ function pairMode(mode,msg,kind){
 function pingHost(){
   raw('/api/ping').then(r=>{if(r.ok&&r.j.app==='remix'){PAIR.host=str(r.j.nome,80);if(!$('pair').hidden)pairTexts();}}).catch(()=>{});
 }
+let religando=false;
 async function toPair(msg){
   S.ready=false;stopAudio();
+  // o vínculo está no PC: se o cookie caiu (Safari limpou, endereço novo), a chave religa sem PIN
+  if(!religando&&/^[0-9a-f]{32}$/.test(LS.get('chave',''))){
+    religando=true;
+    try{
+      if(await entrarComChave(LS.get('chave',''))){ await startApp(); toast('Conexão com o PC renovada.'); return; }
+    }catch(e){}
+    finally{religando=false;}
+  }
   await popTo(0);
   pairMode(PAIR.token?'qr':'pin',msg,'err');pingHost();
 }
@@ -944,7 +954,7 @@ async function pairGo(){
       LS.set('nome',nome);
       if(r.st===401){PAIR.token='';pairMode('pin',ERR.qr);return;}
       if(!r.ok){setPairMsg(errOf(r),'err');return;}
-      if(r.j.estado==='aceito'){setPairMsg('Pronto! Abrindo...','ok');PAIR.token='';await startAfterPair();return;}
+      if(r.j.estado==='aceito'){setPairMsg('Pronto! Abrindo...','ok');PAIR.token='';await startAfterPair();guardaChave();return;}
       if(r.j.estado==='pendente'&&HEX16.test(str(r.j.req,20))){PAIR.token='';await waitAccept(r.j.req,gen);return;}
       setPairMsg('Resposta inesperada do PC.','err');return;
     }
@@ -1010,14 +1020,41 @@ async function refresh(manual){
   try{applyEst(await api('/api/estado'));await loadData();renderAll();if(manual)toast('Listas atualizadas');}
   catch(e){if(manual)fail(e);}
 }
+// O vinculo mora no PC: a "chave" identifica ESTE aparelho em qualquer endereco (tunel novo, rede local,
+// app na tela de inicio). O cookie continua sendo o atalho do dia a dia; a chave recupera quando ele some.
+async function entrarComChave(chave){
+  const k=String(chave||'').toLowerCase();
+  if(!/^[0-9a-f]{32}$/.test(k))return false;
+  try{
+    const r=await raw('/api/entrar',{chave:k});
+    if(r.st!==200||!r.j||!r.j.ok)return false;
+    LS.set('chave',k);
+    return true;
+  }catch(e){return false;}
+}
+async function guardaChave(){   // depois de vincular: guarda a chave para nao perder o vinculo se o cookie sumir
+  try{const j=await api('/api/minhachave',{});if(j&&/^[0-9a-f]{32}$/.test(String(j.chave||'')))LS.set('chave',String(j.chave));}catch(e){}
+}
+function meuLink(){
+  const k=LS.get('chave','');
+  return /^[0-9a-f]{32}$/.test(k)?(location.origin+location.pathname+'#a='+k):'';
+}
 async function boot(){
   $('pair').hidden=true;$('app').hidden=true;$('boot').hidden=false;
   pingHost();
+  if(PAIR.chave){const k=PAIR.chave;PAIR.chave='';if(await entrarComChave(k)){try{await startApp();toast('Aparelho religado a este PC.');return;}catch(e){}}}
   try{
     await startApp();
     if(PAIR.token){PAIR.token='';toast('Este aparelho já está conectado a '+S.host+'.');}
+    guardaChave();
   }catch(e){
-    if(e&&e.st===401)pairMode(PAIR.token?'qr':'pin');
+    if(e&&e.st===401){
+      // cookie perdido (endereço novo, app da tela de início, Safari limpou): a chave guardada religa sozinha
+      if(await entrarComChave(LS.get('chave',''))){
+        try{await startApp();guardaChave();return;}catch(e2){}
+      }
+      pairMode(PAIR.token?'qr':'pin');
+    }
     else{pairMode('off');if(e&&e.st)setPairMsg(e.message,'err');}   // ex.: 429 (o PC respondeu, mas pediu calma)
   }
 }
@@ -1497,8 +1534,16 @@ function openProfile(){
     row('Busca online',S.online?'disponível':'indisponível');
     box.appendChild(dl);
     box.appendChild(mi('refresh','Atualizar listas',async()=>{await closeSheet();refresh(true);}));
+    box.appendChild(mi('share','Copiar link deste aparelho',async()=>{
+      if(!meuLink())await guardaChave();
+      const l=meuLink();
+      if(!l){toast('Não consegui pegar a chave deste aparelho.',1);return;}
+      let ok=false;
+      try{if(navigator.clipboard&&navigator.clipboard.writeText){await navigator.clipboard.writeText(l);ok=true;}}catch(e){}
+      toast(ok?'Link copiado: abre direto neste aparelho, em qualquer endereço do PC.':'Link deste aparelho: '+l,ok?0:1);
+    }));
     box.appendChild(mi('logout','Desconectar este aparelho',confirmSair,'danger'));
-    box.appendChild(h('p',{class:'shNote',text:'Nada do aparelho é coletado. O Remix só guarda um código aleatório neste navegador para lembrar a conexão.'}));
+    box.appendChild(h('p',{class:'shNote',text:'O vínculo fica no PC. Este link (e o QR "religar" do painel HOST) trazem o aparelho de volta mesmo quando o endereço muda ou o navegador esquece a conexão.'}));
   });
 }
 function confirmSair(){
@@ -1509,6 +1554,7 @@ function confirmSair(){
     ok.addEventListener('click',async()=>{
       ok.disabled=true;
       try{await api('/api/sair',{});}catch(e){if(e.st!==401){ok.disabled=false;fail(e);return;}}
+      LS.set('chave','');
       S.ready=false;stopAudio();await popTo(0);
       S.lib=[];S.pc=[];S.mine=[];S.sh=[];
       pairMode('pin','Aparelho desconectado.','ok');pingHost();
@@ -1990,20 +2036,26 @@ function init(){
   setupAccent();
   // fragmento #q=<token> do QR code: le e tira da barra na hora (nao fica no historico)
   const hs=history.state;
-  if((location.hash||'').startsWith('#q=')){
-    const m=/^#q=([0-9a-fA-F]{32})$/.exec(location.hash);
-    if(m)PAIR.token=m[1].toLowerCase();
+  if((location.hash||'').startsWith('#q=')||(location.hash||'').startsWith('#a=')){
+    const m=/^#([qa])=([0-9a-fA-F]{32})$/.exec(location.hash);
+    if(m&&m[1]==='q')PAIR.token=m[2].toLowerCase();
+    else if(m)PAIR.chave=m[2].toLowerCase();   // link/QR de religar: o vínculo está no PC
     try{history.replaceState(null,'',location.pathname+location.search);}catch(e){}
   }else if(hs&&hs.rl>0){try{history.go(-hs.rl);}catch(e){}}
   document.querySelectorAll('[data-ic]').forEach(e=>setIc(e,e.dataset.ic));
   // QR lido com a pagina ja aberta (so muda o fragmento, sem recarregar)
   window.addEventListener('hashchange',()=>{
-    const hsh=location.hash||'';if(!hsh.startsWith('#q='))return;
-    const m=/^#q=([0-9a-fA-F]{32})$/.exec(hsh);
+    const hsh=location.hash||'';if(!hsh.startsWith('#q=')&&!hsh.startsWith('#a='))return;
+    const m=/^#([qa])=([0-9a-fA-F]{32})$/.exec(hsh);
     try{history.replaceState(history.state,'',location.pathname+location.search);}catch(e){}
     if(!m)return;
+    if(m[1]==='a'){   // QR/link de religar lido com a página aberta
+      if(S.ready){toast('Este aparelho já está conectado a '+S.host+'.');return;}
+      entrarComChave(m[2].toLowerCase()).then(ok=>{if(ok)boot();else{PAIR.gen++;pairDone();pairMode('pin','Essa chave não vale mais neste PC.','err');}});
+      return;
+    }
     if(S.ready){toast('Este aparelho já está conectado a '+S.host+'.');return;}
-    PAIR.gen++;pairDone();PAIR.token=m[1].toLowerCase();pairMode('qr');pingHost();
+    PAIR.gen++;pairDone();PAIR.token=m[2].toLowerCase();pairMode('qr');pingHost();
   });
   // preferencias locais
   const tab=LS.get('tab','home');S.tab=['home','search','lib'].includes(tab)?tab:'home';

@@ -154,7 +154,9 @@ struct OItem { std::wstring url, play, title, artist, thumb; int dur = 0; long l
 struct HPlaylist { std::wstring slug, name; std::vector<std::string> ids; };
 // persist=false ("Lembrar" desmarcado): vale so enquanto o Remix estiver aberto e some depois de 12 h sem uso;
 // os outros somem depois de 180 dias sem uso. Nenhum dos dois vale para sempre.
-struct Device { std::string id, name, token, ip; long long created = 0, lastSeen = 0, savedSeen = 0; bool lib = false, persist = true; };
+// key = chave permanente do aparelho: entra por link/QR em QUALQUER endereco (o cookie do navegador e so
+// um atalho daquele dominio; trocar de tunel ou abrir como app na tela de inicio perde o cookie, nao o vinculo).
+struct Device { std::string id, name, token, ip, key; long long created = 0, lastSeen = 0, savedSeen = 0; bool lib = false, persist = true; };
 constexpr long long DEV_TEMP_IDLE = 12 * 3600LL, DEV_IDLE = 180 * 24 * 3600LL;
 struct PairReq { std::string id, name, ip; long long created = 0; int estado = 0; std::string token, devId; bool viaTunnel = false, viaQr = false, lembrar = true; };   // estado: 0 pendente, 1 aceito, 2 recusado
 struct DevPlaylist { std::string dev, slug, name; std::vector<std::string> ids; bool share = false, pcOk = false; };
@@ -207,7 +209,7 @@ inline void SaveIni() {   // chamar com St().m travado
     std::map<std::string, bool> temp;   // aparelho temporario ("Lembrar" desmarcado) nao vai para o disco
     for (auto& d : s.devs) {
         if (!d.persist) { temp[d.id] = true; continue; }
-        o += "dev=" + d.id + "|" + d.token + "|" + std::to_string(d.created) + "|" + Esc(d.name) + "|" + Esc(d.ip) + "|" + (d.lib ? "1" : "0") + "|1|" + std::to_string(d.lastSeen) + "\n";
+        o += "dev=" + d.id + "|" + d.token + "|" + std::to_string(d.created) + "|" + Esc(d.name) + "|" + Esc(d.ip) + "|" + (d.lib ? "1" : "0") + "|1|" + std::to_string(d.lastSeen) + "|" + d.key + "\n";
     }
     o += "[Playlists]\n";
     for (auto& kv : s.targets) if (!kv.second.empty()) o += Esc(WideToUtf8(kv.first)) + "=" + kv.second + "\n";
@@ -245,6 +247,7 @@ inline void LoadIni() {
         for (auto& p : tp) s.dpls.push_back(p);
     } };
     s.devs.clear(); s.targets.clear(); s.dpls.clear(); s.loaded = true;
+    bool novaChave = false;
     Keep keep{ s, temps, tempPls };
 #ifdef _WIN32
     FILE* f = _wfopen(IniPath().c_str(), L"rb");
@@ -270,6 +273,7 @@ inline void LoadIni() {
             if (fl.size() >= 4 && IsHex(fl[0], 12) && IsHex(fl[1], 64)) {
                 Device d; d.id = fl[0]; d.token = fl[1]; d.created = atoll(fl[2].c_str()); d.name = Unesc(fl[3]); if (fl.size() > 4) d.ip = Unesc(fl[4]); if (fl.size() > 5) d.lib = fl[5] == "1";
                 d.lastSeen = fl.size() > 7 ? atoll(fl[7].c_str()) : NowSec(); d.savedSeen = d.lastSeen;
+                if (fl.size() > 8 && IsHex(fl[8], 32)) d.key = fl[8]; else { d.key = RandomHex(16); novaChave = true; }   // versao antiga: ganha chave agora
                 if (fl.size() > 6 && fl[6] == "0") continue;          // temporario gravado por versao antiga: nao volta
                 if (NowSec() - d.lastSeen > DEV_IDLE) continue;       // 180 dias sem uso: precisa vincular de novo
                 s.devs.push_back(d);
@@ -283,6 +287,7 @@ inline void LoadIni() {
         }
     }
     s.dpls.erase(std::remove_if(s.dpls.begin(), s.dpls.end(), [&](const DevPlaylist& p) { for (auto& d : s.devs) if (d.id == p.dev) return false; return true; }), s.dpls.end());
+    if (novaChave) SaveIni();   // aparelhos vindos de uma versao sem chave: guarda a chave nova agora
 }
 
 // Antes de mexer em playlists hosteadas com o Host desligado: le o host.ini primeiro (sem isso o
@@ -611,7 +616,7 @@ inline std::string CookieFor(const std::string& token, bool persist, bool secure
     return "Set-Cookie: remix_dev=" + token + "; Path=/; HttpOnly; SameSite=Strict" + std::string(persist ? "; Max-Age=31536000" : "") + (secure ? "; Secure" : "");
 }
 inline Device NewDevice(const std::string& name, const std::string& ip, bool persist) {   // com a trava
-    Device d; d.id = RandomHex(6); d.name = name; d.token = RandomHex(32); d.ip = ip; d.created = d.lastSeen = d.savedSeen = NowSec(); d.persist = persist; d.lib = false;
+    Device d; d.id = RandomHex(6); d.name = name; d.token = RandomHex(32); d.key = RandomHex(16); d.ip = ip; d.created = d.lastSeen = d.savedSeen = NowSec(); d.persist = persist; d.lib = false;
     St().devs.push_back(d); SaveIni(); Bump(); return d;
 }
 // Tira o aparelho de tudo (com a trava): lista, playlists dele, buscas, streaming e listas de playlists hosteadas.
@@ -979,6 +984,23 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
         AppPost(EV_HOST_STATUS, L"\"" + Utf8ToWide(nome) + L"\" foi vinculado pelo QR code. Libere o que ele pode ouvir no painel HOST.", 0);
         SendJson(c, 200, "{\"estado\":\"aceito\"}", { CookieFor(d.token, lembrar, r.viaTunnel) }); return;
     }
+    if (P == "/api/entrar") {   // chave permanente do aparelho (link/QR de religar): vale em qualquer endereco
+        if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }
+        std::string key = JGet(r.body, "chave");
+        std::lock_guard<std::mutex> lk(s.m);
+        if (PairLocked(r.rateKey)) { SendJson(c, 429, "{\"erro\":\"travado\"}", { "Retry-After: 60" }); return; }
+        if (!IsHex(key, 32)) { PairFail(r.rateKey); SendErr(c, 401, "chave"); return; }
+        for (auto& d : s.devs) {
+            if (d.key.empty() || !ConstEq(key, d.key)) continue;
+            PairOk(r.rateKey);
+            d.ip = r.ip; d.lastSeen = NowSec(); d.persist = true;
+            if (d.lastSeen - d.savedSeen > 3600) { d.savedSeen = d.lastSeen; SaveIni(); }
+            Bump();
+            SendJson(c, 200, "{\"ok\":1,\"nome\":" + JStrA(d.name) + "}", { CookieFor(d.token, true, r.viaTunnel) });
+            return;
+        }
+        PairFail(r.rateKey); SendErr(c, 401, "chave"); return;
+    }
     if (P == "/api/parear/estado") {
         std::string id = QueryGet(r.query, "req");
         if (!IsHex(id, 16)) { SendErr(c, 400, "req"); return; }
@@ -1073,6 +1095,11 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
             SaveIni(); AuthChanged();
         }();
         SendJson(c, st, out); return;
+    }
+    if (P == "/api/minhachave") {   // o aparelho ja vinculado pega a propria chave (botao "copiar link deste aparelho")
+        std::string key; { std::lock_guard<std::mutex> lk(s.m); for (auto& d : s.devs) if (d.id == dev.id) key = d.key; }
+        if (key.empty()) { SendErr(c, 404, "chave"); return; }
+        SendJson(c, 200, "{\"chave\":\"" + key + "\"}"); return;
     }
     if (P == "/api/sair") {
         if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }
@@ -1465,6 +1492,18 @@ inline std::string QrUrl(bool preferTunnel, bool& isTunnel) {
     if (s.qrToken.empty()) { s.qrToken = RandomHex(16); s.qrCreated = NowSec(); Bump(); }
     return base + "/#q=" + s.qrToken;
 }
+// Link permanente de um aparelho: base + #a=<chave>. Serve para religar quando o endereco muda
+// (tunel novo, rede local, app na tela de inicio) sem precisar de PIN nem de QR novo.
+inline std::string DeviceLinkUrl(const std::string& devId, bool preferTunnel, bool& isTunnel) {
+    State& s = St(); std::lock_guard<std::mutex> lk(s.m);
+    std::string base;
+    if (preferTunnel && !s.tunUrl.empty()) { base = s.tunUrl; isTunnel = true; }
+    else if (!s.lanUrls.empty()) { base = s.lanUrls[0]; isTunnel = false; }
+    else if (!s.tunUrl.empty()) { base = s.tunUrl; isTunnel = true; }
+    if (base.empty() || !s.running) return "";
+    for (auto& d : s.devs) if (d.id == devId && !d.key.empty()) return base + "/#a=" + d.key;
+    return "";
+}
 inline void RotateQr() { State& s = St(); std::lock_guard<std::mutex> lk(s.m); s.qrToken.clear(); Bump(); }
 inline long long QrSecondsLeft() { State& s = St(); std::lock_guard<std::mutex> lk(s.m); return s.qrToken.empty() ? 0 : std::max(0LL, 600 - (NowSec() - s.qrCreated)); }
 // Copia do estado para a UI desenhar (sem segurar o mutex enquanto desenha).
@@ -1523,7 +1562,8 @@ struct PanelUI {
     RECT btnPort{ 0,0,0,0 }, btnPin{ 0,0,0,0 }, btnName{ 0,0,0,0 }, btnLan{ 0,0,0,0 };
     RECT qrBox{ 0,0,0,0 }, btnCopyTun{ 0,0,0,0 }, btnCopyLan{ 0,0,0,0 }, btnQrMode{ 0,0,0,0 }, btnQrNew{ 0,0,0,0 }, btnOnline{ 0,0,0,0 }, btnQrConfirm{ 0,0,0,0 }, btnIpv6{ 0,0,0,0 }, info{ 0,0,0,0 };
     RECT list{ 0,0,0,0 };
-    std::vector<RECT> accept, deny, revoke, devLib, plHost, dplOk; std::vector<std::vector<RECT>> plDev;
+    std::vector<RECT> accept, deny, revoke, devLib, devLink, plHost, dplOk; std::vector<std::vector<RECT>> plDev;
+    std::string qrDev;   // != "" : o QR grande e o link permanente deste aparelho, nao o de vincular
     View v;   // copia usada pelo layout e pelo desenho (atualizada quando version muda)
     std::string qrText; qr::Code qr;   // QR ja codificado (so recodifica quando o texto muda)
 };
