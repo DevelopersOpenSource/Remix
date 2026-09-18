@@ -160,6 +160,8 @@ is in progress: the PC app becomes a **server** and the phone uses it from the b
   error, and the WhatsApp connect page works even in the iPhone preview (no JavaScript needed).
 - **Online on the phone:** search and play YouTube Music, YouTube and SoundCloud from the phone — the **PC** runs yt-dlp and
   ffmpeg and sends only the audio; hosted playlists with online tracks stream too. The phone never talks to those sites.
+  You can also **paste a playlist or album link** (Spotify, YouTube, YouTube Music, Deezer, Apple Music, SoundCloud,
+  Bandcamp): the PC resolves it and the phone saves the whole thing as one of its own playlists in a tap.
 - **LAN and internet:** same router (Wi-Fi or cable) or a **Cloudflare tunnel** (HTTPS, no port forwarding, CGNAT-friendly,
   your IP stays hidden). The tunnel link is **shown only after it is verified** (avoids DNS `NXDOMAIN` caching) and has a
   **COPY LINK** button.

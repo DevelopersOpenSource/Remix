@@ -1049,6 +1049,20 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
             if (acao == "renomear") { if (nome.empty()) { st = 400; out = ErrJson("nome"); return; } if (nome != pl->name) { relock(); pl->name = nome; } }
             else if (acao == "apagar") { s.dpls.erase(std::remove_if(s.dpls.begin(), s.dpls.end(), [&](const DevPlaylist& p) { return p.dev == dev.id && p.slug == slug; }), s.dpls.end()); }
             else if (acao == "add") { if (!IsId(id) || !CanSee(dev, id)) { st = 404; out = ErrJson("faixa"); return; } if (pl->ids.size() >= 5000) { st = 400; out = ErrJson("limite"); return; } if (!InList(pl->ids, id)) { relock(); pl->ids.push_back(id); } }
+            else if (acao == "addvarios") {   // playlist inteira de um link: um pedido so em vez de um por musica
+                int n = 0;
+                for (size_t i = 0; i + 16 <= r.body.size(); ++i) {
+                    std::string cand = r.body.substr(i, 16);
+                    if (!IsId(cand) || (i > 0 && isalnum((unsigned char)r.body[i - 1]))) continue;
+                    if (i + 16 < r.body.size() && isalnum((unsigned char)r.body[i + 16])) continue;
+                    i += 15;
+                    if (!CanSee(dev, cand) || InList(pl->ids, cand)) continue;
+                    if (pl->ids.size() >= 5000 || n >= 500) break;
+                    if (!n) relock();
+                    pl->ids.push_back(cand); n++;
+                }
+                out = "{\"ok\":1,\"n\":" + std::to_string(n) + "}";
+            }
             else if (acao == "remover") { pl->ids.erase(std::remove(pl->ids.begin(), pl->ids.end(), id), pl->ids.end()); }
             else if (acao == "compartilhar") {
                 bool on = valor == "true" || valor == "1";
@@ -1149,6 +1163,42 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
         }
         int dsec = 0; { std::lock_guard<std::mutex> lk(s.m); auto f = s.onl.find(id); if (f != s.onl.end()) dsec = f->second.dur; }
         ServeStream(c, r, dev, id, t, fx, true, L"", dsec); return;
+    }
+    if (P == "/api/online/link") {   // celular cola um link de playlist/album (Spotify, YouTube, Deezer, Apple, SoundCloud)
+        if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }
+        std::wstring url = Utf8ToWide(JGet(r.body, "url"));
+        while (!url.empty() && (url.back() == L' ' || url.back() == L'\n' || url.back() == L'\r')) url.pop_back();
+        if (url.size() > 600 || !HttpLink(url)) { SendErr(c, 400, "link"); return; }
+        OSrc src = DetectSource(url);
+        if (src == OS_UNKNOWN || src == OS_OTHER || src == OS_GPM) { SendErr(c, 400, "link_nao_suportado"); return; }
+        { std::lock_guard<std::mutex> lk(s.m); if (!s.opt.onlineOk) { SendErr(c, 403, "online_desligado"); return; } }
+        EnsureTools();
+        if (!YtdlpOk()) { SendErr(c, 503, "sem_ferramentas"); return; }
+        { std::lock_guard<std::mutex> lk(s.m); if (s.searching[dev.id] >= 1 || s.searchingAll >= 3) { SendErr(c, 429, "buscando"); return; } s.searching[dev.id]++; s.searchingAll++; }
+        struct Done { std::string d; ~Done() { std::lock_guard<std::mutex> lk(St().m); if (--St().searching[d] <= 0) St().searching.erase(d); St().searchingAll--; } } done{ dev.id };
+        hostnet::SetTimeout(c, 300000);
+        std::atomic<bool> cancel{ false }, fim{ false }; unsigned rg = s.runGen.load();
+        std::thread watch([&] { while (!fim.load()) { if (s.runGen.load() != rg || hostnet::PeerGone(c)) { cancel = true; return; } std::this_thread::sleep_for(std::chrono::milliseconds(250)); } });
+        OResolved res = ResolveLink(url, &cancel);
+        fim = true; watch.join();
+        if (cancel.load()) return;
+        if (res.items.empty()) { SendJson(c, 502, "{\"erro\":\"link_vazio\",\"msg\":" + JStr(res.err.empty() ? L"Não achei músicas nesse link." : res.err) + "}"); return; }
+        { std::vector<std::wstring> pre; for (size_t i = 0; i < res.items.size() && pre.size() < 3; ++i) { std::wstring pl = res.items[i].play.empty() ? res.items[i].url : res.items[i].play; if (HttpLink(pl) && !NeedsMatch(DetectSource(pl))) pre.push_back(pl); } PreResolve(pre); }
+        std::string o = "{\"nome\":" + JStr(res.name) + ",\"fonte\":" + JStrA(WideToUtf8(SourceName(res.src))) + ",\"faixas\":[";
+        bool first = true;
+        {
+            std::lock_guard<std::mutex> lk(s.m);
+            if (!s.opt.onlineOk) { SendErr(c, 403, "online_desligado"); return; }
+            for (auto& t : res.items) {
+                if (t.url.empty() || !HttpLink(t.url)) continue;
+                std::string id = OnlineId(t.url); OItem& it = s.onl[id];
+                it.url = t.url; if (it.play.empty() && HttpLink(t.play)) it.play = t.play; it.title = t.title; it.artist = t.artist; it.thumb = t.thumb; it.dur = t.dur; it.used = NowSec();
+                RememberSeen(dev.id, id);
+                std::string j = ItemJson(id); if (j.empty()) continue;
+                if (!first) o += ","; first = false; o += j;
+            }
+        }
+        SendJson(c, 200, o + "]}"); return;
     }
     if (P == "/api/preparar") {   // o celular avisa quais sao as proximas: o PC ja extrai o link (cache de 25 min)
         if (r.method != "POST") { SendErr(c, 405, "metodo"); return; }

@@ -481,6 +481,7 @@ body.kbOpen .sheet{max-height:calc(100% - var(--kb,0px) - 12px);padding-bottom:1
 .shNote{font-size:13px;color:var(--tx2);margin:14px 0 4px}
 .shNote.center{text-align:center;font-size:14.5px;margin:0 0 6px}
 .shBtns{display:flex;gap:10px;justify-content:center;margin-top:20px}
+.linkBtns{margin:6px 0 14px;flex-wrap:wrap}
 .shBtns>*{flex:1;max-width:220px}
 .bigIn{margin:4px 0 0;text-align:center;font-size:20px;font-weight:700;height:56px;background:#2e2e2e;border-color:#3e3e3e}
 .mi{display:flex;align-items:center;gap:16px;width:100%;min-height:54px;padding:6px 4px;border-radius:8px;text-align:left;font-size:16px;color:var(--tx)}
@@ -673,9 +674,11 @@ const ERR={pin:'PIN errado.',qr:'Este QR code expirou ou já foi usado. Gere out
   online_desligado:'A busca online está desligada no PC.',limite:'Limite atingido.',playlist:'Playlist não encontrada.',
   faixa:'Essa música não está disponível para este aparelho.',nome:'Digite um nome.',pareie:'Este aparelho não está conectado ao PC.',
   origem:'O PC recusou o pedido.',rota:'O PC não entendeu o pedido (versões diferentes do Remix?).',rede:'Sem conexão com o PC.',
-  buscando:'O PC ainda está terminando a busca anterior. Espere alguns segundos.'};
+  buscando:'O PC ainda está terminando a busca anterior. Espere alguns segundos.',
+  link:'Isso não parece um link.',link_nao_suportado:'Link não suportado. Use YouTube, YouTube Music, SoundCloud, Spotify, Deezer, Apple Music ou Bandcamp.',
+  link_vazio:'Não achei músicas nesse link.'};
 function errTxt(c){return c&&Object.prototype.hasOwnProperty.call(ERR,c)?ERR[c]:'';}
-class ApiErr extends Error{constructor(st,code){super(errTxt(code)||('Algo deu errado ('+st+').'));this.st=st;this.code=code||'';}}
+class ApiErr extends Error{constructor(st,code,msg){super(msg||errTxt(code)||('Algo deu errado ('+st+').'));this.st=st;this.code=code||'';this.msg=msg||'';}}
 // O PC limita pedidos por aparelho (tudo conta: API, capas e audio). As capas esperam a vez.
 const reqLog=[];
 function recentReq(){const now=Date.now();while(reqLog.length&&now-reqLog[0]>10000)reqLog.shift();return reqLog.length;}
@@ -698,7 +701,7 @@ async function raw(path,body,signal){
 async function api(path,body,signal){
   const r=await raw(path,body,signal);
   if(r.st===401){if(S.ready)toPair('Este aparelho foi desconectado do PC.');throw new ApiErr(401,'pareie');}
-  if(!r.ok){const c=str(r.j.erro,40);throw new ApiErr(r.st,r.st===429&&!errTxt(c)?'calma':c);}   // 429: travado, pedidos, buscando ou calma
+  if(!r.ok){const c=str(r.j.erro,40);throw new ApiErr(r.st,r.st===429&&!errTxt(c)?'calma':c,str(r.j.msg,200));}   // 429: travado, pedidos, buscando ou calma
   return r.j;
 }
 
@@ -708,7 +711,7 @@ const S={
   lib:[],pc:[],mine:[],sh:[],lastLoad:0,
   tab:'home',scroll:{home:0,search:0,lib:0},plKey:'',
   libFilter:'all',
-  sq:{mode:'pc',fonte:0,q:'',res:[],busy:false,err:'',done:'',doneF:0,ctl:null},
+  sq:{mode:'pc',fonte:0,q:'',res:[],busy:false,err:'',done:'',doneF:0,ctl:null,link:'',linkNome:'',linkFonte:''},
   // player
   queue:[],order:[],pos:-1,cur:null,off:0,ctx:{name:'',key:''},shuffle:false,repeat:0,errs:0,rate:1,
   // efeitos (0..3, aplicados pelo PC) e stems ('' = completa)
@@ -1146,12 +1149,45 @@ function pcIndex(){
   return S.idx=out;
 }
 let searchT=0;
+// Link de playlist/album de outra plataforma: o PC resolve (yt-dlp, Spotify/Deezer/Apple) e devolve as musicas.
+async function openLinkOnline(url){
+  if(S.sq.ctl)S.sq.ctl.abort();
+  const ctl=new AbortController();S.sq.ctl=ctl;
+  S.sq.busy=true;S.sq.err='';S.sq.link='';renderResults();
+  const tm=setTimeout(()=>ctl.abort(),300000);   // playlist grande demora (o PC lê tudo)
+  try{
+    let j;
+    for(;;){
+      try{j=await api('/api/online/link',{url},ctl.signal);break;}
+      catch(e){
+        if(!(e&&e.code==='buscando')||S.sq.ctl!==ctl)throw e;
+        await sleep(2000);
+        if(S.sq.ctl!==ctl)return;
+        if(ctl.signal.aborted){const x=new Error('tempo');x.name='AbortError';throw x;}
+      }
+    }
+    if(S.sq.ctl!==ctl)return;
+    S.sq.res=arr(j.faixas).map(nT).filter(Boolean);S.sq.res.forEach(t=>{t.o=true;});
+    S.sq.link=url;S.sq.linkNome=str(j.nome,80)||'Link';S.sq.linkFonte=str(j.fonte,30);
+    S.sq.done=url;S.sq.doneF=S.sq.fonte;
+    if(!S.sq.res.length)S.sq.err='Esse link não trouxe músicas.';
+  }catch(e){
+    if(S.sq.ctl!==ctl)return;
+    if(e&&e.name==='AbortError')S.sq.err='O PC demorou demais para abrir o link. Tente de novo.';
+    else if(e&&e.code==='link_nao_suportado')S.sq.err='Link não suportado. Use YouTube, YouTube Music, SoundCloud, Spotify, Deezer, Apple Music ou Bandcamp.';
+    else if(e&&e.code==='link_vazio')S.sq.err=str(e.msg,200)||'Não achei músicas nesse link.';
+    else S.sq.err=(e&&e.message)||'Algo deu errado.';
+  }finally{
+    clearTimeout(tm);
+    if(S.sq.ctl===ctl){S.sq.busy=false;S.sq.ctl=null;renderResults();}
+  }
+}
 function renderSearch(){
   const v=$('vSearch');clear(v);S.sq.onlineShown=S.online;
   const on=S.sq.mode==='online';
   v.appendChild(topBar('Buscar'));
   const inp=h('input',{id:'sIn',type:'search',enterkeyhint:'search',autocomplete:'off',autocapitalize:'off',autocorrect:'off',spellcheck:'false',maxlength:'200',
-    'aria-label':on?'Buscar música online':'Buscar no PC',placeholder:on?'Música ou artista para buscar online':'O que você quer ouvir?'});
+    'aria-label':on?'Buscar música online ou colar link':'Buscar no PC',placeholder:on?'Música, artista ou link de playlist/álbum':'O que você quer ouvir?'});
   inp.value=S.sq.q;
   const clr=h('button',{class:'ib clr',type:'button','aria-label':'Limpar busca'},ic('close'));clr.hidden=!S.sq.q;
   inp.addEventListener('input',()=>{S.sq.q=inp.value;clr.hidden=!inp.value;if(S.sq.mode==='pc'){clearTimeout(searchT);searchT=setTimeout(renderResults,140);}});
@@ -1170,7 +1206,8 @@ function renderSearch(){
     FONTES.forEach((n,i)=>f.appendChild(h('button',{class:'chip'+(S.sq.fonte===i?' on':''),type:'button','aria-pressed':String(S.sq.fonte===i),text:n,
       onclick:()=>{if(S.sq.fonte===i)return;S.sq.fonte=i;LS.set('fonte',i);const again=(!!S.sq.done||S.sq.busy)&&!!S.sq.q.trim();renderSearch();if(again)searchOnline();}})));
     v.appendChild(f);
-    v.appendChild(h('div',{class:'sGo'},h('button',{id:'sGoBtn',class:'btnP',type:'button',text:S.sq.busy?'Buscando...':'Buscar',onclick:searchOnline})));
+    v.appendChild(h('div',{class:'sGo'},h('button',{id:'sGoBtn',class:'btnP',type:'button',text:S.sq.busy?(isLink(S.sq.q)?'Abrindo o link...':'Buscando...'):(isLink(S.sq.q)?'Abrir link':'Buscar'),onclick:searchOnline})));
+    if(isLink(S.sq.q))v.appendChild(h('p',{class:'resInfo',text:'Link reconhecido: o PC abre a playlist ou o álbum e você salva no seu aparelho.'}));
   }
   v.appendChild(h('div',{id:'sRes'}));
   renderResults();
@@ -1179,16 +1216,22 @@ function renderResults(){
   const box=$('sRes');if(!box)return;
   const prev=box.querySelectorAll('.trow').length;
   clear(box);
-  const b=$('sGoBtn');if(b){b.textContent=S.sq.busy?'Buscando...':'Buscar';b.disabled=S.sq.busy;}
+  const b=$('sGoBtn');if(b){const lk=isLink(S.sq.q);b.textContent=S.sq.busy?(lk?'Abrindo o link...':'Buscando...'):(lk?'Abrir link':'Buscar');b.disabled=S.sq.busy;}
   const q=S.sq.q.trim();
   if(S.sq.mode==='online'){
-    if(S.sq.busy){box.appendChild(h('div',{class:'loading',role:'status'},h('div',{class:'spin'}),h('p',{text:'O PC está buscando em '+FONTES[S.sq.fonte]+'... pode levar alguns segundos.'})));return;}
+    if(S.sq.busy){box.appendChild(h('div',{class:'loading',role:'status'},h('div',{class:'spin'}),h('p',{text:isLink(S.sq.q)?'O PC está abrindo o link... playlist grande pode levar um tempo.':'O PC está buscando em '+FONTES[S.sq.fonte]+'... pode levar alguns segundos.'})));return;}
     if(S.sq.err){box.appendChild(emptyBox('globe','Não deu para buscar',S.sq.err,[['Tentar de novo',searchOnline]]));return;}
-    if(!S.sq.done){box.appendChild(emptyBox('globe','Buscar online','O PC procura em '+FONTES[S.sq.fonte]+' e toca para você por streaming. Este aparelho só conversa com o PC.'));return;}
-    if(!S.sq.res.length){box.appendChild(emptyBox('search','Nada encontrado','Nenhum resultado para “'+S.sq.done+'”. Tente outras palavras ou outra fonte.'));return;}
-    box.appendChild(h('p',{class:'resInfo',text:plural(S.sq.res.length,'resultado','resultados')+' para “'+S.sq.done+'” em '+FONTES[S.sq.doneF]}));
+    if(!S.sq.done){box.appendChild(emptyBox('globe','Buscar online','O PC procura em '+FONTES[S.sq.fonte]+' e toca para você por streaming. Você também pode colar um link de playlist ou álbum (Spotify, YouTube, YouTube Music, Deezer, Apple Music, SoundCloud) e salvar como playlist deste aparelho.'));return;}
+    if(!S.sq.res.length){box.appendChild(emptyBox('search','Nada encontrado',S.sq.link?'Esse link não trouxe músicas.':'Nenhum resultado para “'+S.sq.done+'”. Tente outras palavras ou outra fonte.'));return;}
+    if(S.sq.link){
+      const nome=S.sq.linkNome||'Link';
+      box.appendChild(h('p',{class:'resInfo',text:nome+'  ·  '+plural(S.sq.res.length,'música','músicas')+(S.sq.linkFonte?'  ·  '+S.sq.linkFonte:'')}));
+      box.appendChild(h('div',{class:'shBtns linkBtns'},
+        h('button',{class:'btnS',type:'button',text:'Tocar tudo',onclick:()=>playFrom(S.sq.res,0,{name:nome,key:'link:'+nome})}),
+        h('button',{class:'btnP',type:'button',text:'Salvar como playlist',onclick:()=>nameSheet(null,null,S.sq.res)})));
+    }else box.appendChild(h('p',{class:'resInfo',text:plural(S.sq.res.length,'resultado','resultados')+' para “'+S.sq.done+'” em '+FONTES[S.sq.doneF]}));
     const list=h('div',{class:'tlist'});box.appendChild(list);
-    const ctx={name:'Busca: '+S.sq.done,key:'search'};
+    const ctx={name:S.sq.link?(S.sq.linkNome||'Link'):('Busca: '+S.sq.done),key:S.sq.link?('link:'+(S.sq.linkNome||'')):'search'};
     chunked(list,S.sq.res,(t,i)=>trackRow(t,i,S.sq.res,ctx),prev);
     markAll();return;
   }
@@ -1218,9 +1261,10 @@ function renderResults(){
   markAll();
 }
 async function searchOnline(){
-  const inp=$('sIn');const q=S.sq.q.trim().slice(0,200);
+  const inp=$('sIn');const q=S.sq.q.trim().slice(0,600);
   if(!q){if(inp)inp.focus();return;}
   if(inp)inp.blur();
+  if(isLink(q)){openLinkOnline(q);return;}
   if(S.sq.ctl)S.sq.ctl.abort();
   const ctl=new AbortController();S.sq.ctl=ctl;
   S.sq.busy=true;S.sq.err='';renderResults();
@@ -1241,7 +1285,7 @@ async function searchOnline(){
     }
     if(S.sq.ctl!==ctl)return;
     S.sq.res=arr(j.faixas).map(nT).filter(Boolean);S.sq.res.forEach(t=>{t.o=true;});
-    S.sq.done=q;S.sq.doneF=fonte;
+    S.sq.done=q;S.sq.doneF=fonte;S.sq.link='';
   }catch(e){
     if(S.sq.ctl!==ctl)return;
     if(e&&e.name==='AbortError')S.sq.err='O PC demorou demais para responder. Tente de novo.';
@@ -1355,11 +1399,23 @@ function addSheet(t){
     }
   });
 }
-function nameSheet(p,addT){
+const isLink=q=>/^https?:\/\//i.test((q||'').trim());
+// Cria uma playlist deste aparelho com todas as musicas de um link (album/playlist de outra plataforma).
+async function saveLinkPl(nome,itens){
+  const r=await api('/api/minhas',{acao:'criar',nome});
+  const slug=str(r.slug,120);
+  if(!slug)throw new Error('Não consegui criar a playlist.');
+  const ids=itens.map(t=>t.id).filter(Boolean).slice(0,500);
+  const add=await api('/api/minhas',{acao:'addvarios',slug,ids});
+  await reload();
+  return {slug,n:Number(add&&add.n)||0};
+}
+function nameSheet(p,addT,linkItens){
   sheet(box=>{
-    box.appendChild(h('h2',{class:'shTitle',text:p?'Renomear playlist':'Dê um nome à sua playlist'}));
+    box.appendChild(h('h2',{class:'shTitle',text:p?'Renomear playlist':(linkItens?'Salvar como playlist':'Dê um nome à sua playlist')}));
+    if(linkItens)box.appendChild(h('p',{class:'shNote center',text:plural(linkItens.length,'música','músicas')+' do link vão para esta playlist do seu aparelho.'}));
     const inp=h('input',{class:'bigIn',type:'text',maxlength:'60',autocomplete:'off',enterkeyhint:'done','aria-label':'Nome da playlist','data-autofocus':'1'});
-    inp.value=p?p.nome:'Minha playlist nº '+(S.mine.length+1);
+    inp.value=p?p.nome:(linkItens&&S.sq.linkNome?S.sq.linkNome.slice(0,60):'Minha playlist nº '+(S.mine.length+1));
     const ok=h('button',{class:'btnP',type:'button',text:p?'Salvar':'Criar'});
     const go=async()=>{
       const nome=inp.value.trim().slice(0,60);
@@ -1369,6 +1425,11 @@ function nameSheet(p,addT){
         if(p){
           await api('/api/minhas',{acao:'renomear',slug:p.slug,nome});
           await closeSheet();await reload();toast('Playlist renomeada');
+        }else if(linkItens){
+          const {slug,n}=await saveLinkPl(nome,linkItens);
+          await closeSheet();
+          toast(n?('Playlist criada com '+plural(n,'música','músicas')):'Playlist criada');
+          if(findPl('mine:'+slug))openPl('mine:'+slug);
         }else{
           const r=await api('/api/minhas',{acao:'criar',nome});
           const slug=str(r.slug,120);

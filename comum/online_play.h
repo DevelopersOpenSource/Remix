@@ -272,6 +272,17 @@ inline std::wstring SafeFileName(std::wstring s) {
     return s.empty() ? std::wstring(L"musica") : s;
 }
 inline bool LooseAudioExt(const std::wstring& e) { return e == L".mp3" || e == L".m4a" || e == L".opus" || e == L".ogg" || e == L".webm" || e == L".flac" || e == L".wav" || e == L".aac" || e == L".mka"; }
+// Duracao de um arquivo baixado (qualquer formato: quem le e o ffmpeg). 0 = nao sei.
+inline int MediaDurSec(const std::wstring& file) {
+    if (!FfmpegOk()) return 0;
+    CapResult r = RunCapture({ FfmpegTool(), L"-nostdin", L"-hide_banner", L"-i", file }, 60000);
+    const std::string& t = r.err.find("Duration:") != std::string::npos ? r.err : r.out;
+    size_t p = t.find("Duration:");
+    if (p == std::string::npos) return 0;
+    int h = 0, m = 0; double sec = 0;
+    if (sscanf(t.c_str() + p + 9, " %d:%d:%lf", &h, &m, &sec) != 3) return 0;
+    return h * 3600 + m * 60 + (int)sec;
+}
 inline void RunDownload(DlJob& j) {
     EnsureTools();
     std::error_code ec;
@@ -283,8 +294,8 @@ inline void RunDownload(DlJob& j) {
     if (t.play.empty() || NeedsMatch(DetectSource(t.play))) { if (!MatchOnYouTube(t, err, &j.cancel)) { if (j.cancel) finish(4, L"Cancelado."); else finish(3, err); return; } }
     // Extracao: a mesma do streaming (se a musica ja tocou ou apareceu na busca, sai do cache na hora).
     // O yt-dlp baixa a partir desse JSON (--load-info-json) sem extrair de novo; se falhar, faz do jeito normal.
-    std::wstring infoFile;
-    { MediaInfo mi; std::wstring e; if (GetMediaInfo(t.play, mi, e, &j.cancel) && !mi.raw.empty()) {
+    std::wstring infoFile; MediaInfo mi;
+    { std::wstring e; if (GetMediaInfo(t.play, mi, e, &j.cancel) && !mi.raw.empty()) {
         infoFile = Config::Join(j.tmp, L"info.json");
         std::ofstream o(std::filesystem::path(infoFile), std::ios::binary | std::ios::trunc); o.write(mi.raw.data(), (std::streamsize)mi.raw.size());
         if (!o) infoFile.clear();
@@ -308,13 +319,35 @@ inline void RunDownload(DlJob& j) {
         }
         ec.clear(); return f;
     };
+    // Quanto a musica deve ter. Se o arquivo baixado vier bem menor, o yt-dlp trouxe so um pedaco
+    // (link do cache velho, formato em fragmentos que parou no primeiro): apaga e baixa do jeito normal.
+    int want = t.dur > 0 ? t.dur : mi.dur;
+    auto curto = [&](const std::wstring& f, int* gotOut) {
+        int got = (want > 40) ? MediaDurSec(f) : 0;
+        if (gotOut) *gotOut = got;
+        return got > 0 && got + 20 < want && got < (int)(want * 0.85);
+    };
     CapResult r;
     std::wstring produced;
-    if (!infoFile.empty()) { r = runYt(true); if (j.cancel) { finish(4, L"Cancelado."); return; } produced = findProduced(); if (produced.empty()) ForgetMediaInfo(t.play); }
+    if (!infoFile.empty()) {
+        r = runYt(true);
+        if (j.cancel) { finish(4, L"Cancelado."); return; }
+        produced = findProduced();
+        if (produced.empty()) ForgetMediaInfo(t.play);
+        else if (curto(produced, nullptr)) {   // veio pela metade: joga fora e refaz a extracao
+            std::error_code e4; std::filesystem::remove(std::filesystem::path(produced), e4);
+            produced.clear(); ForgetMediaInfo(t.play);
+        }
+    }
     if (produced.empty()) {
         r = runYt(false);
         if (j.cancel) { finish(4, L"Cancelado."); return; }
         produced = findProduced();
+        int got = 0;
+        if (!produced.empty() && curto(produced, &got)) {
+            wchar_t b[96]; swprintf(b, 96, L"Veio incompleta (%d:%02d de %d:%02d). Tente de novo.", got / 60, got % 60, want / 60, want % 60);
+            finish(3, b); return;
+        }
     }
     if (produced.empty()) { finish(3, OErr(r, L"O download falhou.")); return; }
     j.pct = 93;

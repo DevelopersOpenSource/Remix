@@ -320,6 +320,8 @@ Android nativa é feita: o Remix do PC vira um **servidor** e o celular usa pelo
   funcionar depois de um erro e a página do WhatsApp mostra os links até na pré-visualização do iPhone (sem JavaScript).
 - **Online no celular:** buscar e ouvir YouTube Music, YouTube e SoundCloud pelo celular — o **PC** roda o yt-dlp e o
   ffmpeg e manda só o áudio; playlists do PC com músicas online também tocam. O celular nunca fala com esses sites.
+  Dá também para **colar um link de playlist ou álbum** (Spotify, YouTube, YouTube Music, Deezer, Apple Music,
+  SoundCloud, Bandcamp): o PC resolve e o celular salva tudo como playlist dele com um toque.
 - **Rede local e internet:** pelo mesmo roteador (Wi-Fi ou cabo) ou por um **túnel Cloudflare** (HTTPS, sem abrir porta,
   atravessa CGNAT, sem entregar seu IP). O link do túnel **só aparece depois de testado** (evita o erro de DNS
   `DNS_PROBE_POSSIBLE`) e tem botão **COPIAR LINK**; **NOVO LINK** gera outro. **HTML P/ WHATSAPP** gera uma página com os links.

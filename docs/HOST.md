@@ -200,6 +200,12 @@ o estado do host.
   descarrega a aba quando falta memória), ela volta na mesma música, pausada.
 - **Arrastar o mini player** (a barrinha de baixo) para a esquerda passa para a próxima e para a direita
   volta — agora na barra inteira, com o dedo arrastando junto (antes só a parte do título respondia).
+- **Playlist de outras plataformas pelo celular:** cole um link de playlist ou álbum (Spotify, YouTube,
+  YouTube Music, Deezer, Apple Music, SoundCloud, Bandcamp) na busca online — o botão vira **ABRIR LINK**,
+  o PC resolve com os mesmos mecanismos do app (`POST /api/online/link`) e o celular mostra as músicas com
+  **TOCAR TUDO** e **SALVAR COMO PLAYLIST** (playlist do próprio aparelho, criada com todas de uma vez pela
+  ação `addvarios` de `/api/minhas`). Link de fora dessas fontes é recusado (o yt-dlp do PC não vira leitor
+  de URL qualquer).
 
 ## O que mudou na 1.5.2
 
