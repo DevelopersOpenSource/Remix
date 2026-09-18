@@ -110,6 +110,35 @@ static void RxDrawSide(Color ab,Color white,Color gray){
     }
 }
 
+// ------------------------------------------------------- iconezinhos -------
+static void RxIconLetra(const RectF& r,Color c){
+    for(int i=0;i<4;i++){
+        float y=r.Y+r.Height*(0.18f+i*0.22f);
+        float w=r.Width*((i%2)?0.62f:0.86f);
+        gfx::Line(r.X+r.Width*0.07f,y,r.X+r.Width*0.07f+w,y,1.7f,c);
+    }
+}
+static void RxIconFila(const RectF& r,Color c){
+    for(int i=0;i<3;i++){
+        float y=r.Y+r.Height*(0.22f+i*0.26f);
+        gfx::Line(r.X+r.Width*0.08f,y,r.X+r.Width*0.62f,y,1.7f,c);
+    }
+    gfx::Line(r.X+r.Width*0.74f,r.Y+r.Height*0.22f,r.X+r.Width*0.74f,r.Y+r.Height*0.78f,1.7f,c);
+    gfx::Line(r.X+r.Width*0.74f,r.Y+r.Height*0.78f,r.X+r.Width*0.92f,r.Y+r.Height*0.50f,1.7f,c);
+}
+static void RxIconSaida(const RectF& r,Color c){   // caixinha de som / dispositivo
+    gfx::StrokeRect(r.X+r.Width*0.20f,r.Y+r.Height*0.10f,r.Width*0.60f,r.Height*0.80f,1.7f,c);
+    gfx::StrokeEllipse(r.X+r.Width*0.34f,r.Y+r.Height*0.44f,r.Width*0.32f,r.Height*0.32f,1.6f,c);
+    gfx::FillEllipse(r.X+r.Width*0.46f,r.Y+r.Height*0.20f,r.Width*0.08f,r.Height*0.08f,c);
+}
+static void RxBotaoBarra(const RECT& r,void(*ico)(const RectF&,Color),bool on,Color ab,Color white,Color gray){
+    if(r.right<=r.left) return;
+    RectF b=RF(r);
+    bool hot=UiHot(r);
+    if(on||hot){ Color bg=ToGdi(on?UI().surfaceHi:UI().surface); DrawRoundRect(b,S(6),&bg,nullptr); }
+    ico(RectF(b.X+S(6),b.Y+S(6),b.Width-S(12),b.Height-S(12)),on?ab:(hot?white:gray));
+}
+
 // --------------------------------------------------------- barra de baixo ---
 static void RxDrawBar(int w,int h,Color ab,Color white,Color gray,Color navB,Color playP,Color playB){
     RectF bar=RF(R_rxBar);
@@ -156,6 +185,9 @@ static void RxDrawBar(int w,int h,Color ab,Color white,Color gray,Color navB,Col
         gfx::TextRect(FormatTime(pos),RectF(sk.X-S(50),sk.Y-S(1),S(44),S(16)),S(10),gray,false,gfx::Far,true);
         gfx::TextRect(FormatTime(len),RectF(sk.X+sk.Width+S(6),sk.Y-S(1),S(44),S(16)),S(10),gray,false,gfx::Near,true);
     }
+    RxBotaoBarra(R_rxLetra,RxIconLetra,g_rxLetraOn,ab,white,gray);
+    RxBotaoBarra(R_rxPainel,RxIconFila,g_rxPainelOn,ab,white,gray);
+    RxBotaoBarra(R_rxSaida,RxIconSaida,!Player::OutDeviceName().empty(),ab,white,gray);
     // volume
     {
         RectF vt=RF(R_vol);
@@ -230,6 +262,100 @@ static void RxDrawLista(Color ab,Color white,Color gray){
         DrawOrderArrows(i,ab,gray);
         DrawPickMark(i,rr);
     }
+}
+
+// ------------------------------------------------------------- letra -------
+// Letra no meio da tela, linha por linha: a atual em destaque, as outras mais
+// apagadas. Clicar numa linha pula a música para aquele ponto.
+static void RxDrawLetra(Color ab,Color white,Color gray){
+    RectF main=RF(R_rxMain);
+    gfx::PushClip(main);
+    const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+    gfx::Text(ct?ct->title:L"Nada tocando",main.X,main.Y+S(2),S(20),white,true);
+    if(ct) gfx::Text(ct->artist,main.X,main.Y+S(28),S(11),gray);
+    if(!ct){ gfx::PopClip(); return; }
+    letra::Letra L=letra::Para(ct->path,ct->title,ct->artist,DurSegundos(ct->path,ct->durSec),RxAvisarNovidades);
+    if(L.estado==0){ gfx::TextRect(L"Procurando a letra...",RectF(main.X,main.Y+S(90),main.Width,S(24)),S(13),gray,false,gfx::Near,true); gfx::PopClip(); return; }
+    if(L.estado==2){
+        gfx::TextRect(L"Não achei a letra desta música.",RectF(main.X,main.Y+S(90),main.Width,S(24)),S(14),white,true,gfx::Near,true);
+        gfx::TextRect(L"O Remix procura no LRCLIB pelo nome, artista e duração. Corrigir o nome ou o artista da faixa costuma resolver.",
+                      RectF(main.X,main.Y+S(118),main.Width-S(40),S(22)),S(11),gray,false,gfx::Near,true,gfx::EllipsisWord);
+        gfx::PopClip(); return;
+    }
+    DWORD pos=g_player.loaded?g_player.GetPositionMs():0;
+    int atual=letra::LinhaAtual(L,(int)pos);
+    gfx::PushClip(RectF(main.X,main.Y+S(46),main.Width,main.Height-S(46)));   // as linhas nao passam por cima do titulo
+    if(L.sync){
+        for(size_t i=0;i<R_rxLetraLinhas.size()&&i<L.linhas.size();i++){
+            RECT r=R_rxLetraLinhas[i]; RectF b=RF(r);
+            if(b.Y+b.Height<main.Y||b.Y>main.Y+main.Height) continue;
+            bool ehAtual=((int)i==atual);
+            Color c=ehAtual?white:(UiHot(r)?white:ToGdi(UI().textFaint));
+            if(ehAtual){ Color bg=ToGdi(UI().surface); DrawRoundRect(RectF(b.X-S(6),b.Y-S(2),b.Width+S(12),b.Height+S(4)),S(6),&bg,nullptr); }
+            gfx::TextRect(L.linhas[i].txt.empty()?L"♪":L.linhas[i].txt,RectF(b.X,b.Y,b.Width,b.Height),ehAtual?S(17):S(14),c,ehAtual,gfx::Near,true,gfx::EllipsisWord);
+        }
+    } else {
+        float y=main.Y+S(52)-(float)g_rxLetraScroll;
+        std::wstring t=L.texto; size_t i=0;
+        while(i<=t.size()&&y<main.Y+main.Height){
+            size_t e=t.find(L'\n',i); if(e==std::wstring::npos) e=t.size();
+            if(y>main.Y-S(20)) gfx::TextRect(t.substr(i,e-i),RectF(main.X,y,main.Width-S(20),S(22)),S(13),ToGdi(UI().textDim),false,gfx::Near,true,gfx::EllipsisWord);
+            y+=S(24);
+            if(e==t.size()) break;
+            i=e+1;
+        }
+    }
+    gfx::PopClip();
+    if(!L.fonte.empty())
+        gfx::TextRect(L.fonte+(L.sync?L"  ·  toque numa linha para pular":L"  ·  sem marcação de tempo"),
+                      RectF(main.X,main.Y+main.Height-S(22),main.Width-S(16),S(18)),S(9.5f),ToGdi(UI().textFaint),false,gfx::Far,true);
+    gfx::PopClip();
+}
+
+// --------------------------------------------------- painel da direita -----
+// "Tocando agora": capa grande, o que vem depois na fila e um resumo do artista.
+static void RxDrawPainel(Color ab,Color white,Color gray){
+    if(R_rxNp.right<=R_rxNp.left) return;
+    RectF p=RF(R_rxNp);
+    Color bg=Argb(215,(BYTE)GetRValue(UI().bg),(BYTE)GetGValue(UI().bg),(BYTE)GetBValue(UI().bg));
+    DrawRoundRect(p,S(10),&bg,nullptr);
+    gfx::PushClip(p);
+    const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+    float x=p.X+S(14), w=p.Width-S(28), y=p.Y+S(14);
+    gfx::Text(L"TOCANDO AGORA",x,y,S(9.5f),ToGdi(UI().textFaint),true); y+=S(20);
+    if(!ct){ gfx::TextRect(L"Nada tocando.",RectF(x,y+S(10),w,S(20)),S(12),gray,false,gfx::Near,true); gfx::PopClip(); return; }
+    RectF art(x,y,w,w);
+    Color plate=ToGdi(UI().surface);
+    if(g_cfg.artShape==L"cd") DrawCoverCircle(g_coverImg,art,ToGdi(UI().borderHi),1.2f,g_player.playing?g_rotation:0);
+    else { DrawRoundRect(art,S(UI_R_CARD),&plate,nullptr); if(g_coverImg&&g_coverImg->ok) gfx::DrawImgCover(g_coverImg,art); }
+    y=art.Y+art.Height+S(12);
+    gfx::TextRect(ct->title,RectF(x,y,w,S(24)),S(16),white,true,gfx::Near,false,gfx::EllipsisChar); y+=S(24);
+    gfx::TextRect(ct->artist.empty()?L"Artista desconhecido":ct->artist,RectF(x,y,w,S(18)),S(11),gray,false,gfx::Near,false,gfx::EllipsisChar); y+=S(24);
+    {   // de onde vem + duração
+        int dur=DurSegundos(ct->path,ct->durSec);
+        std::wstring de=IsOnlineTrack(*ct)?std::wstring(L"Online"):std::filesystem::path(ct->path).parent_path().filename().wstring();
+        gfx::TextRect(de+(dur>0?(L"  ·  "+FormatTime((DWORD)dur*1000)):std::wstring()),RectF(x,y,w,S(16)),S(10),ToGdi(UI().textFaint),false,gfx::Near,false,gfx::EllipsisChar);
+        y+=S(24);
+    }
+    // a seguir
+    gfx::Text(L"A SEGUIR",x,y,S(9.5f),ToGdi(UI().textFaint),true); y+=S(18);
+    int mostrados=0;
+    for(int k=1;k<=4&&mostrados<4;k++){
+        int idx=-1;
+        if(g_cfg.shuffle&&!g_shufQueue.empty()&&g_shufPos>=0){ int q=g_shufPos+k; if(q<(int)g_shufQueue.size()) idx=g_shufQueue[(size_t)q]; }
+        else if(g_current>=0&&g_current+k<(int)g_tracks.size()) idx=g_current+k;
+        if(idx<0||idx>=(int)g_tracks.size()) break;
+        const Track& t=g_tracks[(size_t)idx];
+        float rh=S(38);
+        if(y+rh>p.Y+p.Height-S(8)) break;
+        RectF cvr(x,y+S(3),rh-S(8),rh-S(8));
+        Color pl2=ToGdi(UI().surface); DrawRoundRect(cvr,S(4),&pl2,nullptr);
+        Img* im=GetThumb(t.coverPath); if(im) gfx::DrawImgCover(im,cvr);
+        gfx::TextRect(t.title,RectF(cvr.X+cvr.Width+S(8),y+S(2),w-cvr.Width-S(12),S(17)),S(11),white,false,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(t.artist,RectF(cvr.X+cvr.Width+S(8),y+S(18),w-cvr.Width-S(12),S(15)),S(9.5f),gray,false,gfx::Near,false,gfx::EllipsisChar);
+        y+=rh; mostrados++;
+    }
+    gfx::PopClip();
 }
 
 // ------------------------------------------------- cabecalho da biblioteca --

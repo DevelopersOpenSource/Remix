@@ -115,6 +115,31 @@ static void RxDrawSide(Graphics& g,const Color& ab,const Color& white,const Colo
     }
 }
 
+// ------------------------------------------------------- iconezinhos -------
+static void RxIconLetra(Graphics& g,const RectF& r,const Color& c){
+    Pen p(c,1.7f);
+    for(int i=0;i<4;i++){ REAL y=r.Y+r.Height*(0.18f+i*0.22f); REAL w=r.Width*((i%2)?0.62f:0.86f); g.DrawLine(&p,r.X+r.Width*0.07f,y,r.X+r.Width*0.07f+w,y); }
+}
+static void RxIconFila(Graphics& g,const RectF& r,const Color& c){
+    Pen p(c,1.7f);
+    for(int i=0;i<3;i++){ REAL y=r.Y+r.Height*(0.22f+i*0.26f); g.DrawLine(&p,r.X+r.Width*0.08f,y,r.X+r.Width*0.62f,y); }
+    g.DrawLine(&p,r.X+r.Width*0.74f,r.Y+r.Height*0.22f,r.X+r.Width*0.74f,r.Y+r.Height*0.78f);
+    g.DrawLine(&p,r.X+r.Width*0.74f,r.Y+r.Height*0.78f,r.X+r.Width*0.92f,r.Y+r.Height*0.50f);
+}
+static void RxIconSaida(Graphics& g,const RectF& r,const Color& c){
+    Pen p(c,1.7f); SolidBrush b(c);
+    g.DrawRectangle(&p,r.X+r.Width*0.20f,r.Y+r.Height*0.10f,r.Width*0.60f,r.Height*0.80f);
+    g.DrawEllipse(&p,r.X+r.Width*0.34f,r.Y+r.Height*0.44f,r.Width*0.32f,r.Height*0.32f);
+    g.FillEllipse(&b,r.X+r.Width*0.46f,r.Y+r.Height*0.20f,r.Width*0.08f,r.Height*0.08f);
+}
+static void RxBotaoBarra(Graphics& g,const RECT& r,void(*ico)(Graphics&,const RectF&,const Color&),bool on,const Color& ab,const Color& white,const Color& gray){
+    if(r.right<=r.left) return;
+    RectF b=RF(r);
+    bool hot=UiHot(r);
+    if(on||hot){ SolidBrush bg(ToGdi(on?UI().surfaceHi:UI().surface)); DrawRoundRect(g,b,(int)S(6),&bg,nullptr); }
+    ico(g,RectF(b.X+S(6),b.Y+S(6),b.Width-S(12),b.Height-S(12)),on?ab:(hot?white:gray));
+}
+
 // --------------------------------------------------------- barra de baixo ---
 static void RxDrawBar(Graphics& g,int w,int h,const Color& ab,const Color& white,const Color& gray,const Color& navB,const Color& playP,const Color& playB){
     (void)h;
@@ -169,6 +194,9 @@ static void RxDrawBar(Graphics& g,int w,int h,const Color& ab,const Color& white
         g.DrawString(FormatTime(pos).c_str(),-1,UiFont(S(10),true),RectF(sk.X-S(50),sk.Y-S(1),S(44),S(16)),&rfmt,&gb);
         TextAt(g,FormatTime(len),sk.X+sk.Width+S(6),sk.Y-S(1),S(10),&gb,true);
     }
+    RxBotaoBarra(g,R_rxLetra,RxIconLetra,g_rxLetraOn,ab,white,gray);
+    RxBotaoBarra(g,R_rxPainel,RxIconFila,g_rxPainelOn,ab,white,gray);
+    RxBotaoBarra(g,R_rxSaida,RxIconSaida,!Player::OutDeviceName().empty(),ab,white,gray);
     {   // volume
         RectF vt=RF(R_vol);
         SolidBrush vb(ToGdi(UI().border)); DrawRoundRect(g,vt,2,&vb,nullptr);
@@ -240,6 +268,101 @@ static void RxDrawLista(Graphics& g,const Color& ab,const Color& white,const Col
         DrawOrderArrows(g,i,&abb,&gb);
         DrawPickMark(g,i,rr);
     }
+}
+
+// ------------------------------------------------------------- letra -------
+static void RxDrawLetra(Graphics& g,const Color& ab,const Color& white,const Color& gray){
+    (void)ab;
+    RectF main=RF(R_rxMain);
+    Region old; g.GetClip(&old); g.SetClip(main);
+    SolidBrush wb(white), gb(gray), fb(ToGdi(UI().textFaint));
+    const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+    TextAt(g,ct?ct->title:std::wstring(L"Nada tocando"),main.X,main.Y+S(2),S(20),&wb,true);
+    if(ct) TextAt(g,ct->artist,main.X,main.Y+S(28),S(11),&gb);
+    if(!ct){ g.SetClip(&old); return; }
+    letra::Letra L=letra::Para(ct->path,ct->title,ct->artist,DurSegundos(ct->path,ct->durSec),RxAvisarNovidades);
+    if(L.estado==0){ TextTrim(g,L"Procurando a letra...",RectF(main.X,main.Y+S(90),main.Width,S(24)),S(13),&gb,false,StringTrimmingEllipsisCharacter,true); g.SetClip(&old); return; }
+    if(L.estado==2){
+        TextTrim(g,L"Não achei a letra desta música.",RectF(main.X,main.Y+S(90),main.Width,S(24)),S(14),&wb,true,StringTrimmingEllipsisCharacter,true);
+        TextTrim(g,L"O Remix procura no LRCLIB pelo nome, artista e duração. Corrigir o nome ou o artista da faixa costuma resolver.",
+                 RectF(main.X,main.Y+S(118),main.Width-S(40),S(22)),S(11),&gb,false,StringTrimmingEllipsisWord,true);
+        g.SetClip(&old); return;
+    }
+    DWORD pos=g_player.loaded?g_player.GetPositionMs():0;
+    int atual=letra::LinhaAtual(L,(int)pos);
+    Region old2; g.GetClip(&old2); g.SetClip(RectF(main.X,main.Y+S(46),main.Width,main.Height-S(46)));
+    if(L.sync){
+        for(size_t i=0;i<R_rxLetraLinhas.size()&&i<L.linhas.size();i++){
+            RECT r=R_rxLetraLinhas[i]; RectF b=RF(r);
+            if(b.Y+b.Height<main.Y||b.Y>main.Y+main.Height) continue;
+            bool ehAtual=((int)i==atual);
+            SolidBrush c(ehAtual?white:(UiHot(r)?white:ToGdi(UI().textFaint)));
+            if(ehAtual){ SolidBrush bg(ToGdi(UI().surface)); DrawRoundRect(g,RectF(b.X-S(6),b.Y-S(2),b.Width+S(12),b.Height+S(4)),(int)S(6),&bg,nullptr); }
+            TextTrim(g,L.linhas[i].txt.empty()?std::wstring(L"♪"):L.linhas[i].txt,b,ehAtual?S(17):S(14),&c,ehAtual,StringTrimmingEllipsisWord,true);
+        }
+    } else {
+        REAL y=main.Y+S(52)-(REAL)g_rxLetraScroll;
+        std::wstring t=L.texto; size_t i=0;
+        while(i<=t.size()&&y<main.Y+main.Height){
+            size_t e=t.find(L'\n',i); if(e==std::wstring::npos) e=t.size();
+            if(y>main.Y-S(20)) TextTrim(g,t.substr(i,e-i),RectF(main.X,y,main.Width-S(20),S(22)),S(13),&gb,false,StringTrimmingEllipsisWord,true);
+            y+=S(24);
+            if(e==t.size()) break;
+            i=e+1;
+        }
+    }
+    g.SetClip(&old2);
+    if(!L.fonte.empty()){
+        StringFormat rf; rf.SetAlignment(StringAlignmentFar); rf.SetLineAlignment(StringAlignmentCenter);
+        g.DrawString((L.fonte+(L.sync?L"  ·  toque numa linha para pular":L"  ·  sem marcação de tempo")).c_str(),-1,UiFont(S(9.5f),false),
+                     RectF(main.X,main.Y+main.Height-S(22),main.Width-S(16),S(18)),&rf,&fb);
+    }
+    g.SetClip(&old);
+}
+
+// --------------------------------------------------- painel da direita -----
+static void RxDrawPainel(Graphics& g,const Color& ab,const Color& white,const Color& gray){
+    (void)ab;
+    if(R_rxNp.right<=R_rxNp.left) return;
+    RectF p=RF(R_rxNp);
+    SolidBrush bg(ToGdi(UI().bg,215));
+    DrawRoundRect(g,p,(int)S(10),&bg,nullptr);
+    Region old; g.GetClip(&old); g.SetClip(p);
+    SolidBrush wb(white), gb(gray), fb(ToGdi(UI().textFaint));
+    const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+    REAL x=p.X+S(14), w=p.Width-S(28), y=p.Y+S(14);
+    TextAt(g,L"TOCANDO AGORA",x,y,S(9.5f),&fb,true); y+=S(20);
+    if(!ct){ TextTrim(g,L"Nada tocando.",RectF(x,y+S(10),w,S(20)),S(12),&gb,false,StringTrimmingEllipsisCharacter,true); g.SetClip(&old); return; }
+    RectF art(x,y,w,w);
+    if(g_cfg.artShape==L"cd"){ Pen pn(ToGdi(UI().borderHi),1.2f); DrawCoverCircle(g,g_coverImg,Rect((int)art.X,(int)art.Y,(int)art.Width,(int)art.Height),&pn,g_player.playing?g_rotation:0); }
+    else { SolidBrush plate(ToGdi(UI().surface)); DrawRoundRect(g,art,(int)S(UI_R_CARD),&plate,nullptr); if(g_coverImg&&g_coverImg->GetLastStatus()==Ok) DrawImgCover(g,g_coverImg,art); }
+    y=art.Y+art.Height+S(12);
+    TextTrim(g,ct->title,RectF(x,y,w,S(24)),S(16),&wb,true,StringTrimmingEllipsisCharacter); y+=S(24);
+    TextTrim(g,ct->artist.empty()?std::wstring(L"Artista desconhecido"):ct->artist,RectF(x,y,w,S(18)),S(11),&gb,false,StringTrimmingEllipsisCharacter); y+=S(24);
+    {
+        int dur=DurSegundos(ct->path,ct->durSec);
+        std::wstring de=IsOnlineTrack(*ct)?std::wstring(L"Online"):std::filesystem::path(ct->path).parent_path().filename().wstring();
+        TextTrim(g,de+(dur>0?(L"  ·  "+FormatTime((DWORD)dur*1000)):std::wstring()),RectF(x,y,w,S(16)),S(10),&fb,false,StringTrimmingEllipsisCharacter);
+        y+=S(24);
+    }
+    TextAt(g,L"A SEGUIR",x,y,S(9.5f),&fb,true); y+=S(18);
+    int mostrados=0;
+    for(int k=1;k<=4&&mostrados<4;k++){
+        int idx=-1;
+        if(g_cfg.shuffle&&!g_shufQueue.empty()&&g_shufPos>=0){ int q=g_shufPos+k; if(q<(int)g_shufQueue.size()) idx=g_shufQueue[(size_t)q]; }
+        else if(g_current>=0&&g_current+k<(int)g_tracks.size()) idx=g_current+k;
+        if(idx<0||idx>=(int)g_tracks.size()) break;
+        const Track& t=g_tracks[(size_t)idx];
+        REAL rh=S(38);
+        if(y+rh>p.Y+p.Height-S(8)) break;
+        RectF cvr(x,y+S(3),rh-S(8),rh-S(8));
+        SolidBrush pl2(ToGdi(UI().surface)); DrawRoundRect(g,cvr,(int)S(4),&pl2,nullptr);
+        Image* im=GetThumb(t.coverPath); if(im) DrawImgCover(g,im,cvr);
+        TextTrim(g,t.title,RectF(cvr.X+cvr.Width+S(8),y+S(2),w-cvr.Width-S(12),S(17)),S(11),&wb,false,StringTrimmingEllipsisCharacter);
+        TextTrim(g,t.artist,RectF(cvr.X+cvr.Width+S(8),y+S(18),w-cvr.Width-S(12),S(15)),S(9.5f),&gb,false,StringTrimmingEllipsisCharacter);
+        y+=rh; mostrados++;
+    }
+    g.SetClip(&old);
 }
 
 // ------------------------------------------------- cabecalho da biblioteca --

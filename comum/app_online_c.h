@@ -112,6 +112,12 @@ static void OnlineAddAll(int x,int y){
 
 // ---- itens dos menus novos (CTX_MENU, CTX_PICKON e acoes novas de faixa/playlist) -----------
 static bool RunMenuAction(int kind,int act,int arg){
+    if(kind==CTX_SAIDA){
+        int i=act-CA_SAIDA_BASE;
+        if(i==0) TrocarSaida(L"");
+        else if(i-1>=0&&i-1<(int)g_saidas.size()) TrocarSaida(g_saidas[(size_t)i-1]);
+        return true;
+    }
     if(kind==CTX_PICKON){ if(act==CA_PICKON_NEW||act>=CA_PICKON_BASE) OnlinePickTarget(act,arg); return true; }
     if(kind==CTX_TRACK){
         if(arg<0||arg>=(int)g_tracks.size()) return false;

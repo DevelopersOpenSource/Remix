@@ -430,6 +430,12 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     R_rxBar={0,h-barH,w,h};
     int mx = sideW? sideW+gap : gap;
     R_rxMain={mx,topH+SI(8),w-gap,h-barH-SI(6)};
+    R_rxNp={0,0,0,0};
+    if(g_rxPainelOn&&w>=SI(1100)){          // painel da direita: tocando agora + artista + fila
+        int npw=std::min(SI(340),w/4);
+        R_rxNp={w-gap-npw,topH+SI(8),w-gap,h-barH-SI(6)};
+        R_rxMain.right=(int)R_rxNp.left-gap;
+    }
 
     // ---- barra de cima: marca a esquerda, busca no meio, atalhos a direita
     int rx=w-SI(12)-chrome;
@@ -482,15 +488,40 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         R_seek={cx-sw/2,sy-SI(9),cx+sw/2,sy+SI(9)};
         R_wavePanel={0,0,0,0};
         int vx=w-SI(20)-chrome;
-        R_vol={vx-SI(110),bt+barH/2-SI(3),vx,bt+barH/2+SI(3)};
-        R_volIcon={(int)R_vol.left-SI(30),bt+barH/2-SI(12),(int)R_vol.left-SI(6),bt+barH/2+SI(12)};
+        R_vol={vx-SI(96),bt+barH/2-SI(3),vx,bt+barH/2+SI(3)};
+        R_volIcon={(int)R_vol.left-SI(28),bt+barH/2-SI(12),(int)R_vol.left-SI(6),bt+barH/2+SI(12)};
+        {   // botoes: letra, fila/painel e onde tocar (somem se a janela ficar estreita)
+            int bx2=(int)R_volIcon.left-SI(10), by2=bt+barH/2-SI(14), d=SI(28);
+            auto bt2=[&](RECT& r){ if(bx2-d<(int)R_seek.right+SI(20)){ r={0,0,0,0}; return; } r={bx2-d,by2,bx2,by2+d}; bx2=bx2-d-SI(6); };
+            bt2(R_rxSaida); bt2(R_rxPainel); bt2(R_rxLetra);
+        }
         R_playerPanel={0,0,0,0};
         R_runnerSlider={0,0,0,0};
         R_pencilPanel={0,0,0,0};
     }
     // ---- area principal
-    g_rxCards.clear(); g_rxFilas.clear();
+    g_rxCards.clear(); g_rxFilas.clear(); R_rxLetraLinhas.clear();
     R_rxCab={0,0,0,0}; R_rxTocar={0,0,0,0}; R_rxAleat={0,0,0,0}; R_rxVoltar={0,0,0,0}; R_rxBuscarOn={0,0,0,0};
+    if(g_rxLetraOn){   // letra: uma linha por vez, clicável (pula para aquele ponto)
+        R_library={0,0,0,0};
+        const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+        if(ct){
+            letra::Letra L=letra::Para(ct->path,ct->title,ct->artist,DurSegundos(ct->path,ct->durSec),RxAvisarNovidades);
+            int lh=SI(34);
+            if(L.sync&&GetTickCount64()-g_rxLetraMexeu>6000){   // segue a música sozinha (a menos que você acabou de rolar)
+                int atual=letra::LinhaAtual(L,(int)(g_player.loaded?g_player.GetPositionMs():0));
+                int visH=(int)(R_rxMain.bottom-R_rxMain.top)-SI(60);
+                if(atual>=0) g_rxLetraScroll=std::max(0,atual*lh-visH/2+lh);
+                else g_rxLetraScroll=0;
+            }
+            int y0=(int)R_rxMain.top+SI(52)-g_rxLetraScroll;
+            for(size_t i=0;i<L.linhas.size()&&i<200;i++){
+                int yy=y0+(int)i*lh;
+                R_rxLetraLinhas.push_back({(int)R_rxMain.left+SI(10),yy,(int)R_rxMain.right-SI(10),yy+lh-SI(4)});
+            }
+        }
+        return;
+    }
     if(g_rxPag==RXP_LISTA){
         // cabecalho da pagina: nome da lista, quantas musicas e os botoes de tocar
         int cabH=SI(74);

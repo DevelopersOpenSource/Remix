@@ -137,6 +137,7 @@ void StreamWavePump(StreamJob* jp, const int16_t* s16, size_t nSamples, uint64_t
 #include "online_play.h"
 #include "stems.h"
 #include "descobrir.h"   // novidades/recomendacoes da tela inicial (Deezer publico + o que voce ouve)
+#include "letras.h"      // letra da musica (LRCLIB), guardada no disco para sempre
 #include "discord_rpc.h"  // Rich Presence: mostra no Discord o que esta tocando
 static int g_curStreamId=0; static bool g_curStreamOpen=false; static ULONGLONG g_queueTick=0;   // canal de streaming tocando agora (a fila fica em online_play.h)
 static std::map<std::wstring,OTrack> g_onlineInfo;              // url -> metadados/links achados (busca, streaming)
@@ -206,6 +207,7 @@ enum : int {
     // Estilo REMIX (1.6): lateral, tela inicial com fileiras e player embaixo.
     Z_RX_NAV_BASE=30000,          // +3: Início / Buscar / Sua biblioteca
     Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS, Z_RX_TOCAR, Z_RX_ALEATORIO, Z_RX_VOLTAR, Z_RX_BUSCARON, Z_RX_SIDEDRAG,
+    Z_RX_LETRA=30030, Z_RX_SAIDA, Z_RX_PAINEL, Z_RX_LETRA_LINHA_BASE=30200,   // +200: clicar numa linha da letra pula para ela
     Z_RX_ATALHO_BASE=30100,       // +16: atalhos do topo do Início (mais ouvidos)
     Z_RX_SIDE_BASE=31000,         // +500: itens da lateral (0 = todas as músicas, depois as playlists)
     Z_RX_CARD_BASE=32000,         // +4000: cartões da tela inicial
@@ -286,6 +288,14 @@ static RECT R_rxSideDrag{0,0,0,0};         // divisória: arrasta para mudar a l
 // Atalhos do topo do Início: o que você mais ouviu por último (playlists e músicas).
 struct RxAtalho { RECT r{0,0,0,0}; int tipo=0; int idx=0; std::wstring nome, sub, capa; };
 static std::vector<RxAtalho> g_rxAtalhos;
+// Barra de baixo: botoes de letra, fila e onde tocar.
+static RECT R_rxLetra{0,0,0,0}, R_rxSaida{0,0,0,0}, R_rxPainel{0,0,0,0};
+static bool g_rxLetraOn=false;         // letra ocupando a area principal
+static bool g_rxPainelOn=false;        // painel da direita (tocando agora)
+static RECT R_rxNp{0,0,0,0};           // area do painel da direita
+static std::vector<RECT> R_rxLetraLinhas;
+static int g_rxLetraScroll=0;
+static ULONGLONG g_rxLetraMexeu=0;   // rolou com a mão: para de seguir a música por alguns segundos
 struct RxCard { RECT r{0,0,0,0}, play{0,0,0,0}; int fila=0, item=0; };
 static std::vector<RxCard> g_rxCards;      // cartoes visiveis da tela inicial
 struct RxFila { RECT head{0,0,0,0}, verTudo{0,0,0,0}; int fonte=0; };   // fonte: -1 = local (recentes), >=0 = fileira do descobrir
@@ -338,11 +348,11 @@ static int g_ctxTrack = -1;
 static RECT R_ctxBox;
 static std::vector<RECT> R_ctxItems;
 // menu de contexto generico: rotulos + acao de cada item (faixa, card de playlist, escolher playlist)
-enum { CTX_TRACK=0, CTX_PLAYLIST=1, CTX_PICKPL=2, CTX_MENU=3, CTX_PICKON=4 };
+enum { CTX_TRACK=0, CTX_PLAYLIST=1, CTX_PICKPL=2, CTX_MENU=3, CTX_PICKON=4, CTX_SAIDA=5 };
 enum { CA_PLAY=1, CA_COVER, CA_ARTIST, CA_RENAME, CA_FOLDER, CA_ADDPL, CA_REMOVEPL, CA_DELETE, CA_PL_PLAY, CA_PL_SHUF, CA_PL_RENAME, CA_PL_DELETE, CA_PL_HOST, CA_PICK_NEW,
        CA_ADD_LIB, CA_ADD_FILES, CA_ADD_FOLDERCOPY, CA_ADD_FOLDERLINK, CA_ADD_LINK, CA_ADD_SEARCH, CA_NEW_EMPTY, CA_NEW_FOLDER, CA_NEW_LINK, CA_NEW_SEARCH,
        CA_PLF_PICK, CA_PLF_UNLINK, CA_PLF_LIBRARY, CA_PL_FOLDER, CA_PL_SYNC, CA_PL_DLALL, CA_PL_MODE, CA_DOWNLOAD, CA_OPEN_URL, CA_ACT_CANCEL, CA_ACT_OPENDIR, CA_PICKON_NEW, CA_DC_PLAY, CA_DC_PLPLAY, CA_DC_PLTOGGLE,
-       CA_PICK_BASE=100, CA_PLF_RECENT_BASE=200, CA_PICKON_BASE=300 };
+       CA_PICK_BASE=100, CA_PLF_RECENT_BASE=200, CA_PICKON_BASE=300, CA_SAIDA_BASE=400 };
 static int g_ctxKind=0, g_ctxArg=-1; static std::vector<std::wstring> g_ctxLabels; static std::vector<int> g_ctxActs; static std::vector<bool> g_ctxDanger;
 // confirmacao (excluir)
 static bool g_confirmOpen = false;
@@ -833,6 +843,22 @@ static void OpenAndStart(const std::wstring& src,bool autoplay){
         if(autoplay) g_player.Play();
     } else SetStatus(Player::HasAudio()?L"Nao consegui abrir este arquivo.":L"Sem saida de audio (nenhum dispositivo de som encontrado).",3000);
 }
+static std::vector<std::wstring> g_saidas;   // dispositivos de som listados no menu "onde tocar"
+// Troca onde o som sai (fone, caixa, HDMI...): fecha e reabre o audio e volta
+// para o mesmo ponto da musica. Nome vazio = o que o sistema estiver usando.
+static void TrocarSaida(const std::wstring& nome){
+    if(Player::OutDeviceName()==nome) return;
+    bool tocava=g_player.playing;
+    DWORD pos=g_player.loaded?g_player.GetPositionMs():0;
+    std::wstring src=g_currentSource;
+    g_player.Close();
+    Player::OutDeviceName()=nome;
+    g_cfg.outDevice=nome; g_cfg.Save();
+    Player::GlobalShutdown();
+    Player::GlobalInit();
+    if(!src.empty()){ g_resumeMs=pos; OpenAndStart(src,tocava); }
+    SetStatus(nome.empty()?L"Som no dispositivo padrão do sistema.":L"Som em: "+nome,3000);
+}
 // ---- fila embaralhada ---------------------------------------------------------
 // A lista visivel continua na ordem do usuario (inclusive a manual); o aleatorio
 // so muda a ORDEM DE REPRODUCAO: cada faixa toca uma vez por ciclo e "anterior"
@@ -1198,6 +1224,15 @@ static void OpenCtxMenuGeneric(int x,int y,int kind,int arg,const std::vector<st
     R_ctxBox={bx,by,bx+bw,by+bh}; R_ctxItems.clear();
     for(int i=0;i<n;i++){ int yy=by+(int)S(6)+i*rowH; R_ctxItems.push_back({bx+(int)S(6),yy,bx+bw-(int)S(6),yy+rowH-(int)S(2)}); }
     g_ctxKind=kind; g_ctxArg=arg; g_ctxLabels=labels; g_ctxActs=acts; g_ctxDanger=danger; g_ctxTrack=(kind==CTX_TRACK)?arg:-1; g_ctxOpen=true;
+}
+static void OpenSaidaMenu(int x,int y){
+    g_saidas=Player::OutDevices();
+    std::vector<std::wstring> l; std::vector<int> a;
+    std::wstring atual=Player::OutDeviceName();
+    l.push_back(atual.empty()?L"✓  Padrão do sistema":L"Padrão do sistema"); a.push_back(CA_SAIDA_BASE);
+    for(size_t i=0;i<g_saidas.size()&&i<12;i++){ l.push_back((atual==g_saidas[i]?L"✓  ":L"")+g_saidas[i]); a.push_back(CA_SAIDA_BASE+1+(int)i); }
+    if(g_saidas.empty()) l[0]=L"Nenhum dispositivo de som encontrado";
+    OpenCtxMenuGeneric(x,y,CTX_SAIDA,-1,l,a,std::vector<bool>(l.size(),false),(int)S(330));
 }
 static void OpenCtxMenu(int track,int x,int y){   // menu de uma faixa
     if(track<0||track>=(int)g_tracks.size()) return;
@@ -1650,6 +1685,7 @@ static void Tick(float dt){
             else g_player.Pause();
         }
     }
+    if(RxOn()&&g_rxLetraOn&&g_player.playing) BuildLayout();   // a letra acompanha a musica
     PublishStreamWave();
     {   // Rich Presence do Discord: o que esta tocando (so com o Application ID preenchido)
         const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
@@ -1680,6 +1716,7 @@ static void CoreInit(){
     art::St().onReady=[](const std::wstring& a,const std::wstring& b){ AppPost(EV_ART_READY,OPack({a,b})); };   // capa embutida pronta
     g_themes=LoadAllThemes(); ApplyTheme(); g_cfg.HealMusicFolder(); MigrateIniAssociations(g_cfg.musicFolder); g_artistMap=LoadCustomArtists();
     ExtraFormatsEnabled()=PlatformHaveFfmpeg();
+    Player::OutDeviceName()=g_cfg.outDevice;   // onde tocar, lembrado da última vez
     Player::GlobalInit();
     Player::SetEq(g_cfg.eq,g_cfg.eqOn);
     ApplyFxNow();

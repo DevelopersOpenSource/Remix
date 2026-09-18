@@ -177,9 +177,27 @@ class Player {
         if (e.on && e.init) ma_node_attach_output_bus(s, 0, &e.node[0], 0);
         else ma_node_attach_output_bus(s, 0, ma_engine_get_endpoint(&Engine()), 0);
     }
+    // Contexto proprio para listar e escolher a saida ("onde tocar").
+    static ma_context* OutCtx() {
+        static ma_context ctx; static int st = 0;   // 0 = nao tentou, 1 = ok, 2 = falhou
+        if (st == 0) st = ma_context_init(nullptr, 0, nullptr, &ctx) == MA_SUCCESS ? 1 : 2;
+        return st == 1 ? &ctx : nullptr;
+    }
+    static bool AchaSaida(const std::wstring& nome, ma_device_id& id) {
+        ma_context* c = OutCtx(); if (!c || nome.empty()) return false;
+        ma_device_info* pb = nullptr; ma_uint32 pn = 0; ma_device_info* cb = nullptr; ma_uint32 cn = 0;
+        if (ma_context_get_devices(c, &pb, &pn, &cb, &cn) != MA_SUCCESS) return false;
+        for (ma_uint32 i = 0; i < pn; ++i) if (Utf8ToWide(pb[i].name) == nome) { id = pb[i].id; return true; }
+        return false;
+    }
     static bool InitEngine(ma_uint32 rate) {
         ma_engine_config cfg = ma_engine_config_init();
         cfg.sampleRate = rate; // 0 = taxa do dispositivo
+        static ma_device_id devId;
+        if (!OutDeviceName().empty() && AchaSaida(OutDeviceName(), devId)) {   // saida escolhida pela pessoa
+            cfg.pContext = OutCtx();
+            cfg.pPlaybackDeviceID = &devId;
+        }
         if (std::getenv("REMIX_NULL_AUDIO")) {   // testes: saida "nula" (o tempo anda, nada sai nas caixas)
             static ma_context nullCtx; static bool nullOk = false;
             if (!nullOk) { ma_backend b[1] = { ma_backend_null }; nullOk = ma_context_init(b, 1, NULL, &nullCtx) == MA_SUCCESS; }
@@ -204,6 +222,23 @@ public:
     Player() = default;
     ~Player() { Close(); }
 
+    // Onde tocar: vazio = o que o sistema estiver usando.
+    static std::wstring& OutDeviceName() { static std::wstring v; return v; }
+    static std::vector<std::wstring> OutDevices() {
+        std::vector<std::wstring> out;
+        ma_context* c = OutCtx(); if (!c) return out;
+        ma_device_info* pb = nullptr; ma_uint32 pn = 0; ma_device_info* cb = nullptr; ma_uint32 cn = 0;
+        if (ma_context_get_devices(c, &pb, &pn, &cb, &cn) != MA_SUCCESS) return out;
+        for (ma_uint32 i = 0; i < pn; ++i) out.push_back(Utf8ToWide(pb[i].name));
+        return out;
+    }
+    // Nome do dispositivo que esta tocando agora (para mostrar na tela).
+    static std::wstring OutDeviceAtual() {
+        if (!OutDeviceName().empty()) return OutDeviceName();
+        ma_device* d = EngineOk() ? ma_engine_get_device(&Engine()) : nullptr;
+        if (d && d->playback.name[0]) return Utf8ToWide(d->playback.name);
+        return L"";
+    }
     static void GlobalInit() { if (!EngineOk()) InitEngine(0); }
     static bool HasAudio() { return EngineOk(); }   // dispositivo de som abriu?
     static ma_backend Backend() { ma_device* d = EngineOk() ? ma_engine_get_device(&Engine()) : nullptr; return (d && d->pContext) ? d->pContext->backend : ma_backend_null; }

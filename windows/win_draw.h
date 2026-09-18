@@ -719,8 +719,10 @@ static void DrawNormal(Graphics& g,int w,int h){
     if(RxOn()){
         RxDrawSide(g,accent,ToGdi(UI().text),ToGdi(UI().textDim));
         RxDrawBusca(g,ToGdi(UI().text),ToGdi(UI().textDim));
-        if(g_rxPag==RXP_LISTA) RxDrawCabecalho(g,accent,ToGdi(UI().text),ToGdi(UI().textDim));
+        if(g_rxLetraOn) RxDrawLetra(g,accent,ToGdi(UI().text),ToGdi(UI().textDim));
+        else if(g_rxPag==RXP_LISTA) RxDrawCabecalho(g,accent,ToGdi(UI().text),ToGdi(UI().textDim));
         else RxDrawInicio(g,w,h,accent,ToGdi(UI().text),ToGdi(UI().textDim));
+        RxDrawPainel(g,accent,ToGdi(UI().text),ToGdi(UI().textDim));
         RxDrawBar(g,w,h,accent,ToGdi(UI().text),ToGdi(UI().textDim),ToGdi(cNav),ToGdi(cPlay),UiClassic()?ToGdi(cPlay):ToGdi(UI().bg));
     }
     if(g_showSettings) DrawSettings(g,w,h);

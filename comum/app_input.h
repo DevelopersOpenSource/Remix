@@ -145,6 +145,10 @@ static int HitTest(int x,int y){
         for(int i=0;i<3;i++) if(R_rxNav[i].right>R_rxNav[i].left&&PtIn(R_rxNav[i],x,y)) return Z_RX_NAV_BASE+i;
         if(R_rxNovaPl.right>R_rxNovaPl.left&&PtIn(R_rxNovaPl,x,y)) return Z_RX_NOVAPL;
         if(R_rxSideDrag.right>R_rxSideDrag.left&&PtIn(R_rxSideDrag,x,y)) return Z_RX_SIDEDRAG;
+        if(R_rxLetra.right>R_rxLetra.left&&PtIn(R_rxLetra,x,y)) return Z_RX_LETRA;
+        if(R_rxPainel.right>R_rxPainel.left&&PtIn(R_rxPainel,x,y)) return Z_RX_PAINEL;
+        if(R_rxSaida.right>R_rxSaida.left&&PtIn(R_rxSaida,x,y)) return Z_RX_SAIDA;
+        for(size_t i=0;i<R_rxLetraLinhas.size()&&i<200;i++) if(PtIn(R_rxLetraLinhas[i],x,y)) return Z_RX_LETRA_LINHA_BASE+(int)i;
         if(g_rxPag==RXP_INICIO&&PtIn(R_rxMain,x,y))
             for(size_t i=0;i<g_rxAtalhos.size()&&i<16;i++) if(g_rxAtalhos[i].r.right>g_rxAtalhos[i].r.left&&PtIn(g_rxAtalhos[i].r,x,y)) return Z_RX_ATALHO_BASE+(int)i;
         if(R_rxTocar.right>R_rxTocar.left&&PtIn(R_rxTocar,x,y)) return Z_RX_TOCAR;
@@ -410,6 +414,18 @@ static void OnLButtonDown(int x,int y){
         if(k.idx>=0&&k.idx<(int)fonte.size()){ std::wstring chave=fonte[(size_t)k.idx].path; RxTocarLocal({chave},0); }
         return;
     }
+    if(id==Z_RX_LETRA){ g_rxLetraOn=!g_rxLetraOn; g_rxLetraScroll=0; BuildLayout(); return; }
+    if(id==Z_RX_PAINEL){ g_rxPainelOn=!g_rxPainelOn; BuildLayout(); return; }
+    if(id==Z_RX_SAIDA){ OpenSaidaMenu((int)R_rxSaida.left-(int)S(240),(int)R_rxSaida.top-(int)S(220)); return; }
+    if(id>=Z_RX_LETRA_LINHA_BASE&&id<Z_RX_LETRA_LINHA_BASE+200){
+        size_t i=(size_t)(id-Z_RX_LETRA_LINHA_BASE);
+        const Track* ct=(g_current>=0&&g_current<(int)g_tracks.size())?&g_tracks[(size_t)g_current]:(g_nowPlayingValid?&g_nowPlaying:nullptr);
+        if(ct&&g_player.loaded){
+            letra::Letra L=letra::Para(ct->path,ct->title,ct->artist,DurSegundos(ct->path,ct->durSec),RxAvisarNovidades);
+            if(i<L.linhas.size()) g_player.SeekMs((DWORD)std::max(0,L.linhas[i].ms));
+        }
+        return;
+    }
     if(id==Z_RX_VOLTAR){ g_rxGenero.clear(); g_rxGeneroNome.clear(); g_rxScroll=0; BuildLayout(); return; }
     if(id==Z_RX_BUSCARON){ OpenOnlineSearch(-1,L""); return; }
     if(id==Z_RX_TOCAR||id==Z_RX_ALEATORIO){
@@ -568,6 +584,7 @@ static void OnWheel(int d){ // d = notches (>0 = pra cima)
     if(OU().open){ OU().scroll-=d*SI(116); if(OU().scroll<0) OU().scroll=0; return; }   // LayoutOnline limita o maximo
     if(g_showSettings){g_setScroll-=d*(int)S(56);int maxSc=std::max(0,(int)(g_setContentH-(R_settingsPanel.bottom-R_settingsPanel.top-76)));g_setScroll=std::max(0,std::min(g_setScroll,maxSc));return;}
     if(g_showSplash||g_cfg.displayMode==L"vertical")return;
+    if(RxOn()&&g_rxLetraOn){ g_rxLetraScroll=std::max(0,g_rxLetraScroll-d*SI(90)); g_rxLetraMexeu=GetTickCount64(); BuildLayout(); return; }
     if(RxOn()&&g_rxPag!=RXP_LISTA){   // tela inicial/descobrir: rola as fileiras
         g_rxScroll-=d*SI(110);
         if(g_rxScroll<0) g_rxScroll=0;
@@ -684,6 +701,9 @@ static void RunAction(const std::string& a){
     else if(a=="hosthtml"){host::WriteConnectHtml();}
     else if(a=="tunnel:on"){host::TunnelStart(g_cfg.hostPort);}
     else if(a.rfind("hostlib:",0)==0){ int i=atoi(a.c_str()+8); host::View v=host::GetView(); if(i>=0&&i<(int)v.devs.size()) host::SetDeviceLib(v.devs[(size_t)i].id,a.back()!='0'); }   // hostlib:<aparelho>:<0|1>
+    else if(a=="letra"){ g_rxLetraOn=!g_rxLetraOn; g_rxLetraScroll=0; BuildLayout(); }
+    else if(a=="rxpainel"){ g_rxPainelOn=!g_rxPainelOn; BuildLayout(); }
+    else if(a=="saidas"){ auto v=Player::OutDevices(); fprintf(stderr,"[remix] saidas (%d): ",(int)v.size()); for(auto& s:v) fprintf(stderr,"%s | ",WideToUtf8(s).c_str()); fprintf(stderr,"| atual=%s\n",WideToUtf8(Player::OutDeviceAtual()).c_str()); }
     else if(a.rfind("rxpag:",0)==0){ int n=atoi(a.c_str()+6); if(n==0){ g_rxPag=RXP_INICIO; BuildLayout(); } else if(n==2){ g_rxPag=RXP_DESCOBRIR; g_rxScroll=0; BuildLayout(); } else { g_rxPag=RXP_LISTA; EnterLibraryView(); } }
     else if(a.rfind("rxgen:",0)==0){ int n=atoi(a.c_str()+6); auto gs=desc::ListaGeneros(); if(n>=0&&n<(int)gs.size()){ g_rxGenero=gs[(size_t)n].id; g_rxGeneroNome=gs[(size_t)n].titulo; g_rxScroll=0; desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades); BuildLayout(); } }
     else if(a.rfind("rxpl:",0)==0){ int n=atoi(a.c_str()+5); g_rxPag=RXP_LISTA; if(n>=0&&n<(int)g_playlists.size()) OpenPlaylistView(n); }
