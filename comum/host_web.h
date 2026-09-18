@@ -240,6 +240,7 @@ svg{display:block;width:24px;height:24px;flex:none}
 .art.grad{color:#fff;background:linear-gradient(135deg,rgba(var(--acc-rgb),1) 0%,rgba(var(--acc-rgb),.55) 55%,#3a3a3a 100%)}
 .art .ini{font-weight:800;line-height:1;text-shadow:0 2px 12px rgba(0,0,0,.25);font-size:22px}
 .art.newPl{background:#2a2a2a;color:var(--tx2)}
+.art.round,.art.round img{border-radius:50%}
 .s44{width:44px;height:44px}
 .s48{width:48px;height:48px}
 .s56{width:56px;height:56px}
@@ -814,10 +815,11 @@ function dragDown(target,area,close,canStart){
 // -------------------------------------------------------------- capas --
 // Carrega so o que aparece na tela, poucas por vez e respeitando o limite do PC.
 const COV={q:[],ok:new Set(),busy:0,t:0,io:null};
-function coverUrl(t){return '/api/capa/'+enc(t.id);}
+function coverUrl(t){return t.dc?('/api/desccapa/'+enc(t.c)):('/api/capa/'+enc(t.id));}
 function art(t,cls,opt){
   opt=opt||{};
   const w=h('div',{class:'art '+(cls||'')});
+  if(opt.round)w.classList.add('round');
   if(opt.pl){w.classList.add('grad');w.appendChild(h('span',{class:'ini',text:initial(opt.pl)}));}
   else if(opt.lib){w.classList.add('grad');w.appendChild(ic('pc'));}
   else w.appendChild(ic('note'));
@@ -991,6 +993,45 @@ async function waitAccept(req,gen){
 
 // ------------------------------------------------------------ dados --
 function arr(v){return Array.isArray(v)?v:[];}
+// Novidades da tela inicial: o PC monta as fileiras (API pública do Deezer) e
+// serve as capas; tocar continua passando pelo motor online dele (yt-dlp).
+const DSC={at:0,busy:false,f:[],err:'',carregando:false};
+const TIPO=['Música','Álbum','Playlist','Artista'];
+async function loadDesc(force){
+  if(DSC.busy||!S.online)return;
+  if(!force&&DSC.at&&Date.now()-DSC.at<10*60000)return;
+  DSC.busy=true;
+  try{
+    const j=await api('/api/descobrir');
+    DSC.f=arr(j.fileiras).slice(0,12).map(f=>({
+      titulo:str(f.titulo,80),nota:str(f.nota,90),
+      itens:arr(f.itens).slice(0,30).map(i=>({t:str(i.t,120),s:str(i.s,120),c:str(i.c,32),l:str(i.l,300),k:+i.k||0,d:+i.d||0,dc:1})).filter(i=>i.t&&i.l)
+    })).filter(f=>f.itens.length);
+    DSC.at=Date.now();DSC.carregando=!!j.carregando;DSC.err='';
+  }catch(e){DSC.err=(e&&e.message)||'';}
+  DSC.busy=false;
+  if(S.tab==='home')renderHome();
+}
+function novCard(it){
+  return h('button',{class:'card',type:'button',onclick:()=>abrirNov(it)},
+    art(it,'c140',{round:it.k===3}),h('span',{class:'cT',text:it.t}),h('span',{class:'cS',text:it.s||TIPO[it.k]||''}));
+}
+async function abrirNov(it){
+  if(it.k===0){   // música: o PC resolve o link e já toca
+    try{
+      toast('Preparando "'+it.t+'"...');
+      const j=await api('/api/online/link',{url:it.l});
+      const l=arr(j.faixas).map(nT).filter(Boolean);l.forEach(t=>{t.o=true;});
+      if(!l.length){toast('Não achei essa música.',1);return;}
+      playFrom(l,0,{name:it.s||'Novidades',key:'nov:'+it.l});
+    }catch(e){fail(e);}
+    return;
+  }
+  // álbum, playlist ou artista: abre a lista na aba Buscar (dá para tocar tudo ou salvar)
+  S.sq.mode='online';LS.set('smode','online');
+  if(it.k===3){S.sq.q=it.t;renderSearch();await showTab('search');searchOnline();return;}
+  S.sq.q=it.l;renderSearch();await showTab('search');openLinkOnline(it.l);
+}
 function applyEst(est){
   S.host=str(est.host,80)||'PC';S.dev=str(est.dispositivo,60)||'Este aparelho';S.ver=str(est.v,30);
   S.libOk=!!est.biblioteca;S.online=!!est.online;S.nFaixas=Math.max(0,est.faixas|0);S.stemsOk=!!est.stems;
@@ -1172,7 +1213,12 @@ function renderHome(){
     h('div',{class:'car'},S.mine.map(plCard),h('button',{class:'card',type:'button',onclick:()=>nameSheet()},
       h('div',{class:'art c140 newPl'},ic('plus')),h('span',{class:'cT',text:'Criar playlist'}),h('span',{class:'cS',text:S.online?'músicas do PC e online':'músicas do PC'})))));
   if(S.sh.length)v.appendChild(h('section',{class:'sec'},secHead('Compartilhadas com você',S.sh.length>3?()=>libFilter('sh'):null),h('div',{class:'car'},S.sh.map(plCard))));
+  for(const f of DSC.f)
+    v.appendChild(h('section',{class:'sec'},secHead(f.titulo),h('div',{class:'car'},f.itens.map(novCard))));
+  if(S.online&&!DSC.f.length&&(DSC.busy||DSC.carregando))
+    v.appendChild(h('section',{class:'sec'},secHead('Novidades'),h('p',{class:'shNote',text:'O PC está buscando as novidades...'})));
   markAll();
+  loadDesc(false);
 }
 function libFilter(f){S.libFilter=f;LS.set('lfil',f);renderLib();showTab('lib');}
 

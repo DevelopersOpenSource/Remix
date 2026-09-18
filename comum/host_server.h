@@ -147,6 +147,14 @@ inline std::string ContentTypeFor(const std::wstring& path) {
 inline std::string HtmlEsc(const std::string& s) { std::string o; for (char c : s) { if (c == '<') o += "&lt;"; else if (c == '>') o += "&gt;"; else if (c == '&') o += "&amp;"; else if (c == '"') o += "&quot;"; else o.push_back(c); } return o; }
 inline bool AllowedThumbUrl(const std::wstring& w) { return ThumbUrlAllowed(w); }   // so https, sem usuario/porta, so CDNs conhecidos (online_resolve.h)
 
+// Capa das novidades (tela inicial do celular): o CSP da pagina so deixa carregar
+// imagem do proprio PC, entao cada capa ganha um id curto e o Host serve o arquivo.
+inline std::string DescCapaId(const std::wstring& url) {
+    unsigned long long x = 1469598103934665603ULL;
+    for (wchar_t ch : url) { x ^= (unsigned long long)ch; x *= 1099511628211ULL; }
+    char b[24]; snprintf(b, sizeof b, "%016llx", x); return b;
+}
+
 // ------------------------------------------------------------ estado ------
 struct HTrack { std::string id; std::wstring title, artist, path, coverPath; int dur = 0; };
 // Musica online (resultado de busca ou item de playlist): o celular so conhece o id; a URL fica no PC.
@@ -175,6 +183,7 @@ struct State {
     // biblioteca publicada pela UI
     std::vector<HTrack> tracks; std::map<std::string, size_t> byId; std::map<std::string, bool> libIds; std::vector<HPlaylist> pls;
     std::map<std::string, OItem> onl;               // id -> musica online
+    std::map<std::string, std::wstring> descCapas;  // capa das novidades: id curto -> URL (o celular nao busca fora)
     std::map<std::wstring, std::string> targets;    // slug -> "" (nao hosteada) | "ALL" | "id1,id2"
     std::vector<Device> devs; std::vector<PairReq> reqs; std::vector<DevPlaylist> dpls;
     std::map<std::string, std::vector<std::string>> seen;   // dispositivo -> ids online que ele buscou (autoriza tocar/adicionar)
@@ -1095,6 +1104,39 @@ inline void Serve(hsock_t c, const hostnet::Peer& peer) {
             SaveIni(); AuthChanged();
         }();
         SendJson(c, st, out); return;
+    }
+    if (P == "/api/descobrir") {   // novidades e recomendacoes da tela inicial (as mesmas do PC)
+        if (!s.opt.onlineOk) { SendJson(c, 200, "{\"off\":1,\"fileiras\":[]}"); return; }
+        desc::Atualizar(false, nullptr);
+        desc::Home h = desc::Copia();
+        std::string o = "{\"at\":" + std::to_string(h.at) + ",\"carregando\":" + (desc::Carregando() ? "1" : "0") + ",\"fileiras\":[";
+        bool p1 = true;
+        for (auto& f : h.fileiras) {
+            if (!p1) o += ","; p1 = false;
+            o += "{\"titulo\":" + JStr(f.titulo) + ",\"nota\":" + JStr(f.nota) + ",\"chave\":" + JStr(f.chave) + ",\"itens\":[";
+            bool p2 = true;
+            for (auto& it : f.itens) {
+                if (!p2) o += ","; p2 = false;
+                std::string cid;
+                if (AllowedThumbUrl(it.capa)) { cid = DescCapaId(it.capa); std::lock_guard<std::mutex> lk(s.m); s.descCapas[cid] = it.capa; }
+                o += "{\"t\":" + JStr(it.titulo) + ",\"s\":" + JStr(it.sub) + ",\"c\":" + JStrA(cid) +
+                     ",\"l\":" + JStr(it.link) + ",\"k\":" + std::to_string((int)it.kind) + ",\"d\":" + std::to_string(it.dur) + "}";
+            }
+            o += "]}";
+        }
+        o += "]}";
+        SendJson(c, 200, o); return;
+    }
+    if (P.rfind("/api/desccapa/", 0) == 0) {   // capa de uma novidade (o PC baixa e guarda; o celular nao fala com a internet)
+        std::string id = P.substr(14);
+        if (!IsHex(id, 16)) { SendErr(c, 404, "capa"); return; }
+        std::wstring url;
+        { std::lock_guard<std::mutex> lk(s.m); auto it = s.descCapas.find(id); if (it != s.descCapas.end()) url = it->second; }
+        if (url.empty() || !AllowedThumbUrl(url)) { SendErr(c, 404, "capa"); return; }
+        hostnet::SetTimeout(c, 60000);
+        std::wstring f = FetchThumb(url, true);
+        if (f.empty()) { SendErr(c, 404, "capa"); return; }
+        SendFile(c, r, f, "image/jpeg", true, nullptr); return;
     }
     if (P == "/api/minhachave") {   // o aparelho ja vinculado pega a propria chave (botao "copiar link deste aparelho")
         std::string key; { std::lock_guard<std::mutex> lk(s.m); for (auto& d : s.devs) if (d.id == dev.id) key = d.key; }
