@@ -363,7 +363,7 @@ body.hasBeat.isPlaying .eq i:nth-child(3){transform:scaleY(calc(.22 + .5*var(--b
 #dock{position:fixed;left:0;right:0;bottom:0;z-index:20;pointer-events:none}
 #dock>*{pointer-events:auto}
 body.kbOpen #dock{display:none}
-.mini{position:relative;display:flex;align-items:center;height:58px;max-width:1000px;margin:0 auto 4px;margin-left:max(8px,calc(8px + var(--sal)));margin-right:max(8px,calc(8px + var(--sar)));padding:0 4px 0 7px;border-radius:8px;overflow:hidden;
+.mini{position:relative;display:flex;align-items:center;height:58px;touch-action:pan-y;will-change:transform;transition:transform .18s ease;max-width:1000px;margin:0 auto 4px;margin-left:max(8px,calc(8px + var(--sal)));margin-right:max(8px,calc(8px + var(--sar)));padding:0 4px 0 7px;border-radius:8px;overflow:hidden;
   background-color:#2b2b2b;background-image:linear-gradient(rgba(var(--acc-rgb),.28),rgba(var(--acc-rgb),.14));box-shadow:0 4px 18px rgba(0,0,0,.45)}
 @media (min-width:1016px){.mini{margin-left:auto;margin-right:auto}}
 .miniOpen{flex:1;min-width:0;display:flex;align-items:center;gap:10px;height:100%;text-align:left;color:#fff}
@@ -1000,6 +1000,7 @@ async function startApp(){
   $('boot').hidden=true;$('pair').hidden=true;$('app').hidden=false;
   document.title='Remix · '+S.host;
   renderAll();showViews();window.scrollTo(0,0);
+  restoreSess();
 }
 async function reload(){await loadData();renderAll();}
 async function refresh(manual){
@@ -1474,7 +1475,12 @@ function fxLabel(){
 }
 function updFxBtn(){const b=$('npFx');if(!b)return;const on=fxOn()||!!S.stem;b.classList.toggle('on',on);$('npFxTxt').textContent=fxLabel();}
 // Troca efeito/stem com a musica tocando: recomeca do mesmo ponto com o audio novo (no mesmo toque, iOS ok).
-function reloadCur(){if(!S.cur)return;const at=Math.floor(curTime()),was=!A.paused&&!A.error;loadCur(at,was);}
+function reloadCur(){
+  if(!S.cur)return;
+  const at=Math.floor(curTime()),was=!A.paused&&!A.error;
+  clearTimeout(W.fxT);   // varios toques seguidos nos efeitos: recarrega uma vez so, no fim
+  W.fxT=setTimeout(()=>{if(S.cur)loadCur(at,was);},350);
+}
 function fxDots(v){return h('span',{class:'fxD','aria-hidden':'true'},h('i',{class:v>=1?'on':''}),h('i',{class:v>=2?'on':''}),h('i',{class:v>=3?'on':''}));}
 const STM={t:0,id:''};
 function stemStatusTxt(j){
@@ -1603,14 +1609,16 @@ function waveLoop(ts){
 // ------------------------------------------------------------ player --
 const A=$('audio');
 const NP={open:false,drag:false,at:0};
-const W={t:0,seekTo:0,retry:0,pos:0,cut:0,cutOff:-1,pausedAt:0};
+const W={t:0,seekTo:0,retry:0,pos:0,cut:0,cutOff:-1,pausedAt:0,seekable:false,swapAt:0,pre:'',sess:0,fxT:0};
 function curIdx(){return S.order[S.pos];}
 // "modo stream" (sm): online, com efeito ou com stem. O PC converte e manda sem tamanho: o tempo da musica
 // e o deslocamento pedido (?t=) + o que tocou vezes a velocidade (slow/speed mudam o ritmo).
 function curTime(){return S.cur&&S.cur.sm?S.off+(A.currentTime||0)*S.rate:(A.currentTime||0);}
 function curDur(){
-  if(!S.cur)return 0;if(S.cur.sm)return S.cur.d||0;
-  const d=A.duration;return isFinite(d)&&d>0?d:(S.cur.d||0);
+  if(!S.cur)return 0;
+  const d=A.duration,ok=isFinite(d)&&d>0;
+  if(S.cur.sm)return S.cur.d||(W.seekable&&ok?Math.floor(S.off+d*S.rate):0);
+  return ok?d:(S.cur.d||0);
 }
 function mkOrder(start){
   const n=S.queue.length,idx=[...Array(n).keys()];
@@ -1647,13 +1655,22 @@ function srcFor(t,at){
 function srcOnline(t,at){return srcFor(t,at);}
 function loadCur(at,play){
   const t=S.queue[curIdx()];if(!t)return;
-  S.cur=t;S.off=0;W.retry=0;W.seekTo=0;W.cut=0;W.cutOff=-1;clearTimeout(W.t);npMsg('');
+  S.cur=t;S.off=0;W.retry=0;W.seekTo=0;W.cut=0;W.cutOff=-1;W.seekable=false;W.swapAt=Date.now();clearTimeout(W.t);npMsg('');
   t.sm=streamMode(t);S.rate=t.sm?fxRate():1;
   if(t.sm){S.off=Math.max(0,Math.floor(at||0));A.src=srcFor(t,S.off);noteReq(1);}
   else{A.src='/api/faixa/'+enc(t.id);noteReq(2);if(at>0)W.seekTo=at;}
   loadRitmo(t);updFxBtn();stemCheck(t);
   if(play)doPlay();else{setBusy(false);}
   updNow();updMeta();updPlayBtns();updTime();
+}
+// Avisa o PC quais sao as proximas online: ele adianta a extracao (senao cada troca espera o yt-dlp).
+function prefetchNext(){
+  if(!S.queue.length||S.pos<0)return;
+  const ids=[];
+  for(let k=1;k<=2;k++){const p=S.pos+k;if(p>=S.order.length)break;const t=S.queue[S.order[p]];if(t&&t.o)ids.push(t.id);}
+  const key=ids.join(',');
+  if(!ids.length||key===W.pre)return;
+  W.pre=key;raw('/api/preparar',{ids}).catch(()=>{});
 }
 function doPlay(){
   if(!S.cur)return;
@@ -1677,10 +1694,27 @@ function togglePlay(){
     else doPlay();
   }else A.pause();
 }
+// O iOS recarrega a aba quando fica sem memoria (ou o PWA volta do zero): guarda a fila e o ponto.
+function saveSess(force){
+  try{
+    if(!S.cur||!S.queue.length){LS.set('sess','');return;}
+    const now=Date.now();if(!force&&now-W.sess<5000)return;W.sess=now;
+    LS.set('sess',JSON.stringify({q:S.queue.slice(0,300),o:S.order.slice(0,300),p:S.pos,at:Math.floor(curTime()),c:S.ctx,t:now}));
+  }catch(e){}
+}
+function restoreSess(){
+  if(S.cur)return;
+  let d=null;try{d=JSON.parse(LS.get('sess','')||'null');}catch(e){}
+  if(!d||!Array.isArray(d.q)||!d.q.length||!Array.isArray(d.o)||!(d.p>=0)||d.p>=d.o.length)return;
+  if(Date.now()-(d.t||0)>24*3600*1000){LS.set('sess','');return;}
+  S.queue=d.q;S.order=d.o;S.pos=d.p;S.ctx=d.c&&d.c.key?d.c:{name:'',key:''};
+  loadCur(Math.max(0,d.at||0),false);   // pausada: o iOS so toca depois de um toque
+  npMsg('');
+}
 function stopAudio(){
   try{A.pause();A.removeAttribute('src');A.load();}catch(e){}
   clearTimeout(W.t);S.cur=null;S.queue=[];S.order=[];S.pos=-1;S.ctx={name:'',key:''};
-  setBusy(false);updNow();updPlayBtns();
+  setBusy(false);updNow();updPlayBtns();LS.set('sess','');
   if('mediaSession' in navigator)try{navigator.mediaSession.metadata=null;}catch(e){}
 }
 function next(auto){
@@ -1707,8 +1741,10 @@ function seek(s){
   const t=S.cur;if(!t)return;
   const d=curDur();s=Math.max(0,d?Math.min(s,Math.max(0,d-1)):s);
   if(t.sm){
+    const rel=(s-S.off)/S.rate;   // stream com tamanho (Range): o proprio audio pula, sem pedir tudo de novo
+    if(W.seekable&&rel>=0&&isFinite(A.duration)&&rel<=A.duration){try{A.currentTime=rel;updTime();posState(true);return;}catch(e){}}
     const play=!A.paused;
-    S.off=Math.floor(s);A.src=srcFor(t,S.off);noteReq(1);
+    S.off=Math.floor(s);A.src=srcFor(t,S.off);W.swapAt=Date.now();noteReq(1);
     if(play)doPlay();
   }else if(A.readyState>=1){try{A.currentTime=s;}catch(e){W.seekTo=s;}}
   else W.seekTo=s;
@@ -1773,7 +1809,7 @@ function updTime(){
   const sk=$('npSeek');sk.disabled=!S.cur||!d;
   if(!NP.drag){sk.value=String(Math.round(p*1000));sk.style.setProperty('--p',(p*100).toFixed(2)+'%');$('npPos').textContent=fmt(d?Math.min(c,d):c);}
   $('npLen').textContent=d?fmt(d):'--:--';
-  posState(false);
+  posState(false);saveSess();
 }
 let posT=0;
 function posState(force){
@@ -1829,6 +1865,11 @@ function onAudioError(){
     else{A.load();W.seekTo=at;noteReq(2);}
     doPlay();return;
   }
+  if(Date.now()-W.swapAt<6000&&W.retry<3){   // acabei de trocar efeito/stem ou de avancar: o PC pode ter recusado por excesso de pedidos
+    W.retry++;const volta=Math.max(0,at);
+    setTimeout(()=>{if(S.cur===t)loadCur(volta,true);},900*W.retry);
+    npMsg('O PC está ocupado; tentando de novo...');return;
+  }
   const msg=t.o?'Não deu para tocar “'+t.t+'” online agora. O PC pode estar sem internet ou a fonte recusou.'
     :'Não consegui tocar “'+t.t+'”. O arquivo pode ter saído do PC ou o formato não toca neste navegador.';
   try{A.pause();}catch(e){}   // o botao volta a mostrar play (e o proximo toque recarrega)
@@ -1837,16 +1878,24 @@ function onAudioError(){
   S.errs++;
   if(S.errs<3&&S.pos+1<S.order.length)setTimeout(()=>{if(S.cur===t){S.pos++;loadCur(0,true);}},2000);
 }
+// O PC manda o stream com tamanho quando sabe a duracao: ai o proprio navegador pula no tempo (sem recomecar).
+function noteSeekable(){
+  const ok=!!(S.cur&&S.cur.sm&&((isFinite(A.duration)&&A.duration>0)||(A.seekable&&A.seekable.length&&A.seekable.end(0)>1)));
+  if(ok!==W.seekable){W.seekable=ok;updTime();}
+}
+A.addEventListener('canplay',noteSeekable);
+A.addEventListener('progress',noteSeekable);
 A.addEventListener('loadedmetadata',()=>{
+  noteSeekable();
   if(S.cur&&!S.cur.sm&&isFinite(A.duration)&&A.duration>0&&!S.cur.d)S.cur.d=Math.floor(A.duration);   // guarda a duracao (para efeito/stem depois)
   if(W.seekTo>0&&S.cur&&!S.cur.sm){try{A.currentTime=W.seekTo;}catch(e){}W.seekTo=0;}updTime();});
 A.addEventListener('timeupdate',()=>{updTime();if(A.currentTime>0&&!A.paused){clearTimeout(W.t);}});
-A.addEventListener('durationchange',updTime);
+A.addEventListener('durationchange',()=>{noteSeekable();updTime();});
 A.addEventListener('play',()=>{updPlayBtns();if(A.readyState<3){setBusy(true);armStall();}});
-A.addEventListener('pause',()=>{W.pausedAt=Date.now();setBusy(false);clearTimeout(W.t);updPlayBtns();posState(true);});
+A.addEventListener('pause',()=>{W.pausedAt=Date.now();setBusy(false);clearTimeout(W.t);updPlayBtns();posState(true);saveSess(true);});
 A.addEventListener('waiting',()=>{setBusy(true);if(S.cur&&S.cur.sm)npMsg('O PC está preparando a música...');armStall();});
 A.addEventListener('stalled',()=>{if(!A.paused)armStall();});
-A.addEventListener('playing',()=>{W.pausedAt=0;setBusy(false);npMsg('');clearTimeout(W.t);S.errs=0;updPlayBtns();posState(true);kickWave();});
+A.addEventListener('playing',()=>{W.pausedAt=0;setBusy(false);npMsg('');clearTimeout(W.t);S.errs=0;updPlayBtns();posState(true);kickWave();prefetchNext();saveSess();});
 A.addEventListener('ended',()=>{
   setBusy(false);
   // O stream online nao tem tamanho: se a conexao cai (rede, tunel, pausa longa e o PC desiste)
@@ -1921,14 +1970,27 @@ function init(){
   // navegacao
   document.querySelectorAll('#nav button').forEach(b=>b.addEventListener('click',()=>showTab(b.dataset.tab)));
   // mini player
-  const mini=$('miniOpen');let sx=null,sy=0,swiped=false;
+  const mini=$('miniOpen'),miniBox=$('mini');let sx=null,sy=0,swiped=false,dragX=false;
   mini.addEventListener('click',()=>{if(swiped){swiped=false;return;}openNp();});
-  mini.addEventListener('touchstart',e=>{if(e.touches.length===1){sx=e.touches[0].clientX;sy=e.touches[0].clientY;}},{passive:true});
-  mini.addEventListener('touchcancel',()=>{sx=null;});
-  mini.addEventListener('touchend',e=>{
-    if(sx==null)return;const t=e.changedTouches[0];const dx=t.clientX-sx,dy=t.clientY-sy;sx=null;
-    if(Math.abs(dx)>60&&Math.abs(dy)<40){swiped=true;setTimeout(()=>{swiped=false;},400);if(dx<0)next(false);else prev();}
-  });
+  const miniReset=()=>{miniBox.style.transition='';miniBox.style.transform='';};
+  miniBox.addEventListener('touchstart',e=>{if(e.touches.length!==1||!S.cur)return;sx=e.touches[0].clientX;sy=e.touches[0].clientY;dragX=false;},{passive:true});
+  miniBox.addEventListener('touchmove',e=>{
+    if(sx==null)return;
+    const t=e.touches[0],dx=t.clientX-sx,dy=t.clientY-sy;
+    if(!dragX&&Math.abs(dx)>12&&Math.abs(dx)>Math.abs(dy)*1.4)dragX=true;
+    if(!dragX)return;
+    if(e.cancelable)e.preventDefault();   // segura o gesto de voltar do Safari
+    miniBox.style.transition='none';miniBox.style.transform='translateX('+(dx*0.4).toFixed(1)+'px)';
+  },{passive:false});
+  miniBox.addEventListener('touchend',e=>{
+    if(sx==null)return;const dx=e.changedTouches[0].clientX-sx;sx=null;
+    if(!dragX)return;
+    dragX=false;miniReset();
+    if(Math.abs(dx)<55)return;
+    swiped=true;setTimeout(()=>{swiped=false;},500);
+    if(dx<0){next(false);toast('Próxima');}else{prev();toast('Anterior');}
+  },{passive:true});
+  miniBox.addEventListener('touchcancel',()=>{sx=null;dragX=false;miniReset();});
   $('miniPlay').addEventListener('click',togglePlay);
   $('miniAdd').addEventListener('click',()=>{if(S.cur)addSheet(S.cur);});
   // tocando agora
@@ -1984,7 +2046,8 @@ function init(){
   updModes();
   // volta para o app: atualiza as listas se ficou muito tempo fora
   document.addEventListener('visibilitychange',()=>{
-    if(document.visibilityState==='visible'&&S.ready&&Date.now()-S.lastLoad>45000)refresh(false);
+    if(document.visibilityState==='hidden'){saveSess(true);return;}
+    if(S.ready&&Date.now()-S.lastLoad>45000)refresh(false);
   });
   try{if('serviceWorker' in navigator&&window.isSecureContext!==false)navigator.serviceWorker.register('/sw.js').catch(()=>{});}catch(e){}
   boot();

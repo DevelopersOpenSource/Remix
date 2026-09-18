@@ -403,6 +403,14 @@ inline void PlayCurL(Guild& g, int offset, bool newMessage) {
     if (newMessage) { DeleteNpL(g); g.npPending = true; }   // a mensagem nova sai quando o audio comecar (ja com a duracao)
     else UpdateNpL(g);
     PresenceL();
+    if (newMessage) {   // adianta o link das proximas online (o yt-dlp leva ~3 s): a troca de faixa fica rapida
+        std::vector<std::wstring> nx;
+        for (size_t i = 0; i < g.q.size() && nx.size() < 2; ++i) {
+            const QItem& it = g.q[i];
+            if (it.path.empty() && !it.url.empty()) { std::wstring pl = it.play.empty() ? it.url : it.play; if (!NeedsMatch(DetectSource(pl))) nx.push_back(pl); }
+        }
+        if (!nx.empty()) PreResolve(nx);
+    }
 }
 inline void StopAudioL(Guild& g) {
     g.gen = ++St().genCounter; g.genRef->store(g.gen);

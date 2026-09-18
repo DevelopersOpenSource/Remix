@@ -176,6 +176,31 @@ o estado do host.
   (`LayoutHostPanel`/`DrawHostPanel` nas duas cascas), copiar link
   (`PlatformSetClipboardText`).
 
+## O que mudou na 1.5.6
+
+- **Corrigido: a música voltava para o começo no meio do streaming** (com o relógio parado no tempo
+  antigo), principalmente no iPhone — e também em música baixada **com efeito ligado**, porque aí ela
+  passa pelo mesmo caminho de conversão. O stream era mandado **sem tamanho e sem "Range"**: quando o
+  Safari precisava pedir o áudio de novo (engasgo de rede, fim de um pedaço, volta do bloqueio) ele
+  recebia o arquivo desde o primeiro byte, mas o contador continuava de onde estava. Agora, quando o PC
+  sabe a duração e o ffmpeg tem o mp3 (192 kbps, taxa fixa = 24000 bytes por segundo), o Host manda
+  `Content-Length` e aceita `Range: bytes=N-`: o byte pedido vira tempo (`N/24000 × velocidade do efeito`)
+  e o ffmpeg recomeça exatamente ali. O celular passa a tratar como arquivo normal.
+- Com isso: **arrastar a barra é instantâneo** (o navegador pula sozinho, sem pedir a música inteira de
+  novo), a **tela bloqueada do iPhone** mostra a duração certa e os controles de faixa, e a duração de
+  arquivos sem tag aparece (o PC mede o arquivo e guarda em cache).
+- Pedido curto com fim definido (`bytes=a-b`, o navegador só espiando o cabeçalho ou o fim) **não derruba
+  mais** o áudio que está tocando naquele aparelho.
+- **Fila adiantada:** a página avisa o PC quais são as **próximas 2 músicas online** (`POST /api/preparar`)
+  e ele já extrai o link (cache de 25 min): trocar de faixa deixa de esperar os ~3 s do yt-dlp.
+- **Efeitos sem sustos:** vários toques seguidos viram uma recarga só (350 ms), e se o áudio falhar logo
+  depois de uma troca de efeito/stem ou de um avanço, a página **tenta a mesma música de novo** em vez de
+  pular para a seguinte.
+- **Volta onde parou:** a fila e o ponto ficam guardados no aparelho; se a página recarregar (o iOS
+  descarrega a aba quando falta memória), ela volta na mesma música, pausada.
+- **Arrastar o mini player** (a barrinha de baixo) para a esquerda passa para a próxima e para a direita
+  volta — agora na barra inteira, com o dedo arrastando junto (antes só a parte do título respondia).
+
 ## O que mudou na 1.5.2
 
 - Efeitos (Slow, Speed, Reverb, Grave, 8D) e stems (Demucs) também no celular, aplicados pelo PC; onda no ritmo real
