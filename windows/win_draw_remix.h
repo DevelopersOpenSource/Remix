@@ -57,9 +57,9 @@ static void RxCapa(Graphics& g,const RectF& art,const std::wstring& capaUrl,cons
     if(redondo){
         GraphicsPath clip; clip.AddEllipse(art.X,art.Y,art.Width,art.Height);
         Region old; g.GetClip(&old); g.SetClip(&clip);
-        g.DrawImage(im,art.X,art.Y,art.Width,art.Height);
+        DrawImgCover(g,im,art);
         g.SetClip(&old);
-    } else g.DrawImage(im,art.X,art.Y,art.Width,art.Height);
+    } else DrawImgCover(g,im,art);
 }
 static void RxBaixarCapasPendentes(){
     if(g_rxThumbFila.empty()) return;
@@ -127,7 +127,7 @@ static void RxDrawBar(Graphics& g,int w,int h,const Color& ab,const Color& white
         if(g_cfg.artShape==L"cd"){ Pen pn(ToGdi(UI().borderHi),1.2f); DrawCoverCircle(g,g_coverImg,Rect((int)art.X,(int)art.Y,(int)art.Width,(int)art.Height),&pn,g_player.playing?g_rotation:0); }
         else {
             SolidBrush pb(ToGdi(UI().surface)); DrawRoundRect(g,art,(int)S(UI_R_CARD),&pb,nullptr);
-            if(g_coverImg&&g_coverImg->GetLastStatus()==Ok) g.DrawImage(g_coverImg,art.X,art.Y,art.Width,art.Height);
+            if(g_coverImg&&g_coverImg->GetLastStatus()==Ok) DrawImgCover(g,g_coverImg,art);
         }
         float tx=art.X+art.Width+S(12);
         float tw=std::min((float)S(240),(float)R_shuffle.left-tx-S(20));
@@ -265,6 +265,26 @@ static void RxDrawInicio(Graphics& g,int w,int h,const Color& ab,const Color& wh
         desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
         if(!g_rxGenero.empty()) desc::HomeDoGenero(g_rxGenero,home);
         else generos=desc::ListaGeneros();
+    }
+    for(const RxAtalho& k:g_rxAtalhos){   // atalhos: capa pequena + nome, em duas colunas
+        if(k.r.right<=k.r.left) continue;
+        RectF b=RF(k.r);
+        if(b.Y>main.Y+main.Height||b.Y+b.Height<main.Y) continue;
+        bool hot=UiHot(k.r);
+        SolidBrush bg(ToGdi(hot?UI().surfaceHi:UI().surface));
+        DrawRoundRect(g,b,(int)S(UI_R_CARD),&bg,nullptr);
+        REAL cv=b.Height;
+        RectF art(b.X,b.Y,cv,cv);
+        RxCapa(g,art,L"",k.capa,false,ToGdi(UI().bg));
+        REAL tx=art.X+cv+S(12), tw=b.Width-(tx-b.X)-S(52);
+        TextTrim(g,k.nome,RectF(tx,b.Y+S(10),tw,S(19)),S(12),&wb,true,StringTrimmingEllipsisCharacter);
+        TextTrim(g,k.sub,RectF(tx,b.Y+S(29),tw,S(16)),S(10),&gb,false,StringTrimmingEllipsisCharacter);
+        if(hot){
+            REAL d=S(30), px=b.X+b.Width-d-S(10), py=b.Y+(b.Height-d)/2;
+            SolidBrush pb(ab); g.FillEllipse(&pb,px,py,d,d);
+            SolidBrush ic(ToGdi(UI().bg));
+            IconPlay(g,RectF(px+d*.34f,py+d*.28f,d*.40f,d*.44f),&ic);
+        }
     }
     for(size_t f=0;f<g_rxFilas.size();f++){
         const RxFila& fl=g_rxFilas[f];

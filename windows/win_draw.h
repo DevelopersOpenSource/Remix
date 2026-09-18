@@ -212,10 +212,32 @@ static void DrawAppBackground(Graphics& g,int w,int h,const Color& fallback){
     }
     if(g_bgCache) g.DrawImage(g_bgCache,0,0);
 }
+// Capa dentro de um quadro: corta o excesso no centro em vez de achatar a imagem
+// (capa 16:9 do YouTube num quadrado ficava "amassada").
+static void DrawImgCover(Graphics& g,Image* img,const Rect& dst){   // versao com Rect inteiro
+    if(!img||img->GetLastStatus()!=Ok||dst.Width<=0||dst.Height<=0) return;
+    REAL iw=(REAL)img->GetWidth(), ih=(REAL)img->GetHeight();
+    if(iw<=0||ih<=0) return;
+    REAL sa=iw/ih, da=(REAL)dst.Width/(REAL)dst.Height;
+    REAL sx=0, sy=0, sw=iw, sh=ih;
+    if(sa>da){ sw=ih*da; sx=(iw-sw)/2; }
+    else if(sa<da){ sh=iw/da; sy=(ih-sh)/2; }
+    g.DrawImage(img,RectF((REAL)dst.X,(REAL)dst.Y,(REAL)dst.Width,(REAL)dst.Height),sx,sy,sw,sh,UnitPixel);
+}
+static void DrawImgCover(Graphics& g,Image* img,const RectF& dst){
+    if(!img||img->GetLastStatus()!=Ok||dst.Width<=0||dst.Height<=0) return;
+    REAL iw=(REAL)img->GetWidth(), ih=(REAL)img->GetHeight();
+    if(iw<=0||ih<=0) return;
+    REAL sa=iw/ih, da=dst.Width/dst.Height;
+    REAL sx=0, sy=0, sw=iw, sh=ih;
+    if(sa>da){ sw=ih*da; sx=(iw-sw)/2; }
+    else if(sa<da){ sh=iw/da; sy=(ih-sh)/2; }
+    g.DrawImage(img,dst,sx,sy,sw,sh,UnitPixel);
+}
 static void DrawCoverCircle(Graphics& g,Image* img,Rect r,Pen* pen,float rotation){
     float cx=r.X+r.Width/2.f,cy=r.Y+r.Height/2.f;g.TranslateTransform(cx,cy);g.RotateTransform(rotation);g.TranslateTransform(-cx,-cy);
     SolidBrush disc(Cs(Color(255,18,20,30),UI().surfaceHi));g.FillEllipse(&disc,(REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);
-    if(img&&img->GetLastStatus()==Ok){GraphicsPath clip;clip.AddEllipse((REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);Region old;g.GetClip(&old);g.SetClip(&clip);g.DrawImage(img,r.X,r.Y,r.Width,r.Height);g.SetClip(&old);}
+    if(img&&img->GetLastStatus()==Ok){GraphicsPath clip;clip.AddEllipse((REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);Region old;g.GetClip(&old);g.SetClip(&clip);DrawImgCover(g,img,RectF((REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height));g.SetClip(&old);}
     SolidBrush hole(Cs(Color(255,7,9,18),UI().surface));float hr=r.Width*.11f;g.FillEllipse(&hole,(REAL)(cx-hr),(REAL)(cy-hr),(REAL)(hr*2),(REAL)(hr*2));g.DrawEllipse(pen,(REAL)r.X,(REAL)r.Y,(REAL)r.Width,(REAL)r.Height);g.ResetTransform();
 }
 // CD grande girando: desenha num offscreen so quando o angulo quantizado muda e reusa
@@ -235,7 +257,7 @@ static void DrawBigCd(Graphics& g,Image* img,Rect r,Pen* pen,float rotation){
                 if(sw<1)sw=1; if(sh<1)sh=1;
                 g_cdSrc=new Bitmap(sw,sh,PixelFormat32bppARGB);
                 Graphics sg(g_cdSrc); sg.SetInterpolationMode(InterpolationModeHighQualityBilinear);
-                sg.Clear(Color(0,0,0,0)); sg.DrawImage(img,0,0,sw,sh);
+                sg.Clear(Color(0,0,0,0)); sg.DrawImage(img,0,0,sw,sh);   // reducao mantendo a proporcao original
             }
             g_cdSrcKey=img;
         }
@@ -246,7 +268,7 @@ static void DrawBigCd(Graphics& g,Image* img,Rect r,Pen* pen,float rotation){
         float ccx=n/2.f,ccy=n/2.f;
         cg.TranslateTransform(ccx,ccy);cg.RotateTransform(qrot);cg.TranslateTransform(-ccx,-ccy);
         SolidBrush disc(Cs(Color(255,18,20,30),UI().surfaceHi));cg.FillEllipse(&disc,(REAL)0,(REAL)0,(REAL)n,(REAL)n);
-        if(g_cdSrc){GraphicsPath clip;clip.AddEllipse((REAL)0,(REAL)0,(REAL)n,(REAL)n);Region old;cg.GetClip(&old);cg.SetClip(&clip);cg.DrawImage(g_cdSrc,0,0,n,n);cg.SetClip(&old);}
+        if(g_cdSrc){GraphicsPath clip;clip.AddEllipse((REAL)0,(REAL)0,(REAL)n,(REAL)n);Region old;cg.GetClip(&old);cg.SetClip(&clip);DrawImgCover(cg,g_cdSrc,RectF(0,0,(REAL)n,(REAL)n));cg.SetClip(&old);}
         SolidBrush hole(Cs(Color(255,7,9,18),UI().surface));float hr=n*.11f;cg.FillEllipse(&hole,ccx-hr,ccy-hr,hr*2,hr*2);
         if(pen)cg.DrawEllipse(pen,(REAL)0,(REAL)0,(REAL)n,(REAL)n);
         cg.ResetTransform();
@@ -377,7 +399,7 @@ static void DrawPlaylistCards(Graphics& g,const Brush* ab,const Brush* white,con
         std::wstring coverPath=isAll?(lib.empty()?L"":lib[0].coverPath):g_playlists[(size_t)pi].coverPath;
         Image* im=coverPath.empty()?nullptr:GetThumb(coverPath);
         SolidBrush plate(Cs(Color(255,18,21,34),UI().bg)); DrawRoundRect(g,art,UiClassic()?10:(int)S(4),&plate,nullptr);
-        if(im) g.DrawImage(im,art.X,art.Y,art.Width,art.Height);
+        if(im) DrawImgCover(g,im,art);
         else { Pen rp(ToGdi(g_theme.accent,160),2.f); g.DrawEllipse(&rp,art.X+cov*0.18f,art.Y+cov*0.18f,cov*0.64f,cov*0.64f); SolidBrush rb(ToGdi(g_theme.accent,160)); g.FillEllipse(&rb,art.X+cov*0.42f,art.Y+cov*0.42f,cov*0.16f,cov*0.16f); }
         float tx=art.X+cov+S(14), tw=card.Width-(tx-card.X)-S(12);
         std::wstring name=isAll?L"Todas as músicas":g_playlists[(size_t)pi].name;
@@ -479,7 +501,7 @@ static void DrawNormal(Graphics& g,int w,int h){
                     SolidBrush t1(Color(40,255,60,60)),t2(Color(40,60,180,255));
                     g.FillRectangle(&t1,(REAL)(cvr.X-4),(REAL)(cvr.Y+sh*.12f),(REAL)(cvr.Width+8),3.f);
                     g.FillRectangle(&t2,(REAL)(cvr.X+3),(REAL)(cvr.Y+sh*.55f),(REAL)(cvr.Width+6),3.f);
-                } else g.DrawImage(g_coverImg,(REAL)cvr.X+3,(REAL)cvr.Y+3,(REAL)cvr.Width-6,(REAL)cvr.Height-6);
+                } else DrawImgCover(g,g_coverImg,RectF((REAL)cvr.X+3,(REAL)cvr.Y+3,(REAL)cvr.Width-6,(REAL)cvr.Height-6));
             }
             if(g_cfg.particlesOn&&FxOn()) DrawParticles(g,RectF((REAL)cvr.X+2,(REAL)cvr.Y+2,(REAL)cvr.Width-4,(REAL)cvr.Height-4),ResolveCustom(g_cfg.particlesColor),tSec,1.f);
         }
@@ -547,7 +569,7 @@ static void DrawNormal(Graphics& g,int w,int h){
             if(cur&&UiRunner()&&ra>6&&FxOn()){ RectF edge((REAL)rr.left,(REAL)rr.top,S(3),(REAL)(rr.bottom-rr.top)); SolidBrush eb(ToGdi(ResolveCustom(g_cfg.runnerColor),(BYTE)(ra*.7f))); DrawRoundRect(g,edge,1,&eb,nullptr); }
             int th=SI(44); Rect art(rr.left+SI(10),rr.top+(rr.bottom-rr.top-th)/2,th,th);
             if(g_cfg.artShape==L"cd") DrawCoverCircle(g,GetThumb(g_tracks[i].coverPath),art,&rp,cur&&g_player.playing?g_rotation:0);
-            else {SolidBrush plate(Cs(Color(255,18,21,34),UI().bg));DrawRoundRect(g,art,UiClassic()?6:(int)S(4),&plate,nullptr);Image* im=GetThumb(g_tracks[i].coverPath);if(im)g.DrawImage(im,art.X,art.Y,art.Width,art.Height);}
+            else {SolidBrush plate(Cs(Color(255,18,21,34),UI().bg));DrawRoundRect(g,art,UiClassic()?6:(int)S(4),&plate,nullptr);Image* im=GetThumb(g_tracks[i].coverPath);if(im)DrawImgCover(g,im,art);}
             if(IsOnlineTrack(g_tracks[i])) DrawOnlineTag(g,RectF((REAL)art.X,(REAL)art.Y,(REAL)art.Width,(REAL)art.Height),g_tracks[i].path);
             float tx=(REAL)rr.left+S(72);
             RectF rtT(tx,(REAL)rr.top+S(9),(REAL)(rr.right-tx-S(60)),(REAL)S(21));
@@ -576,7 +598,7 @@ static void DrawNormal(Graphics& g,int w,int h){
         if(cur&&UiRunner()&&ra>6) DrawRunnerRect(g,RF(rr),16.f,ResolveCustom(g_cfg.runnerColor),(BYTE)(ra*.55f),g_runnerPhase+.5f);
         int cover=SI(142); Rect art(rr.left+SI(18),rr.top+SI(18),cover,cover);
         if(g_cfg.artShape==L"cd") DrawCoverCircle(g,GetThumb(g_tracks[i].coverPath),art,&cp,cur&&g_player.playing?g_rotation:0);
-        else {SolidBrush plate(Cs(Color(255,18,21,34),UI().surfaceHi));DrawRoundRect(g,art,10,&plate,nullptr);Image* im=GetThumb(g_tracks[i].coverPath);if(im)g.DrawImage(im,art.X,art.Y,art.Width,art.Height);}
+        else {SolidBrush plate(Cs(Color(255,18,21,34),UI().surfaceHi));DrawRoundRect(g,art,10,&plate,nullptr);Image* im=GetThumb(g_tracks[i].coverPath);if(im)DrawImgCover(g,im,art);}
         if(IsOnlineTrack(g_tracks[i])) DrawOnlineTag(g,RectF((REAL)art.X,(REAL)art.Y,(REAL)art.Width,(REAL)art.Height),g_tracks[i].path);
         if(cur&&g_cfg.particlesOn&&g_player.playing&&FxOn()){
             GraphicsPath cpt;
@@ -637,7 +659,7 @@ static void DrawNormal(Graphics& g,int w,int h){
         int cw=rr.right-rr.left, cover=cw-SI(20);
         Rect art(rr.left+SI(10),rr.top+SI(10),cover,cover);
         if(g_cfg.artShape==L"cd") DrawCoverCircle(g,GetThumb(g_tracks[i].coverPath),art,&ap,cur&&g_player.playing?g_rotation:0);
-        else {SolidBrush plate(ToGdi(UI().bg));DrawRoundRect(g,art,(int)S(4),&plate,nullptr);Image* im=GetThumb(g_tracks[i].coverPath);if(im)g.DrawImage(im,art.X,art.Y,art.Width,art.Height);}
+        else {SolidBrush plate(ToGdi(UI().bg));DrawRoundRect(g,art,(int)S(4),&plate,nullptr);Image* im=GetThumb(g_tracks[i].coverPath);if(im)DrawImgCover(g,im,art);}
         if(IsOnlineTrack(g_tracks[i])) DrawOnlineTag(g,RectF((REAL)art.X,(REAL)art.Y,(REAL)art.Width,(REAL)art.Height),g_tracks[i].path);
         if(cur&&g_cfg.particlesOn&&g_player.playing&&FxOn()){
             GraphicsPath cpt;

@@ -51,7 +51,7 @@ static void RxCapa(const RectF& art,const std::wstring& capaUrl,const std::wstri
     }
     if(arq.empty()) return;
     Img* im=GetThumb(arq); if(!im) return;
-    if(redondo) gfx::DrawImgCircle(im,art,0); else gfx::DrawImg(im,art);
+    if(redondo) gfx::DrawImgCircle(im,art,0); else gfx::DrawImgCover(im,art);
 }
 // Pede as miniaturas que faltaram neste quadro (uma leva por vez, sem repetir).
 static void RxBaixarCapasPendentes(){
@@ -121,7 +121,7 @@ static void RxDrawBar(int w,int h,Color ab,Color white,Color gray,Color navB,Col
         RectF art=RF(R_art);
         Color plate=ToGdi(UI().surface);
         if(g_cfg.artShape==L"cd") DrawCoverCircle(g_coverImg,art,ToGdi(UI().borderHi),1.2f,g_player.playing?g_rotation:0);
-        else { DrawRoundRect(art,S(UI_R_CARD),&plate,nullptr); if(g_coverImg&&g_coverImg->ok) gfx::DrawImg(g_coverImg,art); }
+        else { DrawRoundRect(art,S(UI_R_CARD),&plate,nullptr); if(g_coverImg&&g_coverImg->ok) gfx::DrawImgCover(g_coverImg,art); }
         float tx=art.X+art.Width+S(12);
         float tw=std::min((float)S(240),(float)R_shuffle.left-tx-S(20));
         if(tw>S(60)){
@@ -258,6 +258,25 @@ static void RxDrawInicio(int w,int h,Color ab,Color white,Color gray){
         desc::AtualizarGeneros(g_rxGenero,g_rxGeneroNome,RxAvisarNovidades);
         if(!g_rxGenero.empty()) desc::HomeDoGenero(g_rxGenero,home);
         else generos=desc::ListaGeneros();
+    }
+    for(const RxAtalho& k:g_rxAtalhos){   // atalhos: capa pequena + nome, em duas colunas
+        if(k.r.right<=k.r.left) continue;
+        RectF b=RF(k.r);
+        if(b.Y>main.Y+main.Height||b.Y+b.Height<main.Y) continue;
+        bool hot=UiHot(k.r);
+        Color bg=ToGdi(hot?UI().surfaceHi:UI().surface);
+        DrawRoundRect(b,S(UI_R_CARD),&bg,nullptr);
+        float cv=b.Height;
+        RectF art(b.X,b.Y,cv,cv);
+        RxCapa(art,L"",k.capa,false,ToGdi(UI().bg));
+        float tx=art.X+cv+S(12), tw=b.Width-(tx-b.X)-S(52);
+        gfx::TextRect(k.nome,RectF(tx,b.Y+S(10),tw,S(19)),S(12),white,true,gfx::Near,false,gfx::EllipsisChar);
+        gfx::TextRect(k.sub,RectF(tx,b.Y+S(29),tw,S(16)),S(10),gray,false,gfx::Near,false,gfx::EllipsisChar);
+        if(hot){   // play redondo no canto, como nos players novos
+            float d=S(30), px=b.X+b.Width-d-S(10), py=b.Y+(b.Height-d)/2;
+            gfx::FillEllipse(RectF(px,py,d,d),ab);
+            IconPlay(RectF(px+d*.34f,py+d*.28f,d*.40f,d*.44f),ToGdi(UI().bg));
+        }
     }
     for(size_t f=0;f<g_rxFilas.size();f++){
         const RxFila& fl=g_rxFilas[f];

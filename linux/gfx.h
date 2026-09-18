@@ -255,9 +255,25 @@ inline void DrawImgPart(Img* g, const RectF& src, const RectF& dst, Color tint =
     if (!g || !g->ok) return;
     DrawTexturePro(g->tex, ToRay(src), ToRay(dst), Vector2{ 0, 0 }, 0, tint);
 }
+// Capa dentro de um quadro: corta o excesso no centro em vez de achatar a imagem
+// (capa 16:9 do YouTube num quadrado ficava "amassada").
+inline void DrawImgCover(Img* g, const RectF& dst, Color tint = WHITE) {
+    if (!g || !g->ok || dst.Width <= 0 || dst.Height <= 0) return;
+    float iw = (float)g->w, ih = (float)g->h;
+    if (iw <= 0 || ih <= 0) return;
+    float sa = iw / ih, da = dst.Width / dst.Height;
+    RectF src(0, 0, iw, ih);
+    if (sa > da) { float nw = ih * da; src = RectF((iw - nw) * 0.5f, 0, nw, ih); }
+    else if (sa < da) { float nh = iw / da; src = RectF(0, (ih - nh) * 0.5f, iw, nh); }
+    DrawTexturePro(g->tex, ToRay(src), ToRay(dst), Vector2{ 0, 0 }, 0, tint);
+}
 inline Texture2D& CircleTex(Img* g) {
     if (!g->circ.id && g->cpu.data) {
         Image m = ImageCopy(g->cpu);
+        if (m.width != m.height) {   // quadrado primeiro: senao o disco sai oval e a capa achatada
+            int lado = std::min(m.width, m.height);
+            ImageCrop(&m, Rectangle{ (float)((m.width - lado) / 2), (float)((m.height - lado) / 2), (float)lado, (float)lado });
+        }
         Color* px = (Color*)m.data;
         int W = m.width, H = m.height;
         float cx = W * 0.5f, cy = H * 0.5f, rx = W * 0.5f, ry = H * 0.5f, mn = std::min(rx, ry);
@@ -280,7 +296,7 @@ inline void DrawImgCircle(Img* g, const RectF& dst, float rotDeg, Color tint = W
     Texture2D& t = CircleTex(g);
     if (!t.id) return;
     Rectangle d{ dst.X + dst.Width * 0.5f, dst.Y + dst.Height * 0.5f, dst.Width, dst.Height };
-    DrawTexturePro(t, Rectangle{ 0, 0, (float)g->w, (float)g->h }, d, Vector2{ dst.Width * 0.5f, dst.Height * 0.5f }, rotDeg, tint);
+    DrawTexturePro(t, Rectangle{ 0, 0, (float)t.width, (float)t.height }, d, Vector2{ dst.Width * 0.5f, dst.Height * 0.5f }, rotDeg, tint);
 }
 inline Texture2D& TinyTex(Img* g) {
     if (!g->tiny.id && g->cpu.data) {

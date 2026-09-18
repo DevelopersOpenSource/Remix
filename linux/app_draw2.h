@@ -452,7 +452,7 @@ static void DrawOnline(int w,int h){
             RectF row=RF(rr); Color rb=Cs(Argb(255,16,19,34),UI().surfaceHi), rp=Cs(Argb(255,45,49,72),UI().borderHi); DrawRoundRect(row,S(9),&rb,&rp,1.f);
             float th=row.Height-S(12); RectF art(row.X+S(6),row.Y+S(6),th,th);
             Color plate=Cs(Argb(255,24,27,44),UI().surfaceHi); DrawRoundRect(art,S(6),&plate,nullptr);
-            if(!t.thumb.empty()){ std::wstring tf=OnlineThumbFile(t.thumb); if(g_thumbReady.count(tf)){ Img* im=GetThumb(tf); if(im) gfx::DrawImg(im,art); } }
+            if(!t.thumb.empty()){ std::wstring tf=OnlineThumbFile(t.thumb); if(g_thumbReady.count(tf)){ Img* im=GetThumb(tf); if(im) gfx::DrawImgCover(im,art); } }
             float tx=art.X+art.Width+S(12), tw=(float)u.bPlay[i].left-tx-S(10);
             gfx::TextRect(t.title.empty()?t.url:t.title,RectF(tx,row.Y+S(5),tw,S(24)),S(13),white,true,gfx::Near,true,gfx::EllipsisWord);
             std::wstring sub=t.artist;

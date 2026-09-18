@@ -144,6 +144,9 @@ static int HitTest(int x,int y){
     if(RxOn()){   // estilo REMIX: lateral, cartoes da tela inicial e "ver tudo"
         for(int i=0;i<3;i++) if(R_rxNav[i].right>R_rxNav[i].left&&PtIn(R_rxNav[i],x,y)) return Z_RX_NAV_BASE+i;
         if(R_rxNovaPl.right>R_rxNovaPl.left&&PtIn(R_rxNovaPl,x,y)) return Z_RX_NOVAPL;
+        if(R_rxSideDrag.right>R_rxSideDrag.left&&PtIn(R_rxSideDrag,x,y)) return Z_RX_SIDEDRAG;
+        if(g_rxPag==RXP_INICIO&&PtIn(R_rxMain,x,y))
+            for(size_t i=0;i<g_rxAtalhos.size()&&i<16;i++) if(g_rxAtalhos[i].r.right>g_rxAtalhos[i].r.left&&PtIn(g_rxAtalhos[i].r,x,y)) return Z_RX_ATALHO_BASE+(int)i;
         if(R_rxTocar.right>R_rxTocar.left&&PtIn(R_rxTocar,x,y)) return Z_RX_TOCAR;
         if(R_rxVoltar.right>R_rxVoltar.left&&PtIn(R_rxVoltar,x,y)) return Z_RX_VOLTAR;
         if(R_rxBuscarOn.right>R_rxBuscarOn.left&&PtIn(R_rxBuscarOn,x,y)) return Z_RX_BUSCARON;
@@ -398,6 +401,15 @@ static void OnLButtonDown(int x,int y){
         return;
     }
     if(id==Z_RX_NOVAPL){ OpenNewPlaylistMenu(R_rxNovaPl.left,R_rxNovaPl.bottom+4); return; }
+    if(id>=Z_RX_ATALHO_BASE&&id<Z_RX_ATALHO_BASE+16){
+        size_t i=(size_t)(id-Z_RX_ATALHO_BASE);
+        if(i>=g_rxAtalhos.size()) return;
+        const RxAtalho& k=g_rxAtalhos[i];
+        if(k.tipo==1){ g_rxPag=RXP_LISTA; if(k.idx>=0&&k.idx<(int)g_playlists.size()) OpenPlaylistView(k.idx); return; }
+        const std::vector<Track>& fonte=(g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks;
+        if(k.idx>=0&&k.idx<(int)fonte.size()){ std::wstring chave=fonte[(size_t)k.idx].path; RxTocarLocal({chave},0); }
+        return;
+    }
     if(id==Z_RX_VOLTAR){ g_rxGenero.clear(); g_rxGeneroNome.clear(); g_rxScroll=0; BuildLayout(); return; }
     if(id==Z_RX_BUSCARON){ OpenOnlineSearch(-1,L""); return; }
     if(id==Z_RX_TOCAR||id==Z_RX_ALEATORIO){
@@ -408,9 +420,11 @@ static void OnLButtonDown(int x,int y){
         PlayIndex(start,true); return;
     }
     if(id>=Z_RX_SIDE_BASE&&id<Z_RX_SIDE_BASE+500){
-        int i=id-Z_RX_SIDE_BASE;
+        size_t i=(size_t)(id-Z_RX_SIDE_BASE);
+        if(i>=g_rxSideOrdem.size()) return;
         g_rxPag=RXP_LISTA;
-        if(i==0) EnterLibraryView(); else if(i-1<(int)g_playlists.size()) OpenPlaylistView(i-1);
+        int pl=g_rxSideOrdem[i];
+        if(pl<0) EnterLibraryView(); else if(pl<(int)g_playlists.size()) OpenPlaylistView(pl);
         return;
     }
     if(id>=Z_RX_VERTUDO_BASE&&id<Z_RX_VERTUDO_BASE+100){ RxVerTudo((size_t)(id-Z_RX_VERTUDO_BASE)); return; }
@@ -501,6 +515,7 @@ static void OnLButtonDown(int x,int y){
     if(id>=Z_THEME_BASE&&id<Z_THEME_BASE+100){int i=id-Z_THEME_BASE;if(i<(int)g_themes.size()){g_cfg.theme=g_themes[i].id;ApplyTheme();g_cfg.Save();}return;}
     if(id==Z_ARTIST_EDIT){StartArtistEdit(g_current);return;}
     if(id==Z_PLAYER_RESIZE){g_dragSeek=id;g_rsArt0=std::max(1,g_panelArt);g_rsScale0=g_cfg.playerScale;return;}
+    if(id==Z_RX_SIDEDRAG){g_dragSeek=id;return;}   // arrastar a divisória da lateral
     if(id==Z_SHAPE_TOGGLE){g_cfg.artShape=(g_cfg.artShape==L"cd")?L"square":L"cd";g_cfg.Save();return;}
     if(id==Z_LISTMODE){g_cfg.listMode=g_cfg.listMode?0:1;g_listScroll=0;g_cfg.Save();BuildLayout();return;}
     if(id==Z_WAVESEEK){
@@ -540,6 +555,7 @@ static void OnMouseDrag(int x){
     else if(g_dragSeek==Z_WAVESEEK&&g_player.loaded){float frac=(float)(x-R_waveDragRect.left)/(float)std::max<int>(1,R_waveDragRect.right-R_waveDragRect.left);frac=std::max(0.f,std::min(1.f,frac));g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}
     else if(g_dragSeek>=Z_CARD_SEEK_BASE&&g_dragSeek<Z_CARD_SEEK_BASE+Z_TRACK_RANGE){int i=g_dragSeek-Z_CARD_SEEK_BASE;if(i>=0&&i<(int)R_cardSeekRects.size()&&i<(int)g_tracks.size()&&g_player.loaded){float frac=(float)(x-R_cardSeekRects[i].left)/(float)std::max<int>(1,R_cardSeekRects[i].right-R_cardSeekRects[i].left);frac=std::max(0.f,std::min(1.f,frac));if(g_current==i)g_player.SeekMs((DWORD)(frac*g_player.GetLengthMs()));}}
     else if(g_dragSeek==Z_VOLBAR){float frac=(float)(x-R_vol.left)/(float)std::max<int>(1,R_vol.right-R_vol.left);SetVolumePercent((int)(std::max(0.f,std::min(1.f,frac))*100));}
+    else if(g_dragSeek==Z_RX_SIDEDRAG){ float esc=g_cfg.uiScale/100.0f*g_dpiMul; int v=(int)std::lround(x/std::max(0.1f,esc)); g_cfg.rxSideW=std::max(170,std::min(460,v)); BuildLayout(); }
     else if(g_dragSeek==Z_PLAYER_RESIZE){int refX=R_playerPanel.left+SI(22);double dist=(double)x-refX;if(dist<(double)S(60))dist=(double)S(60);int sc=(int)std::lround(g_rsScale0*dist/std::max(1,g_rsArt0));g_cfg.playerScale=std::max(60,std::min(170,sc));BuildLayout();}
     else OnMouseDragSlider(x);
 }

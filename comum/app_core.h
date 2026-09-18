@@ -205,7 +205,8 @@ enum : int {
     Z_HOST_DEVLINK_BASE=21600,   // +100: link permanente de cada aparelho (religar em qualquer endereco)
     // Estilo REMIX (1.6): lateral, tela inicial com fileiras e player embaixo.
     Z_RX_NAV_BASE=30000,          // +3: Início / Buscar / Sua biblioteca
-    Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS, Z_RX_TOCAR, Z_RX_ALEATORIO, Z_RX_VOLTAR, Z_RX_BUSCARON,
+    Z_RX_NOVAPL=30010, Z_RX_ATUALIZAR, Z_RX_FILA, Z_RX_VERTODAS, Z_RX_TOCAR, Z_RX_ALEATORIO, Z_RX_VOLTAR, Z_RX_BUSCARON, Z_RX_SIDEDRAG,
+    Z_RX_ATALHO_BASE=30100,       // +16: atalhos do topo do Início (mais ouvidos)
     Z_RX_SIDE_BASE=31000,         // +500: itens da lateral (0 = todas as músicas, depois as playlists)
     Z_RX_CARD_BASE=32000,         // +4000: cartões da tela inicial
     Z_RX_CARDPLAY_BASE=37000,     // +4000: play sobre a capa do cartão
@@ -267,7 +268,7 @@ static_assert(Z_HOST_DPLOK_BASE+500<=Z_FX_BTN && Z_FX_CANCEL<Z_FX_BASE && Z_FX_B
 static_assert(Z_STEM_BASE+10<=Z_SPAD_BTN && Z_ON_ADD_BASE+500<=Z_DC_PLCARD_BASE && Z_DC_PLCARD_BASE+500<=Z_HOST_ACCEPT_BASE && Z_CARD_NEXT_BASE+1000000<=Z_DC_CARD_BASE && Z_DC_CARD_BASE+1000000<=Z_ROW_UP_BASE, "botoes do discord invadem outra faixa");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_BTN && Z_SET_HOST_IPV6<Z_HOST_CLOSE && Z_HOST_IPV6<Z_HOST_DEVLIB_BASE && Z_HOST_DEVLIB_BASE+100<=Z_HOST_DPLOK_BASE && Z_HOST_DPLOK_BASE+500<Z_COVER_BASE, "faixa do host invade outra");
 static_assert(Z_HOST_PLDEV_BASE+4000<=Z_HOST_DEVLINK_BASE && Z_HOST_DEVLINK_BASE+100<=Z_HOST_BTN, "faixa do link do aparelho invade outra");
-static_assert(Z_RX_NAV_BASE>Z_SPAD_BTN+2800 && Z_RX_NAV_BASE+3<=Z_RX_NOVAPL && Z_RX_VERTODAS<Z_RX_SIDE_BASE && Z_RX_SIDE_BASE+500<=Z_RX_CARD_BASE && Z_RX_CARD_BASE+4000<=Z_RX_CARDPLAY_BASE && Z_RX_CARDPLAY_BASE+4000<=Z_RX_VERTUDO_BASE && Z_RX_VERTUDO_BASE+100<Z_COVER_BASE, "faixa do estilo REMIX invade outra");
+static_assert(Z_RX_NAV_BASE>Z_SPAD_BTN+2800 && Z_RX_NAV_BASE+3<=Z_RX_NOVAPL && Z_RX_ATALHO_BASE+16<Z_RX_SIDE_BASE && Z_RX_VERTODAS<Z_RX_SIDE_BASE && Z_RX_SIDE_BASE+500<=Z_RX_CARD_BASE && Z_RX_CARD_BASE+4000<=Z_RX_CARDPLAY_BASE && Z_RX_CARDPLAY_BASE+4000<=Z_RX_VERTUDO_BASE && Z_RX_VERTUDO_BASE+100<Z_COVER_BASE, "faixa do estilo REMIX invade outra");
 static std::vector<RECT> R_cardPlayBtns;   // estilos novos: botao de play sobre a capa do card (aparece com o mouse)
 // ---- estilo REMIX (1.6): lateral com a biblioteca, tela inicial com fileiras, player embaixo ----
 enum { RXP_INICIO=0, RXP_LISTA=1, RXP_DESCOBRIR=2 };   // LISTA = biblioteca/playlists/playlist aberta (usa g_view)
@@ -279,7 +280,12 @@ static RECT R_rxNovaPl{0,0,0,0}, R_rxAtualizar{0,0,0,0}, R_rxVerTodas{0,0,0,0};
 static RECT R_rxCab{0,0,0,0}, R_rxTocar{0,0,0,0}, R_rxAleat{0,0,0,0};   // cabecalho da pagina da biblioteca/playlist
 static RECT R_rxVoltar{0,0,0,0}, R_rxBuscarOn{0,0,0,0};   // cabecalho da pagina Descobrir
 static std::wstring g_rxGenero, g_rxGeneroNome;           // genero aberto na pagina Descobrir (vazio = grade de generos)
-static std::vector<RECT> R_rxSidePl;       // 0 = "Todas as músicas", depois uma por playlist
+static std::vector<RECT> R_rxSidePl;       // 0 = "Todas as músicas", depois as playlists (mais usadas primeiro)
+static std::vector<int> g_rxSideOrdem;     // item da lateral -> índice real da playlist (-1 = todas as músicas)
+static RECT R_rxSideDrag{0,0,0,0};         // divisória: arrasta para mudar a largura da lateral
+// Atalhos do topo do Início: o que você mais ouviu por último (playlists e músicas).
+struct RxAtalho { RECT r{0,0,0,0}; int tipo=0; int idx=0; std::wstring nome, sub, capa; };
+static std::vector<RxAtalho> g_rxAtalhos;
 struct RxCard { RECT r{0,0,0,0}, play{0,0,0,0}; int fila=0, item=0; };
 static std::vector<RxCard> g_rxCards;      // cartoes visiveis da tela inicial
 struct RxFila { RECT head{0,0,0,0}, verTudo{0,0,0,0}; int fonte=0; };   // fonte: -1 = local (recentes), >=0 = fileira do descobrir
@@ -1273,6 +1279,7 @@ static void OpenPlaylistView(int pi){
     ApplyArtistMap(tr);
     if(g_playlists[(size_t)pi].coverPath.empty()){ for(auto& t:tr) if(!t.coverPath.empty()){ g_playlists[(size_t)pi].coverPath=t.coverPath; break; } }
     g_tracks=tr; g_openPl=pi; g_view=2; g_cfg.openPlaylist=g_playlists[(size_t)pi].slug; g_cfg.Save();
+    desc::RegistrarPlaylist(g_playlists[(size_t)pi].slug);   // playlist usada sobe na lateral
     ApplySort(); SyncCurrentToList(); g_listScroll=0; g_searchFocus=false; BuildLayout();
     if(missing>0) SetStatus(std::to_wstring(missing)+(missing==1?L" faixa não encontrada (o arquivo mudou de lugar ou foi apagado).":L" faixas não encontradas (arquivos mudaram de lugar ou foram apagados)."),4000);
 }

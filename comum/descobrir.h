@@ -177,6 +177,20 @@ inline std::vector<std::wstring> MaisTocadas(int n) {
     for (auto& x : v) { if ((int)out.size() >= n) break; out.push_back(x.second); }
     return out;
 }
+// Playlists mais usadas: guardadas no mesmo perfil, com a chave "pl:<slug>".
+inline void RegistrarPlaylist(const std::wstring& slug) {
+    if (slug.empty()) return;
+    Registrar(L"", L"pl:" + slug);
+}
+inline double PesoPlaylist(const std::wstring& slug) {
+    if (slug.empty()) return 0;
+    CarregarPerfil();
+    Perfil& p = P(); std::lock_guard<std::mutex> lk(p.m);
+    auto it = p.faixas.find(L"pl:" + slug);
+    if (it == p.faixas.end()) return 0;
+    long long dias = (Agora() - it->second.ultimo) / 86400; if (dias < 0) dias = 0;
+    return it->second.peso * (1.0 + 2.0 / (1.0 + (double)dias));
+}
 // Peso de um artista no perfil (0 = nunca ouviu). Usado pela mistura do dia.
 inline double PesoArtista(const std::wstring& artista) {
     if (artista.empty()) return 0;

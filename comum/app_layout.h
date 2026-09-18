@@ -365,6 +365,40 @@ static void RxMontarMistura(const std::vector<Track>& fonte){
         g_rxMistura.push_back(x.second); g_rxMisturaChave.push_back(t.path);
     }
 }
+// Atalhos do topo do Início: o que você mais ouviu por último — as playlists que
+// você mais abre e as músicas que mais repetiu, intercaladas.
+static void RxMontarAtalhos(const std::vector<Track>& fonte){
+    g_rxAtalhos.clear();
+    std::vector<std::pair<double,int>> pls;
+    for(size_t i=0;i<g_playlists.size();i++){
+        double pe=desc::PesoPlaylist(g_playlists[i].slug);
+        if(pe>0) pls.push_back({pe,(int)i});
+    }
+    std::sort(pls.begin(),pls.end(),[](const std::pair<double,int>& a,const std::pair<double,int>& b){ return a.first>b.first; });
+    std::map<std::wstring,int> pos;
+    for(size_t i=0;i<fonte.size();i++) pos[fonte[i].path]=(int)i;
+    std::vector<std::pair<double,int>> fx;
+    for(auto& ch:desc::MaisTocadas(24)){
+        auto it=pos.find(ch); if(it==pos.end()) continue;
+        fx.push_back({desc::PesoFaixa(ch),it->second});
+    }
+    size_t a=0,b=0;
+    while(g_rxAtalhos.size()<8&&(a<pls.size()||b<fx.size())){
+        if(a<pls.size()){
+            const Playlist& p=g_playlists[(size_t)pls[a].second];
+            RxAtalho k; k.tipo=1; k.idx=pls[a].second; k.nome=p.name;
+            k.sub=std::to_wstring(p.entries.size())+(p.entries.size()==1?L" música":L" músicas");
+            k.capa=p.coverPath;
+            g_rxAtalhos.push_back(k); a++;
+        }
+        if(g_rxAtalhos.size()>=8) break;
+        if(b<fx.size()){
+            const Track& t=fonte[(size_t)fx[b].second];
+            RxAtalho k; k.tipo=0; k.idx=fx[b].second; k.nome=t.title; k.sub=t.artist; k.capa=t.coverPath;
+            g_rxAtalhos.push_back(k); b++;
+        }
+    }
+}
 static void RxMontarRecentes(){
     g_rxRecentes.clear(); g_rxRecentesChave.clear();
     const std::vector<Track>& fonte=(g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks;
@@ -381,8 +415,14 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     const int topH=SI(56), barH=SI(96), gap=SI(14);
     g_headerH=topH;
     R_rxTop={0,0,w,topH};
-    int sideW = w>=SI(1040)?SI(250) : (w>=SI(840)?SI(206) : 0);
+    // Largura da lateral: a pessoa arrasta a divisória (fica em SideW no config.ini).
+    int sideW=0;
+    if(w>=SI(840)){
+        int pedido=SI(g_cfg.rxSideW);
+        sideW=std::max(SI(170),std::min(pedido,std::min(SI(460),w/3)));
+    }
     g_sideW=sideW;
+    R_rxSideDrag = sideW? RECT{sideW-SI(4),topH,sideW+SI(5),h-barH} : RECT{0,0,0,0};
     // Janela estreita: sem lateral nao teria como navegar, entao volta a barra de
     // abas MUSICAS/PLAYLISTS/ONLINE da biblioteca.
     if(!sideW&&g_rxPag!=RXP_LISTA) g_rxPag=RXP_LISTA;
@@ -409,7 +449,7 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         else { R_searchBox={0,0,0,0}; R_searchClear={0,0,0,0}; }
     }
     // ---- barra lateral: Início / Descobrir / Sua biblioteca + playlists
-    R_rxSidePl.clear();
+    R_rxSidePl.clear(); g_rxSideOrdem.clear();
     R_rxNav[0]=R_rxNav[1]=R_rxNav[2]=RECT{0,0,0,0};
     R_rxNovaPl={0,0,0,0}; R_rxVerTodas={0,0,0,0};
     if(sideW){
@@ -417,9 +457,15 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         for(int i=0;i<3;i++){ R_rxNav[i]={x0,y,x1,y+ih}; y+=ih+SI(2); }
         y+=SI(14);
         R_rxNovaPl={x0,y,x1,y+SI(34)}; y+=SI(34)+SI(10);
+        // ordem da lista: "Todas as músicas" e depois as playlists que você mais usa
+        std::vector<std::pair<double,int>> ord;
+        for(size_t i=0;i<g_playlists.size();i++) ord.push_back({desc::PesoPlaylist(g_playlists[i].slug),(int)i});
+        std::stable_sort(ord.begin(),ord.end(),[](const std::pair<double,int>& a,const std::pair<double,int>& b){ return a.first>b.first; });
         int fim=(int)R_rxSide.bottom-SI(8), ph=SI(46);
-        int n=(int)g_playlists.size()+1;              // 0 = todas as musicas
-        for(int i=0;i<n;i++){ if(y+ph>fim) break; R_rxSidePl.push_back({x0,y,x1,y+ph-SI(4)}); y+=ph; }
+        g_rxSideOrdem.push_back(-1);
+        for(auto& o:ord) g_rxSideOrdem.push_back(o.second);
+        for(size_t i=0;i<g_rxSideOrdem.size();i++){ if(y+ph>fim) break; R_rxSidePl.push_back({x0,y,x1,y+ph-SI(4)}); y+=ph; }
+        g_rxSideOrdem.resize(R_rxSidePl.size());
     }
     // ---- barra de baixo: capa + titulo | transporte + seek | volume
     {
@@ -472,6 +518,7 @@ static void BuildLayoutRemix(int w,int h,int chrome){
         desc::Atualizar(false,RxAvisarNovidades); home=desc::Copia();
         RxMontarRecentes(); comRecentes=!g_rxRecentes.empty();
         RxMontarMistura((g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks); comMistura=g_rxMistura.size()>=6;
+        RxMontarAtalhos((g_libCached&&!g_libTracks.empty())?g_libTracks:g_tracks);
     }
     else {
         // Descobrir: grade de generos e, dentro de um, as paradas dele
@@ -490,6 +537,21 @@ static void BuildLayoutRemix(int w,int h,int chrome){
     if(comGeneros) locais.push_back(-2);
     int nFil=(int)home.fileiras.size()+(int)locais.size();
     int y=(int)R_rxMain.top+SI(46)-g_rxScroll;        // espaco do titulo da pagina
+    if(g_rxPag==RXP_INICIO&&!g_rxAtalhos.empty()){
+        // grade de atalhos larga (capa pequena + nome), como os players novos fazem
+        int acols=mw>=SI(900)?3:(mw>=SI(620)?2:1);
+        int ah=SI(56), agx=SI(10), agy=SI(10);
+        int aw=(mw-(acols-1)*agx)/acols;
+        size_t n=std::min<size_t>(g_rxAtalhos.size(),(size_t)(acols*2));
+        for(size_t i=0;i<g_rxAtalhos.size();i++){
+            if(i>=n){ g_rxAtalhos[i].r={0,0,0,0}; continue; }
+            int r=(int)i/acols, c=(int)i%acols;
+            int ax=mxL+c*(aw+agx), ay=y+r*(ah+agy);
+            g_rxAtalhos[i].r={ax,ay,ax+aw,ay+ah};
+        }
+        int linhas=((int)n+acols-1)/acols;
+        y+=linhas*(ah+agy)+SI(14);
+    } else for(auto& k:g_rxAtalhos) k.r={0,0,0,0};
     for(int f=0; f<nFil; f++){
         int fonte = f<(int)locais.size() ? locais[(size_t)f] : f-(int)locais.size();
         int total = fonte==-1 ? (int)g_rxRecentes.size()

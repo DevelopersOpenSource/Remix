@@ -142,7 +142,7 @@ static void DrawPlaylistCards(Color ab,Color white,Color gray){
         std::wstring coverPath=isAll?(lib.empty()?L"":lib[0].coverPath):g_playlists[(size_t)pi].coverPath;
         Img* im=coverPath.empty()?nullptr:GetThumb(coverPath);
         Color plate=Cs(Argb(255,18,21,34),UI().bg); DrawRoundRect(art,UiClassic()?10:S(4),&plate,nullptr);
-        if(im) gfx::DrawImg(im,art);
+        if(im) gfx::DrawImgCover(im,art);
         else { gfx::StrokeEllipse(RectF(art.X+cov*0.18f,art.Y+cov*0.18f,cov*0.64f,cov*0.64f),2.f,ToGdi(g_theme.accent,160)); gfx::FillEllipse(RectF(art.X+cov*0.42f,art.Y+cov*0.42f,cov*0.16f,cov*0.16f),ToGdi(g_theme.accent,160)); }
         float tx=art.X+cov+S(14), tw=card.Width-(tx-card.X)-S(12);
         std::wstring name=isAll?L"Todas as músicas":g_playlists[(size_t)pi].name;
@@ -254,7 +254,7 @@ static void DrawNormal(int w,int h){
                     }
                     gfx::FillRect(cvr.X-4,cvr.Y+sh*.12f,cvr.Width+8,3.f,Argb(40,255,60,60));
                     gfx::FillRect(cvr.X+3,cvr.Y+sh*.55f,cvr.Width+6,3.f,Argb(40,60,180,255));
-                } else gfx::DrawImg(g_coverImg,RectF(cvr.X+3,cvr.Y+3,cvr.Width-6,cvr.Height-6));
+                } else gfx::DrawImgCover(g_coverImg,RectF(cvr.X+3,cvr.Y+3,cvr.Width-6,cvr.Height-6));
             }
             if(g_cfg.particlesOn&&FxOn()) DrawParticles(RectF(cvr.X+2,cvr.Y+2,cvr.Width-4,cvr.Height-4),ResolveCustom(g_cfg.particlesColor),tSec,1.f);
         }
@@ -332,7 +332,7 @@ static void DrawNormal(int w,int h){
             }
             int th=SI(44); RectF art((float)(rr.left+SI(10)),(float)(rr.top+(rr.bottom-rr.top-th)/2),(float)th,(float)th);
             if(g_cfg.artShape==L"cd") DrawCoverCircle(GetThumb(g_tracks[i].coverPath),art,rp,1.2f,cur&&g_player.playing?g_rotation:0);
-            else {Color plate=Cs(Argb(255,18,21,34),UI().bg);DrawRoundRect(art,UiClassic()?6:S(4),&plate,nullptr);Img* im=GetThumb(g_tracks[i].coverPath);if(im)gfx::DrawImg(im,art);}
+            else {Color plate=Cs(Argb(255,18,21,34),UI().bg);DrawRoundRect(art,UiClassic()?6:S(4),&plate,nullptr);Img* im=GetThumb(g_tracks[i].coverPath);if(im)gfx::DrawImgCover(im,art);}
             if(IsOnlineTrack(g_tracks[i])) DrawOnlineTag(art,g_tracks[i].path);
             float tx=(float)rr.left+S(72);
             RectF rtT(tx,(float)rr.top+S(9),(float)(rr.right-tx-S(60)),S(21));
@@ -361,7 +361,7 @@ static void DrawNormal(int w,int h){
         if(cur&&UiRunner()&&ra>6) DrawRunnerRect(card,16.f,ResolveCustom(g_cfg.runnerColor),(BYTE)(ra*.55f),g_runnerPhase+.5f);
         int cover=SI(142); RectF art((float)(rr.left+SI(18)),(float)(rr.top+SI(18)),(float)cover,(float)cover);
         if(g_cfg.artShape==L"cd") DrawCoverCircle(GetThumb(g_tracks[i].coverPath),art,cp,1.5f,cur&&g_player.playing?g_rotation:0);
-        else {Color plate=Argb(255,18,21,34);DrawRoundRect(art,10,&plate,nullptr);Img* im=GetThumb(g_tracks[i].coverPath);if(im)gfx::DrawImg(im,art);}
+        else {Color plate=Argb(255,18,21,34);DrawRoundRect(art,10,&plate,nullptr);Img* im=GetThumb(g_tracks[i].coverPath);if(im)gfx::DrawImgCover(im,art);}
         if(IsOnlineTrack(g_tracks[i])) DrawOnlineTag(art,g_tracks[i].path);
         if(cur&&g_cfg.particlesOn&&g_player.playing){
             bool ccd=g_cfg.artShape==L"cd";
@@ -425,7 +425,7 @@ static void DrawNormal(int w,int h){
         int cw=rr.right-rr.left, cover=cw-SI(20);
         RectF art((float)(rr.left+SI(10)),(float)(rr.top+SI(10)),(float)cover,(float)cover);
         if(g_cfg.artShape==L"cd") DrawCoverCircle(GetThumb(g_tracks[i].coverPath),art,ToGdi(UI().borderHi),1.2f,cur&&g_player.playing?g_rotation:0);
-        else {Color plate=ToGdi(UI().bg);DrawRoundRect(art,S(4),&plate,nullptr);Img* im=GetThumb(g_tracks[i].coverPath);if(im)gfx::DrawImg(im,art);}
+        else {Color plate=ToGdi(UI().bg);DrawRoundRect(art,S(4),&plate,nullptr);Img* im=GetThumb(g_tracks[i].coverPath);if(im)gfx::DrawImgCover(im,art);}
         if(IsOnlineTrack(g_tracks[i])) DrawOnlineTag(art,g_tracks[i].path);
         if(cur&&g_cfg.particlesOn&&g_player.playing){
             bool ccd=g_cfg.artShape==L"cd";
@@ -493,7 +493,7 @@ static void DrawVertical(int w,int h){
     if(g_cfg.artShape==L"square"){
         if(UiClassic()){ Color plate=Argb(255,16,19,32); DrawRoundRect(art,14,&plate,&accent,2); }
         else { Color plate=ToGdi(UI().surface); DrawRoundRect(art,S(UI_R_CARD),&plate,nullptr); }
-        if(g_coverImg&&g_coverImg->ok){ gfx::PushClip(RectF(art.X+3,art.Y+3,art.Width-6,art.Height-6)); gfx::DrawImg(g_coverImg,RectF(art.X+3,art.Y+3,art.Width-6,art.Height-6)); gfx::PopClip(); }
+        if(g_coverImg&&g_coverImg->ok){ gfx::PushClip(RectF(art.X+3,art.Y+3,art.Width-6,art.Height-6)); gfx::DrawImgCover(g_coverImg,RectF(art.X+3,art.Y+3,art.Width-6,art.Height-6)); gfx::PopClip(); }
     } else DrawCoverCircle(g_coverImg,art,UiClassic()?accent:ToGdi(UI().borderHi),UiClassic()?2.f:1.4f,g_player.playing?g_rotation:0);
     if(g_cfg.particlesOn&&FxOn()){
         bool vcd=g_cfg.artShape==L"cd";
