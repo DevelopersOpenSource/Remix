@@ -535,6 +535,25 @@ static void BuildLayout(){
     R_tabOnline=R_plAdd=R_plMode=R_pickDone=R_pickCancel=R_onlineInfo={0,0,0,0};
     R_plCards.clear(); R_plPlay.clear(); R_plShuf.clear();
     g_visible.clear(); for(size_t i=0;i<g_tracks.size();++i) if(TrackMatchesSearch(g_tracks[i])) g_visible.push_back((int)i);
+    // Buscando: o que melhor casa vem primeiro e, no empate, o que voce mais ouve
+    // (a ordem normal da lista nao muda: isso vale so enquanto tem texto na busca).
+    if(!g_searchBuf.empty()&&g_visible.size()>1){
+        std::wstring q=FoldText(g_searchBuf);
+        auto grau=[&](const Track& t){
+            std::wstring ti=FoldText(t.title), ar=FoldText(t.artist);
+            if(ti.rfind(q,0)==0) return 0;
+            if(ar.rfind(q,0)==0) return 1;
+            if(ti.find(q)!=std::wstring::npos) return 2;
+            if(ar.find(q)!=std::wstring::npos) return 3;
+            return 4;                                  // so casou pelo nome do arquivo
+        };
+        std::vector<std::pair<int,double>> nota(g_tracks.size());
+        for(int i:g_visible) nota[(size_t)i]={grau(g_tracks[(size_t)i]),desc::PesoArtista(g_tracks[(size_t)i].artist)+desc::PesoFaixa(g_tracks[(size_t)i].path)*0.5};
+        std::stable_sort(g_visible.begin(),g_visible.end(),[&](int a,int b){
+            if(nota[(size_t)a].first!=nota[(size_t)b].first) return nota[(size_t)a].first<nota[(size_t)b].first;
+            return nota[(size_t)a].second>nota[(size_t)b].second;
+        });
+    }
     g_gridCols=0; g_contentH=0;
     bool manual=(g_cfg.sortMode==L"manual");
     int chrome=g_customChrome?SI(72):0;   // espaco dos botoes fechar/minimizar (Windows)
