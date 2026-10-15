@@ -5,7 +5,7 @@
 
 | Versão | Onde está |
 |---|---|
-| **Linux** | **https://github.com/NinjaZinS2/Remix-Linux** — em desenvolvimento |
+| **Linux** | **https://github.com/SodreDev/Remix-Linux** — em desenvolvimento |
 | **Windows** | mantida à parte; o link entra aqui quando o repositório for publicado |
 
 ## O que é o Remix
@@ -29,7 +29,7 @@ repositórios da tabela acima.
 ## Créditos
 
 **[Nero-2077](https://github.com/Nero-2077)** criou o Remix: a ideia original e a versão Windows.
-**Sodre** ([NinjaZinS2](https://github.com/NinjaZinS2)) entrou depois como co-desenvolvedor:
+**Sodre** ([SodreDev](https://github.com/SodreDev)) entrou depois como co-desenvolvedor:
 participou da versão Windows, sugeriu e desenvolveu as playlists e a música online, levou o Remix
 para o Linux e teve a ideia do **Host** — o PC vira servidor para o celular.
 
